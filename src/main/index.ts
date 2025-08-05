@@ -115,3 +115,17 @@ ipcMain.handle('selectConfigFile', async () => {
   
   return result.filePaths[0]
 })
+
+ipcMain.handle('checkStatus', async (_, provider: Provider) => {
+  // 简单的连通性检查 - 向API地址发送HEAD请求
+  try {
+    const response = await fetch(provider.apiUrl, {
+      method: 'HEAD',
+      timeout: 5000
+    })
+    return response.ok
+  } catch (error) {
+    console.error('检查供应商状态失败:', error)
+    return false
+  }
+})
