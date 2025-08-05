@@ -25,6 +25,7 @@ declare global {
       getCurrentProvider: () => Promise<string>
       addProvider: (provider: Provider) => Promise<boolean>
       deleteProvider: (id: string) => Promise<boolean>
+      updateProvider: (provider: Provider) => Promise<boolean>
       checkStatus: (provider: Provider) => Promise<ProviderStatus>
       switchProvider: (providerId: string) => Promise<boolean>
       getClaudeCodeConfigPath: () => Promise<string>

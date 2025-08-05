@@ -1,78 +1,58 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Provider } from '../../shared/types'
 import './AddProviderModal.css'
 
-interface AddProviderModalProps {
-  onAdd: (provider: Omit<Provider, 'id'>) => void
+interface EditProviderModalProps {
+  provider: Provider
+  onSave: (provider: Provider) => void
   onClose: () => void
 }
 
-const AddProviderModal: React.FC<AddProviderModalProps> = ({ onAdd, onClose }) => {
+const EditProviderModal: React.FC<EditProviderModalProps> = ({ provider, onSave, onClose }) => {
   const [formData, setFormData] = useState({
-    name: '',
-    apiUrl: '',
-    apiKey: ''
+    name: provider.name,
+    apiUrl: provider.apiUrl,
+    apiKey: provider.apiKey
   })
   const [showPassword, setShowPassword] = useState(false)
 
+  useEffect(() => {
+    setFormData({
+      name: provider.name,
+      apiUrl: provider.apiUrl,
+      apiKey: provider.apiKey
+    })
+  }, [provider])
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    console.log('提交表单，当前数据:', formData)
     
     if (!formData.name || !formData.apiUrl || !formData.apiKey) {
       alert('请填写所有必填字段')
       return
     }
 
-    onAdd(formData)
-  }
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
+    console.log('调用 onSave，provider:', provider, 'formData:', formData)
+    onSave({
+      ...provider,
+      ...formData
     })
   }
 
-  // 预设的供应商配置
-  const presets = [
-    {
-      name: 'YesCode',
-      apiUrl: 'https://co.yes.vg'
-    },
-    {
-      name: 'PackyCode',
-      apiUrl: 'https://api.packycode.com'
-    }
-  ]
-
-  const applyPreset = (preset: typeof presets[0]) => {
-    setFormData({
-      ...formData,
-      name: preset.name,
-      apiUrl: preset.apiUrl
-    })
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target
+    console.log('输入变化:', name, value)
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }))
   }
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <h2>添加新供应商</h2>
-        
-        <div className="presets">
-          <label>快速选择：</label>
-          <div className="preset-buttons">
-            {presets.map((preset, index) => (
-              <button
-                key={index}
-                type="button"
-                className="preset-btn"
-                onClick={() => applyPreset(preset)}
-              >
-                {preset.name}
-              </button>
-            ))}
-          </div>
-        </div>
+        <h2>编辑供应商</h2>
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">
@@ -81,10 +61,11 @@ const AddProviderModal: React.FC<AddProviderModalProps> = ({ onAdd, onClose }) =
               type="text"
               id="name"
               name="name"
-              value={formData.name}
+              value={formData.name || ''}
               onChange={handleChange}
               placeholder="例如：官方 Anthropic"
               required
+              autoComplete="off"
             />
           </div>
 
@@ -94,10 +75,11 @@ const AddProviderModal: React.FC<AddProviderModalProps> = ({ onAdd, onClose }) =
               type="url"
               id="apiUrl"
               name="apiUrl"
-              value={formData.apiUrl}
+              value={formData.apiUrl || ''}
               onChange={handleChange}
               placeholder="https://api.anthropic.com"
               required
+              autoComplete="off"
             />
           </div>
 
@@ -108,10 +90,11 @@ const AddProviderModal: React.FC<AddProviderModalProps> = ({ onAdd, onClose }) =
                 type={showPassword ? "text" : "password"}
                 id="apiKey"
                 name="apiKey"
-                value={formData.apiKey}
+                value={formData.apiKey || ''}
                 onChange={handleChange}
-                placeholder={formData.name === 'YesCode' ? 'cr_...' : 'sk-...'}
+                placeholder={formData.name && formData.name.includes('YesCode') ? 'cr_...' : 'sk-...'}
                 required
+                autoComplete="off"
               />
               <button
                 type="button"
@@ -140,7 +123,7 @@ const AddProviderModal: React.FC<AddProviderModalProps> = ({ onAdd, onClose }) =
               取消
             </button>
             <button type="submit" className="submit-btn">
-              添加
+              保存
             </button>
           </div>
         </form>
@@ -149,4 +132,4 @@ const AddProviderModal: React.FC<AddProviderModalProps> = ({ onAdd, onClose }) =
   )
 }
 
-export default AddProviderModal
+export default EditProviderModal

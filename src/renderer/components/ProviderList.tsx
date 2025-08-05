@@ -8,6 +8,7 @@ interface ProviderListProps {
   statuses: Record<string, ProviderStatus>
   onSwitch: (id: string) => void
   onDelete: (id: string) => void
+  onEdit: (id: string) => void
 }
 
 const ProviderList: React.FC<ProviderListProps> = ({
@@ -15,7 +16,8 @@ const ProviderList: React.FC<ProviderListProps> = ({
   currentProviderId,
   statuses,
   onSwitch,
-  onDelete
+  onDelete,
+  onEdit
 }) => {
   const formatResponseTime = (time: number) => {
     if (time < 0) return '-'
@@ -77,6 +79,19 @@ const ProviderList: React.FC<ProviderListProps> = ({
                 </div>
                 
                 <div className="provider-actions">
+                  <button 
+                    className="enable-btn"
+                    onClick={() => onSwitch(provider.id)}
+                    disabled={!status?.isOnline || isCurrent}
+                  >
+                    启用
+                  </button>
+                  <button 
+                    className="edit-btn"
+                    onClick={() => onEdit(provider.id)}
+                  >
+                    编辑
+                  </button>
                   <button 
                     className="delete-btn"
                     onClick={() => onDelete(provider.id)}

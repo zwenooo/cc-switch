@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Provider, ProviderStatus } from '../shared/types'
 import ProviderList from './components/ProviderList'
 import AddProviderModal from './components/AddProviderModal'
+import EditProviderModal from './components/EditProviderModal'
 import './App.css'
 
 function App() {
@@ -11,6 +12,7 @@ function App() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [configPath, setConfigPath] = useState<string>('')
+  const [editingProviderId, setEditingProviderId] = useState<string | null>(null)
 
   // 加载供应商列表
   useEffect(() => {
@@ -81,6 +83,18 @@ function App() {
     }
   }
 
+  const handleEditProvider = async (provider: Provider) => {
+    try {
+      await window.electronAPI.updateProvider(provider)
+      await loadProviders()
+      setEditingProviderId(null)
+      alert('保存成功！')
+    } catch (error) {
+      console.error('更新供应商失败:', error)
+      alert('保存失败，请重试')
+    }
+  }
+
   return (
     <div className="app">
       <header className="app-header">
@@ -109,6 +123,7 @@ function App() {
           statuses={statuses}
           onSwitch={handleSwitchProvider}
           onDelete={handleDeleteProvider}
+          onEdit={setEditingProviderId}
         />
         
         {configPath && (
@@ -122,6 +137,14 @@ function App() {
         <AddProviderModal
           onAdd={handleAddProvider}
           onClose={() => setIsAddModalOpen(false)}
+        />
+      )}
+
+      {editingProviderId && providers[editingProviderId] && (
+        <EditProviderModal
+          provider={providers[editingProviderId]}
+          onSave={handleEditProvider}
+          onClose={() => setEditingProviderId(null)}
         />
       )}
     </div>
