@@ -88,14 +88,14 @@ const ProviderList: React.FC<ProviderListProps> = ({
                   <button 
                     className="check-btn"
                     onClick={() => onCheckStatus(provider.id)}
-                    disabled={isChecking}
+                    disabled={true}
                   >
                     {isChecking ? '检查中' : '检查状态'}
                   </button>
                   <button 
                     className="enable-btn"
                     onClick={() => onSwitch(provider.id)}
-                    disabled={!status?.isOnline || isCurrent}
+                    disabled={isCurrent}
                   >
                     启用
                   </button>
