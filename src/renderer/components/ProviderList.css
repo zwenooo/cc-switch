@@ -105,6 +105,27 @@
   gap: 0.5rem;
 }
 
+.check-btn {
+  padding: 0.375rem 0.75rem;
+  border: 1px solid #f39c12;
+  background: white;
+  color: #f39c12;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.2s;
+}
+
+.check-btn:hover:not(:disabled) {
+  background: #f39c12;
+  color: white;
+}
+
+.check-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .enable-btn {
   padding: 0.375rem 0.75rem;
   border: 1px solid #27ae60;

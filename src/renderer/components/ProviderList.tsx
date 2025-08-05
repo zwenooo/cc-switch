@@ -6,18 +6,22 @@ interface ProviderListProps {
   providers: Record<string, Provider>
   currentProviderId: string
   statuses: Record<string, ProviderStatus>
+  checkingStatus: Record<string, boolean>
   onSwitch: (id: string) => void
   onDelete: (id: string) => void
   onEdit: (id: string) => void
+  onCheckStatus: (id: string) => void
 }
 
 const ProviderList: React.FC<ProviderListProps> = ({
   providers,
   currentProviderId,
   statuses,
+  checkingStatus,
   onSwitch,
   onDelete,
-  onEdit
+  onEdit,
+  onCheckStatus
 }) => {
   const formatResponseTime = (time: number) => {
     if (time < 0) return '-'
@@ -29,8 +33,9 @@ const ProviderList: React.FC<ProviderListProps> = ({
     return status.isOnline ? '✅' : '❌'
   }
 
-  const getStatusText = (status?: ProviderStatus) => {
-    if (!status) return '检查中...'
+  const getStatusText = (status?: ProviderStatus, isChecking?: boolean) => {
+    if (isChecking) return '检查中...'
+    if (!status) return '未检查'
     if (status.isOnline) return '正常'
     return status.error || '连接失败'
   }
@@ -46,6 +51,7 @@ const ProviderList: React.FC<ProviderListProps> = ({
         <div className="provider-items">
           {Object.values(providers).map((provider) => {
             const status = statuses[provider.id]
+            const isChecking = checkingStatus[provider.id]
             const isCurrent = provider.id === currentProviderId
             
             return (
@@ -69,9 +75,9 @@ const ProviderList: React.FC<ProviderListProps> = ({
                 </div>
                 
                 <div className="provider-status">
-                  <span className="status-icon">{getStatusIcon(status)}</span>
-                  <span className="status-text">{getStatusText(status)}</span>
-                  {status?.isOnline && (
+                  <span className="status-icon">{isChecking ? '🔄' : getStatusIcon(status)}</span>
+                  <span className="status-text">{getStatusText(status, isChecking)}</span>
+                  {status?.isOnline && !isChecking && (
                     <span className="response-time">
                       {formatResponseTime(status.responseTime)}
                     </span>
@@ -79,6 +85,13 @@ const ProviderList: React.FC<ProviderListProps> = ({
                 </div>
                 
                 <div className="provider-actions">
+                  <button 
+                    className="check-btn"
+                    onClick={() => onCheckStatus(provider.id)}
+                    disabled={isChecking}
+                  >
+                    {isChecking ? '检查中' : '检查状态'}
+                  </button>
                   <button 
                     className="enable-btn"
                     onClick={() => onSwitch(provider.id)}

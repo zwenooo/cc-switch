@@ -10,7 +10,7 @@ function App() {
   const [currentProviderId, setCurrentProviderId] = useState<string>('')
   const [statuses, setStatuses] = useState<Record<string, ProviderStatus>>({})
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
-  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [checkingStatus, setCheckingStatus] = useState<Record<string, boolean>>({})
   const [configPath, setConfigPath] = useState<string>('')
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null)
 
@@ -34,20 +34,30 @@ function App() {
   }
 
   const checkAllStatuses = async () => {
-    if (Object.keys(providers).length === 0) return
+    // 功能开发中
+    alert('状态检查功能开发中')
+  }
+
+  const checkSingleStatus = async (providerId: string) => {
+    const provider = providers[providerId]
+    if (!provider) return
+
+    setCheckingStatus(prev => ({ ...prev, [providerId]: true }))
     
-    setIsRefreshing(true)
-    const newStatuses: Record<string, ProviderStatus> = {}
-    
-    await Promise.all(
-      Object.values(providers).map(async (provider) => {
-        const status = await window.electronAPI.checkStatus(provider)
-        newStatuses[provider.id] = status
-      })
-    )
-    
-    setStatuses(newStatuses)
-    setIsRefreshing(false)
+    try {
+      // 暂时显示开发中状态
+      const status: ProviderStatus = {
+        isOnline: false,
+        responseTime: -1,
+        lastChecked: new Date(),
+        error: '功能开发中'
+      }
+      setStatuses(prev => ({ ...prev, [providerId]: status }))
+    } catch (error) {
+      console.error('检查状态失败:', error)
+    } finally {
+      setCheckingStatus(prev => ({ ...prev, [providerId]: false }))
+    }
   }
 
   const handleAddProvider = async (provider: Omit<Provider, 'id'>) => {
@@ -96,10 +106,9 @@ function App() {
         <div className="header-actions">
           <button 
             className="refresh-btn" 
-            onClick={checkAllStatuses} 
-            disabled={isRefreshing}
+            onClick={checkAllStatuses}
           >
-            {isRefreshing ? '检查中...' : '检查状态'}
+            检查状态（开发中）
           </button>
           <button 
             className="add-btn" 
@@ -115,9 +124,11 @@ function App() {
           providers={providers}
           currentProviderId={currentProviderId}
           statuses={statuses}
+          checkingStatus={checkingStatus}
           onSwitch={handleSwitchProvider}
           onDelete={handleDeleteProvider}
           onEdit={setEditingProviderId}
+          onCheckStatus={checkSingleStatus}
         />
         
         {configPath && (
