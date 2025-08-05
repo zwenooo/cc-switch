@@ -20,12 +20,6 @@ function App() {
     loadConfigPath()
   }, [])
 
-  // 定时检查状态
-  useEffect(() => {
-    checkAllStatuses()
-    const interval = setInterval(checkAllStatuses, 30000) // 每30秒检查一次
-    return () => clearInterval(interval)
-  }, [providers])
 
   const loadProviders = async () => {
     const loadedProviders = await window.electronAPI.getProviders()
@@ -105,7 +99,7 @@ function App() {
             onClick={checkAllStatuses} 
             disabled={isRefreshing}
           >
-            {isRefreshing ? '检查中...' : '刷新状态'}
+            {isRefreshing ? '检查中...' : '检查状态'}
           </button>
           <button 
             className="add-btn" 
