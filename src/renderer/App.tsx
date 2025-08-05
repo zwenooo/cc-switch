@@ -48,10 +48,15 @@ function App() {
   }
 
 
+  // 生成唯一ID
+  const generateId = () => {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2, 9)
+  }
+
   const handleAddProvider = async (provider: Omit<Provider, 'id'>) => {
     const newProvider: Provider = {
       ...provider,
-      id: Date.now().toString()
+      id: generateId()
     }
     await window.electronAPI.addProvider(newProvider)
     await loadProviders()
