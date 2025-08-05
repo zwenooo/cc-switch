@@ -3,6 +3,8 @@ import { Provider } from '../shared/types'
 import ProviderList from './components/ProviderList'
 import AddProviderModal from './components/AddProviderModal'
 import EditProviderModal from './components/EditProviderModal'
+import ConfirmModal from './components/ConfirmModal'
+import MessageModal from './components/MessageModal'
 import './App.css'
 
 function App() {
@@ -11,6 +13,20 @@ function App() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [configPath, setConfigPath] = useState<string>('')
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null)
+  
+  // Modal states
+  const [confirmModal, setConfirmModal] = useState<{
+    show: boolean
+    title: string
+    message: string
+    onConfirm: () => void
+  } | null>(null)
+  const [messageModal, setMessageModal] = useState<{
+    show: boolean
+    title: string
+    message: string
+    type: 'success' | 'error' | 'info'
+  } | null>(null)
 
   // 加载供应商列表
   useEffect(() => {
@@ -43,19 +59,35 @@ function App() {
   }
 
   const handleDeleteProvider = async (id: string) => {
-    if (confirm('确定要删除这个供应商吗？')) {
-      await window.electronAPI.deleteProvider(id)
-      await loadProviders()
-    }
+    setConfirmModal({
+      show: true,
+      title: '删除供应商',
+      message: '确定要删除这个供应商吗？',
+      onConfirm: async () => {
+        await window.electronAPI.deleteProvider(id)
+        await loadProviders()
+        setConfirmModal(null)
+      }
+    })
   }
 
   const handleSwitchProvider = async (id: string) => {
     const success = await window.electronAPI.switchProvider(id)
     if (success) {
       setCurrentProviderId(id)
-      alert('切换成功！')
+      setMessageModal({
+        show: true,
+        title: '切换成功',
+        message: '供应商已成功切换！',
+        type: 'success'
+      })
     } else {
-      alert('切换失败，请检查配置')
+      setMessageModal({
+        show: true,
+        title: '切换失败',
+        message: '切换失败，请检查配置',
+        type: 'error'
+      })
     }
   }
 
@@ -64,10 +96,20 @@ function App() {
       await window.electronAPI.updateProvider(provider)
       await loadProviders()
       setEditingProviderId(null)
-      alert('保存成功！')
+      setMessageModal({
+        show: true,
+        title: '保存成功',
+        message: '供应商信息已更新！',
+        type: 'success'
+      })
     } catch (error) {
       console.error('更新供应商失败:', error)
-      alert('保存失败，请重试')
+      setMessageModal({
+        show: true,
+        title: '保存失败',
+        message: '保存失败，请重试',
+        type: 'error'
+      })
     }
   }
 
@@ -127,6 +169,24 @@ function App() {
           provider={providers[editingProviderId]}
           onSave={handleEditProvider}
           onClose={() => setEditingProviderId(null)}
+        />
+      )}
+
+      {confirmModal && (
+        <ConfirmModal
+          title={confirmModal.title}
+          message={confirmModal.message}
+          onConfirm={confirmModal.onConfirm}
+          onCancel={() => setConfirmModal(null)}
+        />
+      )}
+
+      {messageModal && (
+        <MessageModal
+          title={messageModal.title}
+          message={messageModal.message}
+          type={messageModal.type}
+          onClose={() => setMessageModal(null)}
         />
       )}
     </div>
