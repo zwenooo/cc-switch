@@ -5,23 +5,21 @@ import './AddProviderModal.css'
 interface AddProviderModalProps {
   onAdd: (provider: Omit<Provider, 'id'>) => void
   onClose: () => void
-  onError?: (message: string) => void
 }
 
-const AddProviderModal: React.FC<AddProviderModalProps> = ({ onAdd, onClose, onError }) => {
+const AddProviderModal: React.FC<AddProviderModalProps> = ({ onAdd, onClose }) => {
   const [formData, setFormData] = useState({
     name: '',
     apiUrl: '',
     apiKey: ''
   })
   const [showPassword, setShowPassword] = useState(false)
-  const [error, setError] = useState<string>('')
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     
     if (!formData.name || !formData.apiUrl || !formData.apiKey) {
-      setError('请填写所有必填字段')
+      alert('请填写所有必填字段')
       return
     }
 
@@ -77,12 +75,6 @@ const AddProviderModal: React.FC<AddProviderModalProps> = ({ onAdd, onClose, onE
         </div>
 
         <form onSubmit={handleSubmit}>
-          {error && (
-            <div style={{ color: 'red', marginBottom: '1rem', padding: '0.5rem', backgroundColor: '#ffe6e6', borderRadius: '4px' }}>
-              {error}
-            </div>
-          )}
-          
           <div className="form-group">
             <label htmlFor="name">供应商名称 *</label>
             <input

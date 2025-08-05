@@ -3,8 +3,6 @@ import { Provider } from '../shared/types'
 import ProviderList from './components/ProviderList'
 import AddProviderModal from './components/AddProviderModal'
 import EditProviderModal from './components/EditProviderModal'
-import ConfirmModal from './components/ConfirmModal'
-import MessageModal from './components/MessageModal'
 import './App.css'
 
 function App() {
@@ -13,21 +11,6 @@ function App() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [configPath, setConfigPath] = useState<string>('')
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null)
-  
-  // Modal states
-  const [confirmModal, setConfirmModal] = useState<{
-    show: boolean
-    title: string
-    message: string
-    onConfirm: () => void
-  } | null>(null)
-  const [messageModal, setMessageModal] = useState<{
-    show: boolean
-    title: string
-    message: string
-    type: 'success' | 'error' | 'info'
-  } | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
 
   // 加载供应商列表
   useEffect(() => {
@@ -65,53 +48,20 @@ function App() {
   }
 
   const handleDeleteProvider = async (id: string) => {
-    setConfirmModal({
-      show: true,
-      title: '删除供应商',
-      message: '确定要删除这个供应商吗？',
-      onConfirm: async () => {
-        await window.electronAPI.deleteProvider(id)
-        await loadProviders()
-        setConfirmModal(null)
-      }
-    })
+    if (confirm('确定要删除这个供应商吗？')) {
+      await window.electronAPI.deleteProvider(id)
+      await loadProviders()
+    }
   }
 
   const handleSwitchProvider = async (id: string) => {
-    const provider = providers[id]
-    if (!provider) return
-    
-    // 如果是当前供应商，直接返回
-    if (id === currentProviderId) return
-    
-    setConfirmModal({
-      show: true,
-      title: '切换供应商',
-      message: `确定要切换到"${provider.name}"吗？`,
-      onConfirm: async () => {
-        setIsLoading(true)
-        const success = await window.electronAPI.switchProvider(id)
-        setIsLoading(false)
-        
-        if (success) {
-          setCurrentProviderId(id)
-          setMessageModal({
-            show: true,
-            title: '切换成功',
-            message: '供应商已成功切换！',
-            type: 'success'
-          })
-        } else {
-          setMessageModal({
-            show: true,
-            title: '切换失败',
-            message: '切换失败，请检查配置',
-            type: 'error'
-          })
-        }
-        setConfirmModal(null)
-      }
-    })
+    const success = await window.electronAPI.switchProvider(id)
+    if (success) {
+      setCurrentProviderId(id)
+      alert('切换成功！')
+    } else {
+      alert('切换失败，请检查配置')
+    }
   }
 
   const handleEditProvider = async (provider: Provider) => {
@@ -119,20 +69,10 @@ function App() {
       await window.electronAPI.updateProvider(provider)
       await loadProviders()
       setEditingProviderId(null)
-      setMessageModal({
-        show: true,
-        title: '保存成功',
-        message: '供应商信息已更新！',
-        type: 'success'
-      })
+      alert('保存成功！')
     } catch (error) {
       console.error('更新供应商失败:', error)
-      setMessageModal({
-        show: true,
-        title: '保存失败',
-        message: '保存失败，请重试',
-        type: 'error'
-      })
+      alert('保存失败，请重试')
     }
   }
 
@@ -164,7 +104,6 @@ function App() {
           onSwitch={handleSwitchProvider}
           onDelete={handleDeleteProvider}
           onEdit={setEditingProviderId}
-          isLoading={isLoading}
         />
         
         {configPath && (
@@ -193,24 +132,6 @@ function App() {
           provider={providers[editingProviderId]}
           onSave={handleEditProvider}
           onClose={() => setEditingProviderId(null)}
-        />
-      )}
-
-      {confirmModal && (
-        <ConfirmModal
-          title={confirmModal.title}
-          message={confirmModal.message}
-          onConfirm={confirmModal.onConfirm}
-          onCancel={() => setConfirmModal(null)}
-        />
-      )}
-
-      {messageModal && (
-        <MessageModal
-          title={messageModal.title}
-          message={messageModal.message}
-          type={messageModal.type}
-          onClose={() => setMessageModal(null)}
         />
       )}
     </div>

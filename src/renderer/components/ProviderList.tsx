@@ -8,7 +8,6 @@ interface ProviderListProps {
   onSwitch: (id: string) => void
   onDelete: (id: string) => void
   onEdit: (id: string) => void
-  isLoading?: boolean
 }
 
 const ProviderList: React.FC<ProviderListProps> = ({
@@ -16,8 +15,7 @@ const ProviderList: React.FC<ProviderListProps> = ({
   currentProviderId,
   onSwitch,
   onDelete,
-  onEdit,
-  isLoading = false
+  onEdit
 }) => {
   return (
     <div className="provider-list">
@@ -54,21 +52,20 @@ const ProviderList: React.FC<ProviderListProps> = ({
                   <button 
                     className="enable-btn"
                     onClick={() => onSwitch(provider.id)}
-                    disabled={isCurrent || isLoading}
+                    disabled={isCurrent}
                   >
-                    {isLoading ? '处理中...' : '启用'}
+                    启用
                   </button>
                   <button 
                     className="edit-btn"
                     onClick={() => onEdit(provider.id)}
-                    disabled={isLoading}
                   >
                     编辑
                   </button>
                   <button 
                     className="delete-btn"
                     onClick={() => onDelete(provider.id)}
-                    disabled={isCurrent || isLoading}
+                    disabled={isCurrent}
                   >
                     删除
                   </button>
