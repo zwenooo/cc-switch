@@ -13,7 +13,7 @@ function createWindow() {
     width: 800,
     height: 600,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, '../main/preload.js'),
       contextIsolation: true,
       nodeIntegration: false
     },
@@ -68,6 +68,13 @@ ipcMain.handle('addProvider', (_, provider: Provider) => {
 ipcMain.handle('deleteProvider', (_, id: string) => {
   const providers = store.get('providers', {})
   delete providers[id]
+  store.set('providers', providers)
+  return true
+})
+
+ipcMain.handle('updateProvider', (_, provider: Provider) => {
+  const providers = store.get('providers', {})
+  providers[provider.id] = provider
   store.set('providers', providers)
   return true
 })
