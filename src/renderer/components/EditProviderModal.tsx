@@ -26,14 +26,12 @@ const EditProviderModal: React.FC<EditProviderModalProps> = ({ provider, onSave,
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    console.log('提交表单，当前数据:', formData)
     
     if (!formData.name || !formData.apiUrl || !formData.apiKey) {
       alert('请填写所有必填字段')
       return
     }
 
-    console.log('调用 onSave，provider:', provider, 'formData:', formData)
     onSave({
       ...provider,
       ...formData
@@ -42,7 +40,6 @@ const EditProviderModal: React.FC<EditProviderModalProps> = ({ provider, onSave,
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
-    console.log('输入变化:', name, value)
     setFormData(prev => ({
       ...prev,
       [name]: value
