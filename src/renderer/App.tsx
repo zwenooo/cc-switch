@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { Provider, ProviderStatus } from '../shared/types'
 import ProviderList from './components/ProviderList'
 import AddProviderModal from './components/AddProviderModal'
@@ -99,6 +99,13 @@ function App() {
     }
   }
 
+  const handleSelectConfigFile = async () => {
+    const selectedPath = await window.electronAPI.selectConfigFile()
+    if (selectedPath) {
+      setConfigPath(selectedPath)
+    }
+  }
+
   return (
     <div className="app">
       <header className="app-header">
@@ -133,7 +140,14 @@ function App() {
         
         {configPath && (
           <div className="config-path">
-            配置文件位置: {configPath}
+            <span>配置文件位置: {configPath}</span>
+            <button 
+              className="browse-btn" 
+              onClick={handleSelectConfigFile}
+              title="浏览选择配置文件"
+            >
+              浏览
+            </button>
           </div>
         )}
       </main>

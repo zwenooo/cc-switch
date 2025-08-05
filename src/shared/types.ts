@@ -29,6 +29,7 @@ declare global {
       checkStatus: (provider: Provider) => Promise<ProviderStatus>
       switchProvider: (providerId: string) => Promise<boolean>
       getClaudeCodeConfigPath: () => Promise<string>
+      selectConfigFile: () => Promise<string | null>
     }
   }
 }

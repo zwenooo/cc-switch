@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'path'
 import Store from 'electron-store'
 import { Provider, AppConfig } from '../shared/types'
@@ -98,4 +98,24 @@ ipcMain.handle('switchProvider', async (_, providerId: string) => {
 
 ipcMain.handle('getClaudeCodeConfigPath', () => {
   return getClaudeCodeConfig().path
+})
+
+ipcMain.handle('selectConfigFile', async () => {
+  if (!mainWindow) return null
+  
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    title: '选择 Claude Code 配置文件',
+    filters: [
+      { name: 'JSON 文件', extensions: ['json'] },
+      { name: '所有文件', extensions: ['*'] }
+    ],
+    defaultPath: 'settings.json'
+  })
+  
+  if (result.canceled || result.filePaths.length === 0) {
+    return null
+  }
+  
+  return result.filePaths[0]
 })
