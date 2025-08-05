@@ -3,6 +3,15 @@ import path from 'path'
 import os from 'os'
 import { Provider } from '../shared/types'
 
+interface ClaudeCodeConfig {
+  env?: {
+    ANTHROPIC_AUTH_TOKEN?: string
+    ANTHROPIC_BASE_URL?: string
+    [key: string]: string | undefined
+  }
+  [key: string]: any
+}
+
 export function getClaudeCodeConfig() {
   // Claude Code 配置文件路径
   const configDir = path.join(os.homedir(), '.claude')
@@ -19,7 +28,7 @@ export async function switchProvider(provider: Provider): Promise<boolean> {
     await fs.mkdir(configDir, { recursive: true })
 
     // 读取现有配置
-    let config: any = {}
+    let config: ClaudeCodeConfig = {}
     try {
       const content = await fs.readFile(configPath, 'utf-8')
       config = JSON.parse(content)
