@@ -1,19 +1,7 @@
 import fs from 'fs/promises'
 import path from 'path'
 import os from 'os'
-import { Provider, ProviderStatus } from '../shared/types'
-
-export async function checkProviderStatus(
-  provider: Provider
-): Promise<ProviderStatus> {
-  // 暂时返回未检查状态
-  return {
-    isOnline: false,
-    responseTime: -1,
-    lastChecked: new Date(),
-    error: '功能开发中'
-  }
-}
+import { Provider } from '../shared/types'
 
 export function getClaudeCodeConfig() {
   // Claude Code 配置文件路径

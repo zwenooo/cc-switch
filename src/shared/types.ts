@@ -6,13 +6,6 @@ export interface Provider {
   model?: string
 }
 
-export interface ProviderStatus {
-  isOnline: boolean
-  responseTime: number
-  lastChecked: Date
-  error?: string
-}
-
 export interface AppConfig {
   providers: Record<string, Provider>
   current: string
@@ -26,7 +19,6 @@ declare global {
       addProvider: (provider: Provider) => Promise<boolean>
       deleteProvider: (id: string) => Promise<boolean>
       updateProvider: (provider: Provider) => Promise<boolean>
-      checkStatus: (provider: Provider) => Promise<ProviderStatus>
       switchProvider: (providerId: string) => Promise<boolean>
       getClaudeCodeConfigPath: () => Promise<string>
       selectConfigFile: () => Promise<string | null>

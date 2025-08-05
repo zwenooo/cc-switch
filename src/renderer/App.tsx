@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Provider, ProviderStatus } from '../shared/types'
+import { Provider } from '../shared/types'
 import ProviderList from './components/ProviderList'
 import AddProviderModal from './components/AddProviderModal'
 import EditProviderModal from './components/EditProviderModal'
@@ -8,9 +8,7 @@ import './App.css'
 function App() {
   const [providers, setProviders] = useState<Record<string, Provider>>({})
   const [currentProviderId, setCurrentProviderId] = useState<string>('')
-  const [statuses, setStatuses] = useState<Record<string, ProviderStatus>>({})
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
-  const [checkingStatus, setCheckingStatus] = useState<Record<string, boolean>>({})
   const [configPath, setConfigPath] = useState<string>('')
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null)
 
@@ -33,32 +31,6 @@ function App() {
     setConfigPath(path)
   }
 
-  const checkAllStatuses = async () => {
-    // 功能开发中
-    alert('状态检查功能开发中')
-  }
-
-  const checkSingleStatus = async (providerId: string) => {
-    const provider = providers[providerId]
-    if (!provider) return
-
-    setCheckingStatus(prev => ({ ...prev, [providerId]: true }))
-    
-    try {
-      // 暂时显示开发中状态
-      const status: ProviderStatus = {
-        isOnline: false,
-        responseTime: -1,
-        lastChecked: new Date(),
-        error: '功能开发中'
-      }
-      setStatuses(prev => ({ ...prev, [providerId]: status }))
-    } catch (error) {
-      console.error('检查状态失败:', error)
-    } finally {
-      setCheckingStatus(prev => ({ ...prev, [providerId]: false }))
-    }
-  }
 
   const handleAddProvider = async (provider: Omit<Provider, 'id'>) => {
     const newProvider: Provider = {
@@ -112,12 +84,6 @@ function App() {
         <h1>Claude Code 供应商切换器</h1>
         <div className="header-actions">
           <button 
-            className="refresh-btn" 
-            onClick={checkAllStatuses}
-          >
-            检查状态（开发中）
-          </button>
-          <button 
             className="add-btn" 
             onClick={() => setIsAddModalOpen(true)}
           >
@@ -130,12 +96,9 @@ function App() {
         <ProviderList
           providers={providers}
           currentProviderId={currentProviderId}
-          statuses={statuses}
-          checkingStatus={checkingStatus}
           onSwitch={handleSwitchProvider}
           onDelete={handleDeleteProvider}
           onEdit={setEditingProviderId}
-          onCheckStatus={checkSingleStatus}
         />
         
         {configPath && (

@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'path'
 import Store from 'electron-store'
 import { Provider, AppConfig } from '../shared/types'
-import { checkProviderStatus, switchProvider, getClaudeCodeConfig } from './services'
+import { switchProvider, getClaudeCodeConfig } from './services'
 
 const store = new Store<AppConfig>()
 
@@ -77,10 +77,6 @@ ipcMain.handle('updateProvider', (_, provider: Provider) => {
   providers[provider.id] = provider
   store.set('providers', providers)
   return true
-})
-
-ipcMain.handle('checkStatus', async (_, provider: Provider) => {
-  return await checkProviderStatus(provider)
 })
 
 ipcMain.handle('switchProvider', async (_, providerId: string) => {
