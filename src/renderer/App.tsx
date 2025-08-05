@@ -27,6 +27,7 @@ function App() {
     message: string
     type: 'success' | 'error' | 'info'
   } | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
 
   // 加载供应商列表
   useEffect(() => {
@@ -88,7 +89,10 @@ function App() {
       title: '切换供应商',
       message: `确定要切换到"${provider.name}"吗？`,
       onConfirm: async () => {
+        setIsLoading(true)
         const success = await window.electronAPI.switchProvider(id)
+        setIsLoading(false)
+        
         if (success) {
           setCurrentProviderId(id)
           setMessageModal({
@@ -160,6 +164,7 @@ function App() {
           onSwitch={handleSwitchProvider}
           onDelete={handleDeleteProvider}
           onEdit={setEditingProviderId}
+          isLoading={isLoading}
         />
         
         {configPath && (
