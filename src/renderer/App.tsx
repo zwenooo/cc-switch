@@ -77,23 +77,37 @@ function App() {
   }
 
   const handleSwitchProvider = async (id: string) => {
-    const success = await window.electronAPI.switchProvider(id)
-    if (success) {
-      setCurrentProviderId(id)
-      setMessageModal({
-        show: true,
-        title: '切换成功',
-        message: '供应商已成功切换！',
-        type: 'success'
-      })
-    } else {
-      setMessageModal({
-        show: true,
-        title: '切换失败',
-        message: '切换失败，请检查配置',
-        type: 'error'
-      })
-    }
+    const provider = providers[id]
+    if (!provider) return
+    
+    // 如果是当前供应商，直接返回
+    if (id === currentProviderId) return
+    
+    setConfirmModal({
+      show: true,
+      title: '切换供应商',
+      message: `确定要切换到"${provider.name}"吗？`,
+      onConfirm: async () => {
+        const success = await window.electronAPI.switchProvider(id)
+        if (success) {
+          setCurrentProviderId(id)
+          setMessageModal({
+            show: true,
+            title: '切换成功',
+            message: '供应商已成功切换！',
+            type: 'success'
+          })
+        } else {
+          setMessageModal({
+            show: true,
+            title: '切换失败',
+            message: '切换失败，请检查配置',
+            type: 'error'
+          })
+        }
+        setConfirmModal(null)
+      }
+    })
   }
 
   const handleEditProvider = async (provider: Provider) => {
