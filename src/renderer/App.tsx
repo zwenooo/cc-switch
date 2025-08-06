@@ -58,9 +58,10 @@ function App() {
     const success = await window.electronAPI.switchProvider(id)
     if (success) {
       setCurrentProviderId(id)
-      alert('切换成功！')
+      // 移除阻塞式alert
+      console.log('供应商切换成功')
     } else {
-      alert('切换失败，请检查配置')
+      console.error('切换失败，请检查配置')
     }
   }
 
@@ -69,10 +70,17 @@ function App() {
       await window.electronAPI.updateProvider(provider)
       await loadProviders()
       setEditingProviderId(null)
-      alert('保存成功！')
+      // 移除阻塞式alert，避免焦点管理问题
+      setTimeout(() => {
+        console.log('供应商更新成功')
+      }, 100)
     } catch (error) {
       console.error('更新供应商失败:', error)
-      alert('保存失败，请重试')
+      setEditingProviderId(null)
+      // 错误情况下也避免alert
+      setTimeout(() => {
+        console.error('保存失败，请重试')
+      }, 100)
     }
   }
 

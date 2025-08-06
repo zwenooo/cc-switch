@@ -25,7 +25,7 @@ const EditProviderModal: React.FC<EditProviderModalProps> = ({ provider, onSave,
       apiKey: provider.apiKey,
       websiteUrl: provider.websiteUrl || ''
     })
-  }, [provider])
+  }, [provider.id, provider.name, provider.apiUrl, provider.apiKey, provider.websiteUrl])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -86,7 +86,7 @@ const EditProviderModal: React.FC<EditProviderModalProps> = ({ provider, onSave,
               type="text"
               id="name"
               name="name"
-              value={formData.name || ''}
+              value={formData.name}
               onChange={handleChange}
               placeholder="例如：官方 Anthropic"
               required
@@ -100,7 +100,7 @@ const EditProviderModal: React.FC<EditProviderModalProps> = ({ provider, onSave,
               type="url"
               id="apiUrl"
               name="apiUrl"
-              value={formData.apiUrl || ''}
+              value={formData.apiUrl}
               onChange={handleChange}
               onBlur={handleApiUrlBlur}
               placeholder="https://api.anthropic.com"
@@ -115,7 +115,7 @@ const EditProviderModal: React.FC<EditProviderModalProps> = ({ provider, onSave,
               type="text"
               id="websiteUrl"
               name="websiteUrl"
-              value={formData.websiteUrl || ''}
+              value={formData.websiteUrl}
               onChange={handleChange}
               placeholder="https://example.com（可选）"
               autoComplete="off"
@@ -130,7 +130,7 @@ const EditProviderModal: React.FC<EditProviderModalProps> = ({ provider, onSave,
                 type={showPassword ? "text" : "password"}
                 id="apiKey"
                 name="apiKey"
-                value={formData.apiKey || ''}
+                value={formData.apiKey}
                 onChange={handleChange}
                 placeholder={formData.name && formData.name.includes('YesCode') ? 'cr_...' : 'sk-...'}
                 required

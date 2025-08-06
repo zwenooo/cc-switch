@@ -81,8 +81,6 @@
   border-radius: 4px;
   font-size: 0.95rem;
   transition: border-color 0.2s;
-  position: relative;
-  z-index: 1;
   background: white;
 }
 
@@ -152,7 +150,6 @@
   justify-content: center;
   width: 32px;
   height: 32px;
-  z-index: 2;
 }
 
 .password-toggle svg {
