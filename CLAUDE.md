@@ -9,25 +9,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 开发命令
 
 ```bash
+# 安装依赖
+pnpm install
+
 # 开发模式（同时启动 Vite 开发服务器和 Electron 主进程监听）
-npm run dev
+pnpm run dev
 
 # 仅构建主进程
-npm run build:main
+pnpm run build:main
 
 # 仅构建渲染进程
-npm run build:renderer
+pnpm run build:renderer
 
 # 完整构建
-npm run build
+pnpm run build
 
 # 启动应用（需要先构建）
-npm start
+pnpm start
 # 或
 electron .
 
 # 打包发布
-npm run dist
+pnpm run dist
 ```
 
 ## 代码架构
@@ -69,3 +72,33 @@ npm run dist
 - 渲染进程使用 `tsconfig.json` + Vite 构建
 - 开发时渲染进程运行在 `localhost:3000`
 - 生产时渲染进程文件位于 `dist/renderer/`
+
+## 依赖管理
+
+项目使用 npm 管理依赖，但检测到 `pnpm-lock.yaml`，建议使用 pnpm：
+
+```bash
+# 安装依赖
+pnpm install
+
+# 或使用 npm
+npm install
+```
+
+## 核心 IPC 接口
+
+主要的 IPC 接口定义在 `src/shared/types.ts` 中的 `window.electronAPI`：
+
+- `getProviders()`: 获取所有供应商配置
+- `switchProvider(providerId)`: 切换当前供应商
+- `addProvider(provider)`: 添加新供应商
+- `updateProvider(provider)`: 更新供应商配置
+- `deleteProvider(id)`: 删除供应商
+- `getClaudeCodeConfigPath()`: 获取 Claude Code 配置路径
+- `selectConfigFile()`: 打开文件选择对话框
+
+## 重要说明
+
+- 供应商配置存储在 `electron-store` 中，自动持久化
+- 切换供应商会直接修改 `~/.claude/settings.json` 中的 `ANTHROPIC_AUTH_TOKEN` 和 `ANTHROPIC_BASE_URL`
+- 应用支持多平台打包（Windows NSIS、macOS DMG、Linux AppImage）
