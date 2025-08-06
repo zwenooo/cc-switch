@@ -72,10 +72,22 @@ ipcMain.handle('deleteProvider', (_, id: string) => {
   return true
 })
 
-ipcMain.handle('updateProvider', (_, provider: Provider) => {
+ipcMain.handle('updateProvider', async (_, provider: Provider) => {
   const providers = store.get('providers', {})
+  const currentProviderId = store.get('current', '')
+  
   providers[provider.id] = provider
   store.set('providers', providers)
+  
+  // 如果编辑的是当前激活的供应商，同时更新Claude Code配置
+  if (provider.id === currentProviderId) {
+    const success = await switchProvider(provider)
+    if (!success) {
+      console.error('更新当前供应商的Claude Code配置失败')
+      return false
+    }
+  }
+  
   return true
 })
 
