@@ -72,6 +72,32 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            release/*
+            release/*.exe
+            release/*.zip
+            release/*.AppImage
+          name: "CC Switch ${{ github.ref_name }}"
+          body: |
+            ## CC Switch ${{ github.ref_name }}
+            
+            Claude Code 供应商切换工具
+            
+            ### 下载
+            
+            #### Windows 用户
+            - **安装版 (推荐)**: `CC.Switch.Setup.${{ github.ref_name }}.exe`
+            - **便携版**: `CC.Switch.${{ github.ref_name }}.exe`
+            
+            #### macOS 用户  
+            - **ARM64 (M1/M2/M3)**: `CC.Switch-${{ github.ref_name }}-arm64-mac.zip`
+            - **Intel x64**: `CC.Switch-${{ github.ref_name }}-mac.zip`
+            
+            #### Linux 用户
+            - **AppImage**: `CC.Switch-${{ github.ref_name }}.AppImage`
+            
+            ### 使用说明
+            1. 下载对应平台的文件
+            2. Windows 推荐使用安装版获得最佳体验
+            3. macOS 下载 ZIP 后解压即可使用
+            4. Linux 下载后添加执行权限: `chmod +x CC.Switch-*.AppImage`
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
