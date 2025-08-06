@@ -8,8 +8,15 @@ export function inferWebsiteUrl(apiUrl: string): string {
     return ''
   }
 
+  let urlString = apiUrl.trim()
+  
+  // 如果没有协议，默认添加 https://
+  if (!urlString.match(/^https?:\/\//)) {
+    urlString = 'https://' + urlString
+  }
+
   try {
-    const url = new URL(apiUrl.trim())
+    const url = new URL(urlString)
     
     // 如果是localhost或IP地址，去掉路径部分
     if (url.hostname === 'localhost' || /^\d+\.\d+\.\d+\.\d+$/.test(url.hostname)) {

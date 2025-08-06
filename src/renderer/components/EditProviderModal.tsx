@@ -56,6 +56,24 @@ const EditProviderModal: React.FC<EditProviderModalProps> = ({ provider, onSave,
     setFormData(newFormData)
   }
 
+  const handleApiUrlBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const apiUrl = e.target.value.trim()
+    if (apiUrl) {
+      let normalizedApiUrl = apiUrl
+      
+      // 如果没有协议，添加 https://
+      if (!normalizedApiUrl.match(/^https?:\/\//)) {
+        normalizedApiUrl = 'https://' + normalizedApiUrl
+      }
+      
+      setFormData(prev => ({
+        ...prev,
+        apiUrl: normalizedApiUrl,
+        websiteUrl: inferWebsiteUrl(normalizedApiUrl)
+      }))
+    }
+  }
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -84,6 +102,7 @@ const EditProviderModal: React.FC<EditProviderModalProps> = ({ provider, onSave,
               name="apiUrl"
               value={formData.apiUrl || ''}
               onChange={handleChange}
+              onBlur={handleApiUrlBlur}
               placeholder="https://api.anthropic.com"
               required
               autoComplete="off"
@@ -93,7 +112,7 @@ const EditProviderModal: React.FC<EditProviderModalProps> = ({ provider, onSave,
           <div className="form-group">
             <label htmlFor="websiteUrl">网站地址</label>
             <input
-              type="url"
+              type="text"
               id="websiteUrl"
               name="websiteUrl"
               value={formData.websiteUrl || ''}

@@ -43,6 +43,24 @@ const AddProviderModal: React.FC<AddProviderModalProps> = ({ onAdd, onClose }) =
     setFormData(newFormData)
   }
 
+  const handleApiUrlBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const apiUrl = e.target.value.trim()
+    if (apiUrl) {
+      let normalizedApiUrl = apiUrl
+      
+      // 如果没有协议，添加 https://
+      if (!normalizedApiUrl.match(/^https?:\/\//)) {
+        normalizedApiUrl = 'https://' + normalizedApiUrl
+      }
+      
+      setFormData(prev => ({
+        ...prev,
+        apiUrl: normalizedApiUrl,
+        websiteUrl: inferWebsiteUrl(normalizedApiUrl)
+      }))
+    }
+  }
+
   // 预设的供应商配置
   const presets = [
     {
@@ -109,6 +127,7 @@ const AddProviderModal: React.FC<AddProviderModalProps> = ({ onAdd, onClose }) =
               name="apiUrl"
               value={formData.apiUrl}
               onChange={handleChange}
+              onBlur={handleApiUrlBlur}
               placeholder="https://api.anthropic.com"
               required
             />
@@ -117,7 +136,7 @@ const AddProviderModal: React.FC<AddProviderModalProps> = ({ onAdd, onClose }) =
           <div className="form-group">
             <label htmlFor="websiteUrl">网站地址</label>
             <input
-              type="url"
+              type="text"
               id="websiteUrl"
               name="websiteUrl"
               value={formData.websiteUrl}
