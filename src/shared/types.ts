@@ -3,7 +3,6 @@ export interface Provider {
   name: string
   apiUrl: string
   apiKey: string
-  model?: string
   websiteUrl?: string
 }
 
@@ -23,7 +22,6 @@ declare global {
       switchProvider: (providerId: string) => Promise<boolean>
       getClaudeCodeConfigPath: () => Promise<string>
       selectConfigFile: () => Promise<string | null>
-      checkStatus: (provider: Provider) => Promise<boolean>
       openExternal: (url: string) => Promise<boolean>
     }
   }

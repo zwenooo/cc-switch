@@ -44,12 +44,6 @@ const ProviderList: React.FC<ProviderListProps> = ({
               >
                 <div className="provider-info">
                   <div className="provider-name">
-                    <input
-                      type="radio"
-                      name="provider"
-                      checked={isCurrent}
-                      onChange={() => onSwitch(provider.id)}
-                    />
                     <span>{provider.name}</span>
                     {isCurrent && <span className="current-badge">当前使用</span>}
                   </div>
