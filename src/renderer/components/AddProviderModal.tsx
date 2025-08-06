@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { Provider } from '../../shared/types'
+import { inferWebsiteUrl } from '../../shared/utils'
 import './AddProviderModal.css'
 
 interface AddProviderModalProps {
@@ -11,7 +12,8 @@ const AddProviderModal: React.FC<AddProviderModalProps> = ({ onAdd, onClose }) =
   const [formData, setFormData] = useState({
     name: '',
     apiUrl: '',
-    apiKey: ''
+    apiKey: '',
+    websiteUrl: ''
   })
   const [showPassword, setShowPassword] = useState(false)
 
@@ -27,10 +29,18 @@ const AddProviderModal: React.FC<AddProviderModalProps> = ({ onAdd, onClose }) =
   }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setFormData({
+    const { name, value } = e.target
+    const newFormData = {
       ...formData,
-      [e.target.name]: e.target.value
-    })
+      [name]: value
+    }
+    
+    // 如果修改的是API地址，自动推测网站地址
+    if (name === 'apiUrl') {
+      newFormData.websiteUrl = inferWebsiteUrl(value)
+    }
+    
+    setFormData(newFormData)
   }
 
   // 预设的供应商配置
@@ -46,11 +56,14 @@ const AddProviderModal: React.FC<AddProviderModalProps> = ({ onAdd, onClose }) =
   ]
 
   const applyPreset = (preset: typeof presets[0]) => {
-    setFormData({
+    const newFormData = {
       ...formData,
       name: preset.name,
       apiUrl: preset.apiUrl
-    })
+    }
+    // 应用预设时也自动推测网站地址
+    newFormData.websiteUrl = inferWebsiteUrl(preset.apiUrl)
+    setFormData(newFormData)
   }
 
   return (
@@ -99,6 +112,19 @@ const AddProviderModal: React.FC<AddProviderModalProps> = ({ onAdd, onClose }) =
               placeholder="https://api.anthropic.com"
               required
             />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="websiteUrl">网站地址</label>
+            <input
+              type="url"
+              id="websiteUrl"
+              name="websiteUrl"
+              value={formData.websiteUrl}
+              onChange={handleChange}
+              placeholder="https://example.com（可选）"
+            />
+            <small className="field-hint">用于在面板中显示可访问的网站链接，留空则显示API地址</small>
           </div>
 
           <div className="form-group">

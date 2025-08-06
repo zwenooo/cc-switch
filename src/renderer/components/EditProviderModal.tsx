@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Provider } from '../../shared/types'
+import { inferWebsiteUrl } from '../../shared/utils'
 import './AddProviderModal.css'
 
 interface EditProviderModalProps {
@@ -12,7 +13,8 @@ const EditProviderModal: React.FC<EditProviderModalProps> = ({ provider, onSave,
   const [formData, setFormData] = useState({
     name: provider.name,
     apiUrl: provider.apiUrl,
-    apiKey: provider.apiKey
+    apiKey: provider.apiKey,
+    websiteUrl: provider.websiteUrl || ''
   })
   const [showPassword, setShowPassword] = useState(false)
 
@@ -20,7 +22,8 @@ const EditProviderModal: React.FC<EditProviderModalProps> = ({ provider, onSave,
     setFormData({
       name: provider.name,
       apiUrl: provider.apiUrl,
-      apiKey: provider.apiKey
+      apiKey: provider.apiKey,
+      websiteUrl: provider.websiteUrl || ''
     })
   }, [provider])
 
@@ -40,10 +43,17 @@ const EditProviderModal: React.FC<EditProviderModalProps> = ({ provider, onSave,
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
-    setFormData(prev => ({
-      ...prev,
+    const newFormData = {
+      ...formData,
       [name]: value
-    }))
+    }
+    
+    // 如果修改的是API地址，自动推测网站地址
+    if (name === 'apiUrl') {
+      newFormData.websiteUrl = inferWebsiteUrl(value)
+    }
+    
+    setFormData(newFormData)
   }
 
   return (
@@ -78,6 +88,20 @@ const EditProviderModal: React.FC<EditProviderModalProps> = ({ provider, onSave,
               required
               autoComplete="off"
             />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="websiteUrl">网站地址</label>
+            <input
+              type="url"
+              id="websiteUrl"
+              name="websiteUrl"
+              value={formData.websiteUrl || ''}
+              onChange={handleChange}
+              placeholder="https://example.com（可选）"
+              autoComplete="off"
+            />
+            <small className="field-hint">用于在面板中显示可访问的网站链接，留空则显示API地址</small>
           </div>
 
           <div className="form-group">

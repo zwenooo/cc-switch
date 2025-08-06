@@ -4,6 +4,7 @@ export interface Provider {
   apiUrl: string
   apiKey: string
   model?: string
+  websiteUrl?: string
 }
 
 export interface AppConfig {

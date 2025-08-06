@@ -90,6 +90,10 @@
   text-decoration: underline;
 }
 
+.api-url {
+  color: #7f8c8d;
+}
+
 .provider-status {
   display: flex;
   align-items: center;

@@ -54,16 +54,23 @@ const ProviderList: React.FC<ProviderListProps> = ({
                     {isCurrent && <span className="current-badge">当前使用</span>}
                   </div>
                   <div className="provider-url">
-                    <a 
-                      href="#" 
-                      onClick={(e) => {
-                        e.preventDefault()
-                        handleUrlClick(provider.apiUrl)
-                      }}
-                      className="url-link"
-                    >
-                      {provider.apiUrl}
-                    </a>
+                    {provider.websiteUrl ? (
+                      <a 
+                        href="#" 
+                        onClick={(e) => {
+                          e.preventDefault()
+                          handleUrlClick(provider.websiteUrl!)
+                        }}
+                        className="url-link"
+                        title={`访问 ${provider.websiteUrl}`}
+                      >
+                        {provider.websiteUrl}
+                      </a>
+                    ) : (
+                      <span className="api-url" title={provider.apiUrl}>
+                        {provider.apiUrl}
+                      </span>
+                    )}
                   </div>
                 </div>
                 

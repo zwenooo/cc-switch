@@ -168,3 +168,11 @@
 .password-toggle:focus {
   outline: none;
 }
+
+.field-hint {
+  display: block;
+  margin-top: 0.25rem;
+  color: #7f8c8d;
+  font-size: 0.8rem;
+  line-height: 1.3;
+}
