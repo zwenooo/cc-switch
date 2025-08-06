@@ -16,7 +16,7 @@
     "dist": "electron-builder"
   },
   "keywords": [],
-  "author": "",
+  "author": "Jason Young",
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^20.0.0",
@@ -37,14 +37,23 @@
   "build": {
     "appId": "com.ccswitch.app",
     "productName": "CC Switch",
+    "compression": "maximum",
     "directories": {
       "output": "release"
     },
+    "files": [
+      "dist/**/*",
+      "node_modules/**/*",
+      "!node_modules/*/{CHANGELOG.md,README.md,readme.md}",
+      "!node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+      "!node_modules/*.d.ts",
+      "!node_modules/.bin"
+    ],
     "mac": {
       "category": "public.app-category.developer-tools"
     },
     "win": {
-      "target": "nsis"
+      "target": "portable"
     },
     "linux": {
       "target": "AppImage"
