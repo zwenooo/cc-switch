@@ -7,4 +7,3 @@ release/
 .env.local
 *.tsbuildinfo
 .npmrc
-pnpm-lock.yaml
