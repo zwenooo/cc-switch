@@ -17,6 +17,7 @@ const EditProviderModal: React.FC<EditProviderModalProps> = ({ provider, onSave,
     websiteUrl: provider.websiteUrl || ''
   })
   const [showPassword, setShowPassword] = useState(false)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     setFormData({
@@ -29,9 +30,10 @@ const EditProviderModal: React.FC<EditProviderModalProps> = ({ provider, onSave,
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    setError('')
     
     if (!formData.name || !formData.apiUrl || !formData.apiKey) {
-      alert('请填写所有必填字段')
+      setError('请填写所有必填字段')
       return
     }
 
@@ -78,6 +80,12 @@ const EditProviderModal: React.FC<EditProviderModalProps> = ({ provider, onSave,
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <h2>编辑供应商</h2>
+
+        {error && (
+          <div className="error-message">
+            {error}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">

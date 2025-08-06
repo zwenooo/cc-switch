@@ -16,12 +16,14 @@ const AddProviderModal: React.FC<AddProviderModalProps> = ({ onAdd, onClose }) =
     websiteUrl: ''
   })
   const [showPassword, setShowPassword] = useState(false)
+  const [error, setError] = useState('')
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    setError('')
     
     if (!formData.name || !formData.apiUrl || !formData.apiKey) {
-      alert('请填写所有必填字段')
+      setError('请填写所有必填字段')
       return
     }
 
@@ -88,6 +90,12 @@ const AddProviderModal: React.FC<AddProviderModalProps> = ({ onAdd, onClose }) =
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <h2>添加新供应商</h2>
+        
+        {error && (
+          <div className="error-message">
+            {error}
+          </div>
+        )}
         
         <div className="presets">
           <label>快速选择：</label>

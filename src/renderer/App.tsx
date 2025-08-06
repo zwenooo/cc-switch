@@ -3,6 +3,7 @@ import { Provider } from '../shared/types'
 import ProviderList from './components/ProviderList'
 import AddProviderModal from './components/AddProviderModal'
 import EditProviderModal from './components/EditProviderModal'
+import { ConfirmDialog } from './components/ConfirmDialog'
 import './App.css'
 
 function App() {
@@ -13,6 +14,7 @@ function App() {
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null)
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const [isNotificationVisible, setIsNotificationVisible] = useState(false)
+  const [confirmDialog, setConfirmDialog] = useState<{ isOpen: boolean; title: string; message: string; onConfirm: () => void } | null>(null)
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // 设置通知的辅助函数
@@ -82,10 +84,18 @@ function App() {
   }
 
   const handleDeleteProvider = async (id: string) => {
-    if (confirm('确定要删除这个供应商吗？')) {
-      await window.electronAPI.deleteProvider(id)
-      await loadProviders()
-    }
+    const provider = providers[id]
+    setConfirmDialog({
+      isOpen: true,
+      title: '删除供应商',
+      message: `确定要删除供应商 "${provider?.name}" 吗？此操作无法撤销。`,
+      onConfirm: async () => {
+        await window.electronAPI.deleteProvider(id)
+        await loadProviders()
+        setConfirmDialog(null)
+        showNotification('供应商删除成功', 'success')
+      }
+    })
   }
 
   const handleSwitchProvider = async (id: string) => {
@@ -178,6 +188,16 @@ function App() {
           provider={providers[editingProviderId]}
           onSave={handleEditProvider}
           onClose={() => setEditingProviderId(null)}
+        />
+      )}
+
+      {confirmDialog && (
+        <ConfirmDialog
+          isOpen={confirmDialog.isOpen}
+          title={confirmDialog.title}
+          message={confirmDialog.message}
+          onConfirm={confirmDialog.onConfirm}
+          onCancel={() => setConfirmDialog(null)}
         />
       )}
     </div>
