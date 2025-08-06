@@ -1,6 +1,6 @@
 {
   "name": "cc-switch",
-  "version": "1.0.0",
+  "version": "1.0.5",
   "description": "Claude Code 供应商切换工具",
   "main": "dist/main/index.js",
   "scripts": {
@@ -38,6 +38,7 @@
     "appId": "com.ccswitch.app",
     "productName": "CC Switch",
     "compression": "maximum",
+    "publish": null,
     "directories": {
       "output": "release"
     },
@@ -52,7 +53,13 @@
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
-      "icon": "build/icon.icns"
+      "icon": "build/icon.icns",
+      "target": [
+        {
+          "target": "zip",
+          "arch": ["arm64", "x64"]
+        }
+      ]
     },
     "win": {
       "target": [
