@@ -5,7 +5,7 @@
 }
 
 .app-header {
-  background: #2c3e50;
+  background: #3498db;
   color: white;
   padding: 1rem 2rem;
   display: flex;
@@ -54,6 +54,10 @@
 
 .add-btn:hover {
   background: #229954;
+}
+
+.add-btn:focus {
+  outline: none;
 }
 
 .app-main {
