@@ -77,8 +77,8 @@ const EditProviderModal: React.FC<EditProviderModalProps> = ({ provider, onSave,
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay">
+      <div className="modal-content">
         <h2>编辑供应商</h2>
 
         {error && (
