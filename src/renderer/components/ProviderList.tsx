@@ -17,6 +17,14 @@ const ProviderList: React.FC<ProviderListProps> = ({
   onDelete,
   onEdit
 }) => {
+  const handleUrlClick = async (url: string) => {
+    try {
+      await window.electronAPI.openExternal(url)
+    } catch (error) {
+      console.error('打开链接失败:', error)
+    }
+  }
+
   return (
     <div className="provider-list">
       {Object.values(providers).length === 0 ? (
@@ -45,7 +53,18 @@ const ProviderList: React.FC<ProviderListProps> = ({
                     <span>{provider.name}</span>
                     {isCurrent && <span className="current-badge">当前使用</span>}
                   </div>
-                  <div className="provider-url">{provider.apiUrl}</div>
+                  <div className="provider-url">
+                    <a 
+                      href="#" 
+                      onClick={(e) => {
+                        e.preventDefault()
+                        handleUrlClick(provider.apiUrl)
+                      }}
+                      className="url-link"
+                    >
+                      {provider.apiUrl}
+                    </a>
+                  </div>
                 </div>
                 
                 <div className="provider-actions">

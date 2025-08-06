@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
 import path from 'path'
 import Store from 'electron-store'
 import { Provider, AppConfig } from '../shared/types'
@@ -131,6 +131,16 @@ ipcMain.handle('checkStatus', async (_, provider: Provider) => {
     return response.ok
   } catch (error) {
     console.error('检查供应商状态失败:', error)
+    return false
+  }
+})
+
+ipcMain.handle('openExternal', async (_, url: string) => {
+  try {
+    await shell.openExternal(url)
+    return true
+  } catch (error) {
+    console.error('打开外部链接失败:', error)
     return false
   }
 })

@@ -78,6 +78,18 @@
   text-overflow: ellipsis;
 }
 
+.url-link {
+  color: #3498db;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.url-link:hover {
+  color: #2980b9;
+  text-decoration: underline;
+}
+
 .provider-status {
   display: flex;
   align-items: center;

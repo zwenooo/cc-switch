@@ -10,5 +10,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkStatus: (provider: Provider) => ipcRenderer.invoke('checkStatus', provider),
   switchProvider: (providerId: string) => ipcRenderer.invoke('switchProvider', providerId),
   getClaudeCodeConfigPath: () => ipcRenderer.invoke('getClaudeCodeConfigPath'),
-  selectConfigFile: () => ipcRenderer.invoke('selectConfigFile')
+  selectConfigFile: () => ipcRenderer.invoke('selectConfigFile'),
+  openExternal: (url: string) => ipcRenderer.invoke('openExternal', url)
 })
