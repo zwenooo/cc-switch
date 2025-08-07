@@ -45,11 +45,7 @@
     "icon": "build/icon.ico",
     "files": [
       "dist/**/*",
-      "node_modules/**/*",
-      "!node_modules/*/{CHANGELOG.md,README.md,readme.md}",
-      "!node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
-      "!node_modules/*.d.ts",
-      "!node_modules/.bin"
+      "node_modules/**/*"
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
