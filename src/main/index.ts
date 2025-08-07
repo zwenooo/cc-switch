@@ -8,7 +8,6 @@ import {
   saveProviderConfig,
   deleteProviderConfig,
   sanitizeProviderName,
-  importCurrentConfig,
   importCurrentConfigAsDefault,
   getProviderConfigPath,
   fileExists,
@@ -212,26 +211,6 @@ ipcMain.handle("switchProvider", async (_, providerId: string) => {
   } catch (error) {
     console.error("切换供应商失败:", error);
     return false;
-  }
-});
-
-ipcMain.handle("importCurrentConfig", async (_, name: string) => {
-  try {
-    const result = await importCurrentConfig(name);
-
-    if (result.success && result.provider) {
-      // 将导入的供应商添加到store中
-      const providers = store.get("providers", {} as Record<string, Provider>);
-      providers[result.provider.id] = result.provider;
-      await store.set("providers", providers);
-
-      return { success: true, providerId: result.provider.id };
-    }
-
-    return result;
-  } catch (error: any) {
-    console.error("导入配置失败:", error);
-    return { success: false };
   }
 });
 

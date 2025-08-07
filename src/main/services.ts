@@ -137,60 +137,6 @@ export async function switchProvider(
 }
 
 /**
- * 导入当前 settings.json 配置为一个供应商
- */
-export async function importCurrentConfig(
-  name: string
-): Promise<{ success: boolean; provider?: Provider }> {
-  try {
-    const { path: settingsPath } = getClaudeCodeConfig();
-
-    // 检查当前配置是否存在
-    if (!(await fileExists(settingsPath))) {
-      return { success: false };
-    }
-
-    // 读取当前配置
-    const configContent = await fs.readFile(settingsPath, "utf-8");
-    const settingsConfig = JSON.parse(configContent);
-
-    // 生成唯一的供应商ID
-    let providerId = name.toLowerCase().replace(/[^a-z0-9]/g, "-");
-    let counter = 1;
-
-    // 检查ID是否已存在，如果存在则添加数字后缀
-    while (await fileExists(getProviderConfigPath(providerId, name))) {
-      providerId = `${name
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, "-")}-${counter}`;
-      counter++;
-    }
-
-    // 创建供应商对象
-    const provider: Provider = {
-      id: providerId,
-      name: name,
-      settingsConfig: settingsConfig,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-
-    // 保存为供应商配置
-    const success = await saveProviderConfig(provider);
-
-    if (success) {
-      console.log(`已导入当前配置为供应商: ${name} (${providerId})`);
-      return { success: true, provider };
-    } else {
-      return { success: false };
-    }
-  } catch (error: any) {
-    console.error("导入当前配置失败:", error);
-    return { success: false };
-  }
-}
-
-/**
  * 导入当前配置为默认供应商（不生成独立配置文件）
  */
 export async function importCurrentConfigAsDefault(): Promise<{ success: boolean; provider?: Provider }> {
