@@ -231,9 +231,9 @@ export async function deleteProviderConfig(
   providerName?: string
 ): Promise<boolean> {
   try {
-    // 特殊处理：默认供应商不删除配置文件
+    // 默认供应商没有独立配置文件，直接返回成功
     if (providerId === "default") {
-      console.log("默认供应商不删除配置文件");
+      console.log("默认供应商无独立配置文件，删除完成");
       return true;
     }
 
