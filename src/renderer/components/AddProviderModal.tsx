@@ -82,14 +82,43 @@ const AddProviderModal: React.FC<AddProviderModalProps> = ({
     });
   };
 
+  // 从JSON配置中提取并处理官网地址
+  const extractWebsiteUrl = (jsonString: string): string => {
+    try {
+      const config = JSON.parse(jsonString);
+      const baseUrl = config?.env?.ANTHROPIC_BASE_URL;
+      
+      if (baseUrl && typeof baseUrl === 'string') {
+        // 去掉 "api." 前缀
+        return baseUrl.replace(/^https?:\/\/api\./, 'https://');
+      }
+    } catch (err) {
+      // 忽略JSON解析错误
+    }
+    return '';
+  };
+
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: value,
-    });
+    
+    if (name === 'settingsConfig') {
+      // 当用户修改配置时，尝试自动提取官网地址
+      const extractedWebsiteUrl = extractWebsiteUrl(value);
+      
+      setFormData({
+        ...formData,
+        [name]: value,
+        // 只有在官网地址为空时才自动填入
+        websiteUrl: formData.websiteUrl || extractedWebsiteUrl,
+      });
+    } else {
+      setFormData({
+        ...formData,
+        [name]: value,
+      });
+    }
   };
 
   const applyPreset = (preset: typeof presets[0]) => {
