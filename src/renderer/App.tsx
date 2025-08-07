@@ -3,6 +3,7 @@ import { Provider } from "../shared/types";
 import ProviderList from "./components/ProviderList";
 import AddProviderModal from "./components/AddProviderModal";
 import EditProviderModal from "./components/EditProviderModal";
+import ImportConfigModal from "./components/ImportConfigModal";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import "./App.css";
 
@@ -10,6 +11,7 @@ function App() {
   const [providers, setProviders] = useState<Record<string, Provider>>({});
   const [currentProviderId, setCurrentProviderId] = useState<string>("");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [configPath, setConfigPath] = useState<string>("");
   const [editingProviderId, setEditingProviderId] = useState<string | null>(
     null
@@ -139,6 +141,23 @@ function App() {
     }
   };
 
+  const handleImportCurrentConfig = async (name: string) => {
+    try {
+      const result = await window.electronAPI.importCurrentConfig(name)
+      
+      if (result.success) {
+        await loadProviders()
+        setIsImportModalOpen(false)
+        showNotification(`成功导入当前配置为供应商: ${name}`, "success", 3000)
+      } else {
+        showNotification("导入失败，请检查当前是否有有效的配置文件", "error")
+      }
+    } catch (error) {
+      console.error('导入配置失败:', error)
+      showNotification("导入配置时发生错误", "error")
+    }
+  }
+
   const handleSelectConfigFile = async () => {
     const selectedPath = await window.electronAPI.selectConfigFile();
     if (selectedPath) {
@@ -151,6 +170,9 @@ function App() {
       <header className="app-header">
         <h1>Claude Code 供应商切换器</h1>
         <div className="header-actions">
+          <button className="import-btn" onClick={() => setIsImportModalOpen(true)}>
+            导入当前配置
+          </button>
           <button className="add-btn" onClick={() => setIsAddModalOpen(true)}>
             添加供应商
           </button>
@@ -199,6 +221,13 @@ function App() {
         <AddProviderModal
           onAdd={handleAddProvider}
           onClose={() => setIsAddModalOpen(false)}
+        />
+      )}
+
+      {isImportModalOpen && (
+        <ImportConfigModal
+          onImport={handleImportCurrentConfig}
+          onClose={() => setIsImportModalOpen(false)}
         />
       )}
 

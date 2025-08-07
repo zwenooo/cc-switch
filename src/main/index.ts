@@ -1,7 +1,14 @@
 import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
 import path from 'path'
 import { Provider } from '../shared/types'
-import { switchProvider, getClaudeCodeConfig } from './services'
+import { 
+  switchProvider, 
+  getClaudeCodeConfig, 
+  saveProviderConfig, 
+  deleteProviderConfig,
+  sanitizeProviderName,
+  importCurrentConfig 
+} from './services'
 import { store } from './store'
 
 let mainWindow: BrowserWindow | null = null
@@ -57,49 +64,136 @@ ipcMain.handle('getCurrentProvider', () => {
 })
 
 ipcMain.handle('addProvider', async (_, provider: Provider) => {
-  const providers = store.get('providers', {} as Record<string, Provider>)
-  providers[provider.id] = provider
-  await store.set('providers', providers)
-  return true
+  try {
+    // 1. 保存供应商配置到独立文件
+    const saveSuccess = await saveProviderConfig(provider)
+    if (!saveSuccess) {
+      return false
+    }
+    
+    // 2. 更新应用配置
+    const providers = store.get('providers', {} as Record<string, Provider>)
+    providers[provider.id] = {
+      ...provider,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    }
+    await store.set('providers', providers)
+    
+    return true
+  } catch (error) {
+    console.error('添加供应商失败:', error)
+    return false
+  }
 })
 
 ipcMain.handle('deleteProvider', async (_, id: string) => {
-  const providers = store.get('providers', {} as Record<string, Provider>)
-  delete providers[id]
-  await store.set('providers', providers)
-  return true
+  try {
+    // 1. 删除供应商配置文件
+    const deleteSuccess = await deleteProviderConfig(id)
+    if (!deleteSuccess) {
+      console.error('删除供应商配置文件失败')
+      // 仍然继续删除应用配置，避免配置不同步
+    }
+    
+    // 2. 更新应用配置
+    const providers = store.get('providers', {} as Record<string, Provider>)
+    delete providers[id]
+    await store.set('providers', providers)
+    
+    // 3. 如果删除的是当前供应商，清空当前选择
+    const currentProviderId = store.get('current', '')
+    if (currentProviderId === id) {
+      await store.set('current', '')
+    }
+    
+    return true
+  } catch (error) {
+    console.error('删除供应商失败:', error)
+    return false
+  }
 })
 
 ipcMain.handle('updateProvider', async (_, provider: Provider) => {
-  const providers = store.get('providers', {} as Record<string, Provider>)
-  const currentProviderId = store.get('current', '')
-  
-  providers[provider.id] = provider
-  await store.set('providers', providers)
-  
-  // 如果编辑的是当前激活的供应商，同时更新Claude Code配置
-  if (provider.id === currentProviderId) {
-    const success = await switchProvider(provider)
-    if (!success) {
-      console.error('更新当前供应商的Claude Code配置失败')
+  try {
+    const providers = store.get('providers', {} as Record<string, Provider>)
+    const currentProviderId = store.get('current', '')
+    
+    // 1. 保存更新后的配置到文件
+    const saveSuccess = await saveProviderConfig({
+      ...provider,
+      updatedAt: Date.now()
+    })
+    if (!saveSuccess) {
       return false
     }
+    
+    // 2. 更新应用配置
+    providers[provider.id] = {
+      ...provider,
+      updatedAt: Date.now()
+    }
+    await store.set('providers', providers)
+    
+    // 3. 如果编辑的是当前激活的供应商，需要重新切换以应用更改
+    if (provider.id === currentProviderId) {
+      const switchSuccess = await switchProvider(provider, currentProviderId)
+      if (!switchSuccess) {
+        console.error('更新当前供应商的Claude Code配置失败')
+        return false
+      }
+    }
+    
+    return true
+  } catch (error) {
+    console.error('更新供应商失败:', error)
+    return false
   }
-  
-  return true
 })
 
 ipcMain.handle('switchProvider', async (_, providerId: string) => {
-  const providers = store.get('providers', {} as Record<string, Provider>)
-  const provider = providers[providerId]
-  if (provider) {
-    const success = await switchProvider(provider)
+  try {
+    const providers = store.get('providers', {} as Record<string, Provider>)
+    const provider = providers[providerId]
+    const currentProviderId = store.get('current', '')
+    
+    if (!provider) {
+      console.error(`供应商不存在: ${providerId}`)
+      return false
+    }
+    
+    // 执行切换
+    const success = await switchProvider(provider, currentProviderId)
     if (success) {
       await store.set('current', providerId)
+      console.log(`成功切换到供应商: ${provider.name}`)
     }
+    
     return success
+  } catch (error) {
+    console.error('切换供应商失败:', error)
+    return false
   }
-  return false
+})
+
+ipcMain.handle('importCurrentConfig', async (_, name: string) => {
+  try {
+    const result = await importCurrentConfig(name)
+    
+    if (result.success && result.provider) {
+      // 将导入的供应商添加到store中
+      const providers = store.get('providers', {} as Record<string, Provider>)
+      providers[result.provider.id] = result.provider
+      await store.set('providers', providers)
+      
+      return { success: true, providerId: result.provider.id }
+    }
+    
+    return result
+  } catch (error: any) {
+    console.error('导入配置失败:', error)
+    return { success: false }
+  }
 })
 
 ipcMain.handle('getClaudeCodeConfigPath', () => {

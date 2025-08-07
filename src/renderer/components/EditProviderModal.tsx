@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react'
 import { Provider } from '../../shared/types'
-import { inferWebsiteUrl } from '../../shared/utils'
 import './AddProviderModal.css'
 
 interface EditProviderModalProps {
@@ -12,68 +11,58 @@ interface EditProviderModalProps {
 const EditProviderModal: React.FC<EditProviderModalProps> = ({ provider, onSave, onClose }) => {
   const [formData, setFormData] = useState({
     name: provider.name,
-    apiUrl: provider.apiUrl,
-    apiKey: provider.apiKey,
-    websiteUrl: provider.websiteUrl || ''
+    websiteUrl: provider.websiteUrl || '',
+    settingsConfig: JSON.stringify(provider.settingsConfig, null, 2)
   })
-  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
 
+  // 初始化时更新表单数据
   useEffect(() => {
     setFormData({
       name: provider.name,
-      apiUrl: provider.apiUrl,
-      apiKey: provider.apiKey,
-      websiteUrl: provider.websiteUrl || ''
+      websiteUrl: provider.websiteUrl || '',
+      settingsConfig: JSON.stringify(provider.settingsConfig, null, 2)
     })
-  }, [provider.id, provider.name, provider.apiUrl, provider.apiKey, provider.websiteUrl])
+  }, [provider])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     
-    if (!formData.name || !formData.apiUrl || !formData.apiKey) {
-      setError('请填写所有必填字段')
+    if (!formData.name) {
+      setError('请填写供应商名称')
+      return
+    }
+
+    if (!formData.settingsConfig.trim()) {
+      setError('请填写配置内容')
+      return
+    }
+
+    let settingsConfig: object
+    
+    try {
+      settingsConfig = JSON.parse(formData.settingsConfig)
+    } catch (err) {
+      setError('配置JSON格式错误，请检查语法')
       return
     }
 
     onSave({
       ...provider,
-      ...formData
+      name: formData.name,
+      websiteUrl: formData.websiteUrl,
+      settingsConfig,
+      updatedAt: Date.now()
     })
   }
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
-    const newFormData = {
+    setFormData({
       ...formData,
       [name]: value
-    }
-    
-    // 如果修改的是API地址，自动推测网站地址
-    if (name === 'apiUrl') {
-      newFormData.websiteUrl = inferWebsiteUrl(value)
-    }
-    
-    setFormData(newFormData)
-  }
-
-  const handleApiUrlBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-    const apiUrl = e.target.value.trim()
-    if (apiUrl) {
-      let normalizedApiUrl = apiUrl
-      
-      // 如果没有协议，添加 https://
-      if (!normalizedApiUrl.match(/^https?:\/\//)) {
-        normalizedApiUrl = 'https://' + normalizedApiUrl
-      }
-      
-      setFormData(prev => ({
-        ...prev,
-        apiUrl: normalizedApiUrl,
-        websiteUrl: inferWebsiteUrl(normalizedApiUrl)
-      }))
-    }
+    })
   }
 
   return (
@@ -96,31 +85,16 @@ const EditProviderModal: React.FC<EditProviderModalProps> = ({ provider, onSave,
               name="name"
               value={formData.name}
               onChange={handleChange}
-              placeholder="例如：官方 Anthropic"
+              placeholder="例如：Anthropic 官方"
               required
               autoComplete="off"
             />
           </div>
 
           <div className="form-group">
-            <label htmlFor="apiUrl">API 地址 *</label>
+            <label htmlFor="websiteUrl">官网地址</label>
             <input
               type="url"
-              id="apiUrl"
-              name="apiUrl"
-              value={formData.apiUrl}
-              onChange={handleChange}
-              onBlur={handleApiUrlBlur}
-              placeholder="https://api.anthropic.com"
-              required
-              autoComplete="off"
-            />
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="websiteUrl">网站地址</label>
-            <input
-              type="text"
               id="websiteUrl"
               name="websiteUrl"
               value={formData.websiteUrl}
@@ -128,42 +102,28 @@ const EditProviderModal: React.FC<EditProviderModalProps> = ({ provider, onSave,
               placeholder="https://example.com（可选）"
               autoComplete="off"
             />
-            <small className="field-hint">用于在面板中显示可访问的网站链接，留空则显示API地址</small>
           </div>
 
           <div className="form-group">
-            <label htmlFor="apiKey">API Key *</label>
-            <div className="password-input-wrapper">
-              <input
-                type={showPassword ? "text" : "password"}
-                id="apiKey"
-                name="apiKey"
-                value={formData.apiKey}
-                onChange={handleChange}
-                placeholder={formData.name && formData.name.includes('YesCode') ? 'cr_...' : 'sk-...'}
-                required
-                autoComplete="off"
-              />
-              <button
-                type="button"
-                className="password-toggle"
-                onClick={() => setShowPassword(!showPassword)}
-                tabIndex={-1}
-                title={showPassword ? "隐藏密码" : "显示密码"}
-              >
-                {showPassword ? (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                    <circle cx="12" cy="12" r="3" />
-                  </svg>
-                ) : (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-                    <line x1="1" y1="1" x2="23" y2="23" />
-                  </svg>
-                )}
-              </button>
-            </div>
+            <label htmlFor="settingsConfig">Claude Code 配置 (JSON) *</label>
+            <textarea
+              id="settingsConfig"
+              name="settingsConfig"
+              value={formData.settingsConfig}
+              onChange={handleChange}
+              placeholder={`{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://api.anthropic.com",
+    "ANTHROPIC_AUTH_TOKEN": "sk-your-api-key-here"
+  }
+}`}
+              rows={12}
+              style={{fontFamily: 'monospace', fontSize: '14px'}}
+              required
+            />
+            <small className="field-hint">
+              完整的 Claude Code settings.json 配置内容
+            </small>
           </div>
 
           <div className="form-actions">

@@ -17,6 +17,19 @@ const ProviderList: React.FC<ProviderListProps> = ({
   onDelete,
   onEdit
 }) => {
+  // 提取API地址
+  const getApiUrl = (provider: Provider): string => {
+    try {
+      const config = provider.settingsConfig as any
+      if (config?.env?.ANTHROPIC_BASE_URL) {
+        return config.env.ANTHROPIC_BASE_URL
+      }
+      return '未设置'
+    } catch {
+      return '配置错误'
+    }
+  }
+
   const handleUrlClick = async (url: string) => {
     try {
       await window.electronAPI.openExternal(url)
@@ -61,8 +74,8 @@ const ProviderList: React.FC<ProviderListProps> = ({
                         {provider.websiteUrl}
                       </a>
                     ) : (
-                      <span className="api-url" title={provider.apiUrl}>
-                        {provider.apiUrl}
+                      <span className="api-url" title={getApiUrl(provider)}>
+                        {getApiUrl(provider)}
                       </span>
                     )}
                   </div>
