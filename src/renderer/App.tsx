@@ -75,6 +75,11 @@ function App() {
     const currentId = await window.electronAPI.getCurrentProvider();
     setProviders(loadedProviders);
     setCurrentProviderId(currentId);
+    
+    // 如果供应商列表为空，自动弹出导入配置对话框
+    if (Object.keys(loadedProviders).length === 0) {
+      setIsImportModalOpen(true);
+    }
   };
 
   const loadConfigPath = async () => {
@@ -228,6 +233,7 @@ function App() {
         <ImportConfigModal
           onImport={handleImportCurrentConfig}
           onClose={() => setIsImportModalOpen(false)}
+          isEmpty={Object.keys(providers).length === 0}
         />
       )}
 
