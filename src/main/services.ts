@@ -84,10 +84,17 @@ export async function switchProvider(
 ): Promise<boolean> {
   try {
     const { path: settingsPath, dir: configDir } = getClaudeCodeConfig();
-    const newSettingsPath = getProviderConfigPath(provider.id, provider.name);
 
     // 确保目录存在
     await fs.mkdir(configDir, { recursive: true });
+
+    // 特殊处理：如果切换到默认供应商（id="default"），直接使用现有的 settings.json
+    if (provider.id === "default") {
+      console.log(`切换到默认供应商，使用现有配置文件`);
+      return true;
+    }
+
+    const newSettingsPath = getProviderConfigPath(provider.id, provider.name);
 
     // 检查目标配置文件是否存在
     if (!(await fileExists(newSettingsPath))) {
@@ -98,12 +105,15 @@ export async function switchProvider(
     // 1. 如果当前存在settings.json，先备份到当前供应商的配置文件
     if (await fileExists(settingsPath)) {
       if (currentProviderId && providers && providers[currentProviderId]) {
-        const currentProvider = providers[currentProviderId];
-        const currentProviderPath = getProviderConfigPath(
-          currentProviderId,
-          currentProvider.name
-        );
-        await fs.rename(settingsPath, currentProviderPath);
+        // 如果当前是默认供应商，不需要备份（因为 settings.json 就是它的配置）
+        if (currentProviderId !== "default") {
+          const currentProvider = providers[currentProviderId];
+          const currentProviderPath = getProviderConfigPath(
+            currentProviderId,
+            currentProvider.name
+          );
+          await fs.rename(settingsPath, currentProviderPath);
+        }
       } else {
         // 如果没有当前供应商ID，创建临时备份
         const backupPath = path.join(
@@ -181,6 +191,39 @@ export async function importCurrentConfig(
 }
 
 /**
+ * 导入当前配置为默认供应商（不生成独立配置文件）
+ */
+export async function importCurrentConfigAsDefault(): Promise<{ success: boolean; provider?: Provider }> {
+  try {
+    const { path: settingsPath } = getClaudeCodeConfig();
+
+    // 检查当前配置是否存在
+    if (!(await fileExists(settingsPath))) {
+      return { success: false };
+    }
+
+    // 读取当前配置
+    const configContent = await fs.readFile(settingsPath, "utf-8");
+    const settingsConfig = JSON.parse(configContent);
+
+    // 创建默认供应商对象
+    const provider: Provider = {
+      id: "default",
+      name: "默认",
+      settingsConfig: settingsConfig,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    console.log(`已导入当前配置为默认供应商（不生成独立文件）`);
+    return { success: true, provider };
+  } catch (error: any) {
+    console.error("导入默认配置失败:", error);
+    return { success: false };
+  }
+}
+
+/**
  * 删除供应商配置文件
  */
 export async function deleteProviderConfig(
@@ -188,6 +231,12 @@ export async function deleteProviderConfig(
   providerName?: string
 ): Promise<boolean> {
   try {
+    // 特殊处理：默认供应商不删除配置文件
+    if (providerId === "default") {
+      console.log("默认供应商不删除配置文件");
+      return true;
+    }
+
     const providerConfigPath = getProviderConfigPath(providerId, providerName);
 
     if (await fileExists(providerConfigPath)) {

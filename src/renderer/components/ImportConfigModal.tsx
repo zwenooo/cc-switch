@@ -4,10 +4,9 @@ import './AddProviderModal.css'
 interface ImportConfigModalProps {
   onImport: (name: string) => void
   onClose: () => void
-  isEmpty?: boolean  // 供应商列表是否为空
 }
 
-const ImportConfigModal: React.FC<ImportConfigModalProps> = ({ onImport, onClose, isEmpty = false }) => {
+const ImportConfigModal: React.FC<ImportConfigModalProps> = ({ onImport, onClose }) => {
   const [name, setName] = useState('')
   const [error, setError] = useState('')
 
@@ -26,22 +25,13 @@ const ImportConfigModal: React.FC<ImportConfigModalProps> = ({ onImport, onClose
   return (
     <div className="modal-overlay">
       <div className="modal-content">
-        <h2>{isEmpty ? '供应商列表为空' : '导入当前配置'}</h2>
+        <h2>导入当前配置</h2>
         
-        {isEmpty ? (
-          <p style={{marginBottom: '1.5rem', color: '#666', fontSize: '0.9rem'}}>
-            当前还没有任何供应商配置。您可以将当前的 Claude Code 配置 
-            <code>~/.claude/settings.json</code> 导入为一个供应商配置。
-            <br />
-            <strong>注意：</strong>这不会修改您当前的配置文件。
-          </p>
-        ) : (
-          <p style={{marginBottom: '1.5rem', color: '#666', fontSize: '0.9rem'}}>
-            将当前的 <code>~/.claude/settings.json</code> 配置文件导入为一个新的供应商。
-            <br />
-            <strong>注意：</strong>这不会修改您当前的配置文件。
-          </p>
-        )}
+        <p style={{marginBottom: '1.5rem', color: '#666', fontSize: '0.9rem'}}>
+          将当前的 <code>~/.claude/settings.json</code> 配置文件导入为一个新的供应商。
+          <br />
+          <strong>注意：</strong>这不会修改您当前的配置文件。
+        </p>
 
         {error && <div className="error-message">{error}</div>}
 
@@ -54,7 +44,7 @@ const ImportConfigModal: React.FC<ImportConfigModalProps> = ({ onImport, onClose
               name="name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={isEmpty ? "例如：我的默认配置" : "例如：我的当前配置"}
+              placeholder="例如：我的当前配置"
               required
               autoFocus
             />
@@ -62,7 +52,7 @@ const ImportConfigModal: React.FC<ImportConfigModalProps> = ({ onImport, onClose
 
           <div className="form-actions">
             <button type="button" className="cancel-btn" onClick={onClose}>
-              {isEmpty ? '稍后设置' : '取消'}
+              取消
             </button>
             <button type="submit" className="submit-btn">
               导入

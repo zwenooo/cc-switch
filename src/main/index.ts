@@ -9,6 +9,7 @@ import {
   deleteProviderConfig,
   sanitizeProviderName,
   importCurrentConfig,
+  importCurrentConfigAsDefault,
   getProviderConfigPath,
   fileExists,
 } from "./services";
@@ -230,6 +231,29 @@ ipcMain.handle("importCurrentConfig", async (_, name: string) => {
     return result;
   } catch (error: any) {
     console.error("导入配置失败:", error);
+    return { success: false };
+  }
+});
+
+ipcMain.handle("importCurrentConfigAsDefault", async () => {
+  try {
+    const result = await importCurrentConfigAsDefault();
+
+    if (result.success && result.provider) {
+      // 将默认供应商添加到store中
+      const providers = store.get("providers", {} as Record<string, Provider>);
+      providers[result.provider.id] = result.provider;
+      await store.set("providers", providers);
+      
+      // 设置为当前选中的供应商
+      await store.set("current", result.provider.id);
+
+      return { success: true, providerId: result.provider.id };
+    }
+
+    return result;
+  } catch (error: any) {
+    console.error("导入默认配置失败:", error);
     return { success: false };
   }
 });

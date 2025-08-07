@@ -76,9 +76,9 @@ function App() {
     setProviders(loadedProviders);
     setCurrentProviderId(currentId);
     
-    // 如果供应商列表为空，自动弹出导入配置对话框
+    // 如果供应商列表为空，尝试自动导入现有配置为"默认"供应商
     if (Object.keys(loadedProviders).length === 0) {
-      setIsImportModalOpen(true);
+      await handleAutoImportDefault();
     }
   };
 
@@ -163,6 +163,22 @@ function App() {
     }
   }
 
+  // 自动导入现有配置为"默认"供应商
+  const handleAutoImportDefault = async () => {
+    try {
+      const result = await window.electronAPI.importCurrentConfigAsDefault()
+      
+      if (result.success) {
+        await loadProviders()
+        showNotification("已自动导入现有配置为默认供应商", "success", 3000)
+      }
+      // 如果导入失败（比如没有现有配置），静默处理，不显示错误
+    } catch (error) {
+      console.error('自动导入默认配置失败:', error)
+      // 静默处理，不影响用户体验
+    }
+  }
+
   const handleSelectConfigFile = async () => {
     const selectedPath = await window.electronAPI.selectConfigFile();
     if (selectedPath) {
@@ -233,7 +249,6 @@ function App() {
         <ImportConfigModal
           onImport={handleImportCurrentConfig}
           onClose={() => setIsImportModalOpen(false)}
-          isEmpty={Object.keys(providers).length === 0}
         />
       )}
 
