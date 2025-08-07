@@ -149,8 +149,6 @@ export async function importCurrentConfigAsDefault(): Promise<{ success: boolean
       id: "default",
       name: "默认",
       settingsConfig: settingsConfig,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
     };
 
     // 保存默认供应商的配置到独立文件

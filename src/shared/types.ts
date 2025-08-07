@@ -3,8 +3,6 @@ export interface Provider {
   name: string
   settingsConfig: object  // 完整的Claude Code settings.json配置
   websiteUrl?: string
-  createdAt?: number
-  updatedAt?: number
 }
 
 export interface AppConfig {
@@ -21,9 +19,10 @@ declare global {
       deleteProvider: (id: string) => Promise<boolean>
       updateProvider: (provider: Provider) => Promise<boolean>
       switchProvider: (providerId: string) => Promise<boolean>
-      importCurrentConfig: (name: string) => Promise<{ success: boolean; providerId?: string }>
+      importCurrentConfigAsDefault: () => Promise<{ success: boolean; providerId?: string }>
       getClaudeCodeConfigPath: () => Promise<string>
       selectConfigFile: () => Promise<string | null>
+      openConfigFolder: () => Promise<boolean>
       openExternal: (url: string) => Promise<boolean>
     }
   }

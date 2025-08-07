@@ -160,11 +160,8 @@ function App() {
     }
   }
 
-  const handleSelectConfigFile = async () => {
-    const selectedPath = await window.electronAPI.selectConfigFile();
-    if (selectedPath) {
-      setConfigPath(selectedPath);
-    }
+  const handleOpenConfigFolder = async () => {
+    await window.electronAPI.openConfigFolder();
   };
 
   return (
@@ -207,10 +204,10 @@ function App() {
             <span>配置文件位置: {configPath}</span>
             <button
               className="browse-btn"
-              onClick={handleSelectConfigFile}
-              title="浏览选择配置文件"
+              onClick={handleOpenConfigFolder}
+              title="打开配置文件夹"
             >
-              浏览
+              打开
             </button>
           </div>
         )}

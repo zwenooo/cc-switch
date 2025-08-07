@@ -76,11 +76,7 @@ ipcMain.handle("addProvider", async (_, provider: Provider) => {
 
     // 2. 更新应用配置
     const providers = store.get("providers", {} as Record<string, Provider>);
-    providers[provider.id] = {
-      ...provider,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
+    providers[provider.id] = provider;
     await store.set("providers", providers);
 
     return true;
@@ -150,19 +146,13 @@ ipcMain.handle("updateProvider", async (_, provider: Provider) => {
     }
 
     // 2. 保存更新后的配置到文件
-    const saveSuccess = await saveProviderConfig({
-      ...provider,
-      updatedAt: Date.now(),
-    });
+    const saveSuccess = await saveProviderConfig(provider);
     if (!saveSuccess) {
       return false;
     }
 
     // 3. 更新应用配置
-    providers[provider.id] = {
-      ...provider,
-      updatedAt: Date.now(),
-    };
+    providers[provider.id] = provider;
     await store.set("providers", providers);
 
     // 4. 如果编辑的是当前激活的供应商，需要重新切换以应用更改
@@ -259,6 +249,17 @@ ipcMain.handle("selectConfigFile", async () => {
   }
 
   return result.filePaths[0];
+});
+
+ipcMain.handle("openConfigFolder", async () => {
+  try {
+    const { dir } = getClaudeCodeConfig();
+    await shell.openPath(dir);
+    return true;
+  } catch (error) {
+    console.error("打开配置文件夹失败:", error);
+    return false;
+  }
 });
 
 ipcMain.handle("openExternal", async (_, url: string) => {

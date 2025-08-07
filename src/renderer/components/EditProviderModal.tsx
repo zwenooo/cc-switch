@@ -53,7 +53,6 @@ const EditProviderModal: React.FC<EditProviderModalProps> = ({ provider, onSave,
       name: formData.name,
       websiteUrl: formData.websiteUrl,
       settingsConfig,
-      updatedAt: Date.now()
     })
   }
 

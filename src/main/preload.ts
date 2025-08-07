@@ -11,5 +11,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   importCurrentConfigAsDefault: () => ipcRenderer.invoke('importCurrentConfigAsDefault'),
   getClaudeCodeConfigPath: () => ipcRenderer.invoke('getClaudeCodeConfigPath'),
   selectConfigFile: () => ipcRenderer.invoke('selectConfigFile'),
+  openConfigFolder: () => ipcRenderer.invoke('openConfigFolder'),
   openExternal: (url: string) => ipcRenderer.invoke('openExternal', url)
 })
