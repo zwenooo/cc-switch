@@ -1,6 +1,6 @@
 {
   "name": "cc-switch",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Claude Code 供应商切换工具",
   "main": "dist/main/index.js",
   "scripts": {
