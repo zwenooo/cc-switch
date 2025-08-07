@@ -23,7 +23,7 @@
 
 ### 其他平台
 
-- **macOS**: `CC-Switch-x.x.x.dmg`
+- **macOS**: `CC-Switch-x.x.x-mac.zip`
 - **Linux**: `CC-Switch-x.x.x.AppImage`
 
 ## 使用说明
