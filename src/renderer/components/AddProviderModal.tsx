@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Provider } from "../../shared/types";
+import { updateCoAuthoredSetting, checkCoAuthoredSetting, extractWebsiteUrl } from "../utils/providerConfigUtils";
 import "./AddProviderModal.css";
 
 interface AddProviderModalProps {
@@ -17,6 +18,7 @@ const AddProviderModal: React.FC<AddProviderModalProps> = ({
     settingsConfig: ""
   });
   const [error, setError] = useState("");
+  const [disableCoAuthored, setDisableCoAuthored] = useState(false);
 
   // 预设的供应商配置模板
   const presets = [
@@ -82,22 +84,6 @@ const AddProviderModal: React.FC<AddProviderModalProps> = ({
     });
   };
 
-  // 从JSON配置中提取并处理官网地址
-  const extractWebsiteUrl = (jsonString: string): string => {
-    try {
-      const config = JSON.parse(jsonString);
-      const baseUrl = config?.env?.ANTHROPIC_BASE_URL;
-      
-      if (baseUrl && typeof baseUrl === 'string') {
-        // 去掉 "api." 前缀
-        return baseUrl.replace(/^https?:\/\/api\./, 'https://');
-      }
-    } catch (err) {
-      // 忽略JSON解析错误
-    }
-    return '';
-  };
-
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
@@ -106,6 +92,10 @@ const AddProviderModal: React.FC<AddProviderModalProps> = ({
     if (name === 'settingsConfig') {
       // 当用户修改配置时，尝试自动提取官网地址
       const extractedWebsiteUrl = extractWebsiteUrl(value);
+      
+      // 同时检查并同步选择框状态
+      const hasCoAuthoredDisabled = checkCoAuthoredSetting(value);
+      setDisableCoAuthored(hasCoAuthoredDisabled);
       
       setFormData({
         ...formData,
@@ -121,12 +111,30 @@ const AddProviderModal: React.FC<AddProviderModalProps> = ({
     }
   };
 
+  // 处理选择框变化
+  const handleCoAuthoredToggle = (checked: boolean) => {
+    setDisableCoAuthored(checked);
+    
+    // 更新JSON配置
+    const updatedConfig = updateCoAuthoredSetting(formData.settingsConfig, checked);
+    setFormData({
+      ...formData,
+      settingsConfig: updatedConfig,
+    });
+  };
+
   const applyPreset = (preset: typeof presets[0]) => {
+    const configString = JSON.stringify(preset.settingsConfig, null, 2);
+    
     setFormData({
       name: preset.name,
       websiteUrl: preset.websiteUrl,
-      settingsConfig: JSON.stringify(preset.settingsConfig, null, 2)
+      settingsConfig: configString
     });
+    
+    // 同步选择框状态
+    const hasCoAuthoredDisabled = checkCoAuthoredSetting(configString);
+    setDisableCoAuthored(hasCoAuthoredDisabled);
   };
 
   return (
@@ -179,7 +187,17 @@ const AddProviderModal: React.FC<AddProviderModalProps> = ({
           </div>
 
           <div className="form-group">
-            <label htmlFor="settingsConfig">Claude Code 配置 (JSON) *</label>
+            <div className="label-with-checkbox">
+              <label htmlFor="settingsConfig">Claude Code 配置 (JSON) *</label>
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={disableCoAuthored}
+                  onChange={(e) => handleCoAuthoredToggle(e.target.checked)}
+                />
+                禁止 Claude Code 签名
+              </label>
+            </div>
             <textarea
               id="settingsConfig"
               name="settingsConfig"

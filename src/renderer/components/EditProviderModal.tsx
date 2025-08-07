@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Provider } from '../../shared/types'
+import { updateCoAuthoredSetting, checkCoAuthoredSetting, extractWebsiteUrl } from '../utils/providerConfigUtils'
 import './AddProviderModal.css'
 
 interface EditProviderModalProps {
@@ -15,14 +16,20 @@ const EditProviderModal: React.FC<EditProviderModalProps> = ({ provider, onSave,
     settingsConfig: JSON.stringify(provider.settingsConfig, null, 2)
   })
   const [error, setError] = useState('')
+  const [disableCoAuthored, setDisableCoAuthored] = useState(false)
 
   // 初始化时更新表单数据
   useEffect(() => {
+    const configString = JSON.stringify(provider.settingsConfig, null, 2)
     setFormData({
       name: provider.name,
       websiteUrl: provider.websiteUrl || '',
-      settingsConfig: JSON.stringify(provider.settingsConfig, null, 2)
+      settingsConfig: configString
     })
+    
+    // 同步选择框状态
+    const hasCoAuthoredDisabled = checkCoAuthoredSetting(configString)
+    setDisableCoAuthored(hasCoAuthoredDisabled)
   }, [provider])
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -58,9 +65,38 @@ const EditProviderModal: React.FC<EditProviderModalProps> = ({ provider, onSave,
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
+    
+    if (name === 'settingsConfig') {
+      // 当用户修改配置时，尝试自动提取官网地址
+      const extractedWebsiteUrl = extractWebsiteUrl(value)
+      
+      // 同时检查并同步选择框状态
+      const hasCoAuthoredDisabled = checkCoAuthoredSetting(value)
+      setDisableCoAuthored(hasCoAuthoredDisabled)
+      
+      setFormData({
+        ...formData,
+        [name]: value,
+        // 只有在官网地址为空时才自动填入
+        websiteUrl: formData.websiteUrl || extractedWebsiteUrl,
+      })
+    } else {
+      setFormData({
+        ...formData,
+        [name]: value
+      })
+    }
+  }
+
+  // 处理选择框变化
+  const handleCoAuthoredToggle = (checked: boolean) => {
+    setDisableCoAuthored(checked)
+    
+    // 更新JSON配置
+    const updatedConfig = updateCoAuthoredSetting(formData.settingsConfig, checked)
     setFormData({
       ...formData,
-      [name]: value
+      settingsConfig: updatedConfig,
     })
   }
 
@@ -104,7 +140,17 @@ const EditProviderModal: React.FC<EditProviderModalProps> = ({ provider, onSave,
           </div>
 
           <div className="form-group">
-            <label htmlFor="settingsConfig">Claude Code 配置 (JSON) *</label>
+            <div className="label-with-checkbox">
+              <label htmlFor="settingsConfig">Claude Code 配置 (JSON) *</label>
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={disableCoAuthored}
+                  onChange={(e) => handleCoAuthoredToggle(e.target.checked)}
+                />
+                禁止 Claude Code 签名
+              </label>
+            </div>
             <textarea
               id="settingsConfig"
               name="settingsConfig"
