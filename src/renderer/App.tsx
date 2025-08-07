@@ -74,7 +74,7 @@ function App() {
     setProviders(loadedProviders);
     setCurrentProviderId(currentId);
     
-    // 如果供应商列表为空，尝试自动导入现有配置为"默认"供应商
+    // 如果供应商列表为空，尝试自动导入现有配置为"default"供应商
     if (Object.keys(loadedProviders).length === 0) {
       await handleAutoImportDefault();
     }
@@ -87,7 +87,7 @@ function App() {
 
   // 生成唯一ID
   const generateId = () => {
-    return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+    return crypto.randomUUID();
   };
 
   const handleAddProvider = async (provider: Omit<Provider, "id">) => {
@@ -98,6 +98,20 @@ function App() {
     await window.electronAPI.addProvider(newProvider);
     await loadProviders();
     setIsAddModalOpen(false);
+  };
+
+  const handleEditProvider = async (provider: Provider) => {
+    try {
+      await window.electronAPI.updateProvider(provider);
+      await loadProviders();
+      setEditingProviderId(null);
+      // 显示编辑成功提示
+      showNotification("供应商配置已保存", "success", 2000);
+    } catch (error) {
+      console.error("更新供应商失败:", error);
+      setEditingProviderId(null);
+      showNotification("保存失败，请重试", "error");
+    }
   };
 
   const handleDeleteProvider = async (id: string) => {
@@ -130,28 +144,14 @@ function App() {
     }
   };
 
-  const handleEditProvider = async (provider: Provider) => {
-    try {
-      await window.electronAPI.updateProvider(provider);
-      await loadProviders();
-      setEditingProviderId(null);
-      // 显示编辑成功提示
-      showNotification("供应商配置已保存", "success", 2000);
-    } catch (error) {
-      console.error("更新供应商失败:", error);
-      setEditingProviderId(null);
-      showNotification("保存失败，请重试", "error");
-    }
-  };
-
-  // 自动导入现有配置为"默认"供应商
+  // 自动导入现有配置为"default"供应商
   const handleAutoImportDefault = async () => {
     try {
       const result = await window.electronAPI.importCurrentConfigAsDefault()
       
       if (result.success) {
         await loadProviders()
-        showNotification("已自动导入现有配置为默认供应商", "success", 3000)
+        showNotification("已自动导入现有配置为 default 供应商", "success", 3000)
       }
       // 如果导入失败（比如没有现有配置），静默处理，不显示错误
     } catch (error) {

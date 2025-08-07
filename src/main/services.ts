@@ -147,7 +147,7 @@ export async function importCurrentConfigAsDefault(): Promise<{ success: boolean
     // 创建默认供应商对象
     const provider: Provider = {
       id: "default",
-      name: "默认",
+      name: "default",
       settingsConfig: settingsConfig,
     };
 
@@ -157,7 +157,7 @@ export async function importCurrentConfigAsDefault(): Promise<{ success: boolean
       return { success: false };
     }
 
-    console.log(`已导入当前配置为默认供应商，配置文件：settings-默认.json`);
+    console.log(`已导入当前配置为默认供应商，配置文件：settings-default.json`);
     return { success: true, provider };
   } catch (error: any) {
     console.error("导入默认配置失败:", error);
