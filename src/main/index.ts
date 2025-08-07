@@ -1,10 +1,8 @@
 import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
 import path from 'path'
-import Store from 'electron-store'
-import { Provider, AppConfig } from '../shared/types'
+import { Provider } from '../shared/types'
 import { switchProvider, getClaudeCodeConfig } from './services'
-
-const store = new Store<AppConfig>()
+import { store } from './store'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -51,33 +49,33 @@ app.on('window-all-closed', () => {
 
 // IPC handlers
 ipcMain.handle('getProviders', () => {
-  return store.get('providers', {})
+  return store.get('providers', {} as Record<string, Provider>)
 })
 
 ipcMain.handle('getCurrentProvider', () => {
   return store.get('current', '')
 })
 
-ipcMain.handle('addProvider', (_, provider: Provider) => {
-  const providers = store.get('providers', {})
+ipcMain.handle('addProvider', async (_, provider: Provider) => {
+  const providers = store.get('providers', {} as Record<string, Provider>)
   providers[provider.id] = provider
-  store.set('providers', providers)
+  await store.set('providers', providers)
   return true
 })
 
-ipcMain.handle('deleteProvider', (_, id: string) => {
-  const providers = store.get('providers', {})
+ipcMain.handle('deleteProvider', async (_, id: string) => {
+  const providers = store.get('providers', {} as Record<string, Provider>)
   delete providers[id]
-  store.set('providers', providers)
+  await store.set('providers', providers)
   return true
 })
 
 ipcMain.handle('updateProvider', async (_, provider: Provider) => {
-  const providers = store.get('providers', {})
+  const providers = store.get('providers', {} as Record<string, Provider>)
   const currentProviderId = store.get('current', '')
   
   providers[provider.id] = provider
-  store.set('providers', providers)
+  await store.set('providers', providers)
   
   // 如果编辑的是当前激活的供应商，同时更新Claude Code配置
   if (provider.id === currentProviderId) {
@@ -92,12 +90,12 @@ ipcMain.handle('updateProvider', async (_, provider: Provider) => {
 })
 
 ipcMain.handle('switchProvider', async (_, providerId: string) => {
-  const providers = store.get('providers', {})
+  const providers = store.get('providers', {} as Record<string, Provider>)
   const provider = providers[providerId]
   if (provider) {
     const success = await switchProvider(provider)
     if (success) {
-      store.set('current', providerId)
+      await store.set('current', providerId)
     }
     return success
   }
