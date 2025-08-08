@@ -174,9 +174,14 @@
   transition: all 0.2s;
 }
 
-.edit-btn:hover {
+.edit-btn:hover:not(:disabled) {
   background: #3498db;
   color: white;
+}
+
+.edit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .delete-btn {

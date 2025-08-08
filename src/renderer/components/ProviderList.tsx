@@ -92,6 +92,7 @@ const ProviderList: React.FC<ProviderListProps> = ({
                   <button 
                     className="edit-btn"
                     onClick={() => onEdit(provider.id)}
+                    disabled={isCurrent}
                   >
                     编辑
                   </button>
