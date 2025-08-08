@@ -1,6 +1,6 @@
 {
   "name": "cc-switch",
-  "version": "1.0.8",
+  "version": "2.0.0",
   "description": "Claude Code 供应商切换工具",
   "main": "dist/main/index.js",
   "scripts": {
@@ -46,6 +46,10 @@
       "dist/**/*",
       "node_modules/**/*"
     ],
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
     "mac": {
       "category": "public.app-category.developer-tools",
       "icon": "build/icon.icns",
