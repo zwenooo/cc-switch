@@ -159,7 +159,7 @@ export async function importCurrentConfigAsDefault(): Promise<{ success: boolean
 
     console.log(`已导入当前配置为默认供应商，配置文件：settings-default.json`);
     return { success: true, provider };
-  } catch (error: any) {
+  } catch (error) {
     console.error("导入默认配置失败:", error);
     return { success: false };
   }

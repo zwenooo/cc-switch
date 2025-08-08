@@ -1,7 +1,7 @@
 export interface Provider {
   id: string
   name: string
-  settingsConfig: object  // 完整的Claude Code settings.json配置
+  settingsConfig: Record<string, any>  // 完整的Claude Code settings.json配置
   websiteUrl?: string
 }
 

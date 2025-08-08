@@ -41,8 +41,8 @@ export class SimpleStore {
     return value !== undefined ? value : (defaultValue as T)
   }
 
-  async set<T>(key: keyof AppConfig, value: T): Promise<void> {
-    this.data[key] = value as any
+  async set<K extends keyof AppConfig>(key: K, value: AppConfig[K]): Promise<void> {
+    this.data[key] = value
     await this.saveData()
   }
 

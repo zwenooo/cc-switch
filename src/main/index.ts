@@ -223,7 +223,7 @@ ipcMain.handle("importCurrentConfigAsDefault", async () => {
     }
 
     return result;
-  } catch (error: any) {
+  } catch (error) {
     console.error("导入默认配置失败:", error);
     return { success: false };
   }

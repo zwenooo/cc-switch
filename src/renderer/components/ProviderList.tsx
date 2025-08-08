@@ -20,7 +20,7 @@ const ProviderList: React.FC<ProviderListProps> = ({
   // 提取API地址
   const getApiUrl = (provider: Provider): string => {
     try {
-      const config = provider.settingsConfig as any
+      const config = provider.settingsConfig
       if (config?.env?.ANTHROPIC_BASE_URL) {
         return config.env.ANTHROPIC_BASE_URL
       }
