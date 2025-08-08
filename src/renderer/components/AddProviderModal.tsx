@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Provider } from "../../shared/types";
 import { updateCoAuthoredSetting, checkCoAuthoredSetting, extractWebsiteUrl } from "../utils/providerConfigUtils";
+import { providerPresets } from "../config/providerPresets";
 import "./AddProviderModal.css";
 
 interface AddProviderModalProps {
@@ -21,38 +22,7 @@ const AddProviderModal: React.FC<AddProviderModalProps> = ({
   const [disableCoAuthored, setDisableCoAuthored] = useState(false);
 
   // 预设的供应商配置模板
-  const presets = [
-    {
-      name: "Anthropic 官方",
-      websiteUrl: "https://console.anthropic.com",
-      settingsConfig: {
-        "env": {
-          "ANTHROPIC_BASE_URL": "https://api.anthropic.com",
-          "ANTHROPIC_AUTH_TOKEN": "sk-your-api-key-here"
-        }
-      }
-    },
-    {
-      name: "PackyCode",
-      websiteUrl: "https://www.packycode.com",
-      settingsConfig: {
-        "env": {
-          "ANTHROPIC_BASE_URL": "https://api.packycode.com",
-          "ANTHROPIC_AUTH_TOKEN": "sk-your-api-key-here"
-        }
-      }
-    },
-    {
-      name: "YesCode",
-      websiteUrl: "https://yes.vg",
-      settingsConfig: {
-        "env": {
-          "ANTHROPIC_BASE_URL": "https://co.yes.vg",
-          "ANTHROPIC_AUTH_TOKEN": "cr-your-api-key-here"
-        }
-      }
-    }
-  ];
+  const presets = providerPresets;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
