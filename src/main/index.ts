@@ -62,12 +62,12 @@ app.on("window-all-closed", () => {
 });
 
 // IPC handlers
-ipcMain.handle("getProviders", () => {
-  return store.get("providers", {} as Record<string, Provider>);
+ipcMain.handle("getProviders", async () => {
+  return await store.get("providers", {} as Record<string, Provider>);
 });
 
-ipcMain.handle("getCurrentProvider", () => {
-  return store.get("current", "");
+ipcMain.handle("getCurrentProvider", async () => {
+  return await store.get("current", "");
 });
 
 ipcMain.handle("addProvider", async (_, provider: Provider) => {
@@ -79,7 +79,7 @@ ipcMain.handle("addProvider", async (_, provider: Provider) => {
     }
 
     // 2. 更新应用配置
-    const providers = store.get("providers", {} as Record<string, Provider>);
+    const providers = await store.get("providers", {} as Record<string, Provider>);
     providers[provider.id] = provider;
     await store.set("providers", providers);
 
@@ -92,7 +92,7 @@ ipcMain.handle("addProvider", async (_, provider: Provider) => {
 
 ipcMain.handle("deleteProvider", async (_, id: string) => {
   try {
-    const providers = store.get("providers", {} as Record<string, Provider>);
+    const providers = await store.get("providers", {} as Record<string, Provider>);
     const provider = providers[id];
 
     // 1. 删除供应商配置文件
@@ -107,7 +107,7 @@ ipcMain.handle("deleteProvider", async (_, id: string) => {
     await store.set("providers", providers);
 
     // 3. 如果删除的是当前供应商，清空当前选择
-    const currentProviderId = store.get("current", "");
+    const currentProviderId = await store.get("current", "");
     if (currentProviderId === id) {
       await store.set("current", "");
     }
@@ -121,8 +121,8 @@ ipcMain.handle("deleteProvider", async (_, id: string) => {
 
 ipcMain.handle("updateProvider", async (_, provider: Provider) => {
   try {
-    const providers = store.get("providers", {} as Record<string, Provider>);
-    const currentProviderId = store.get("current", "");
+    const providers = await store.get("providers", {} as Record<string, Provider>);
+    const currentProviderId = await store.get("current", "");
     const oldProvider = providers[provider.id];
 
     // 1. 如果名字发生变化，需要重命名配置文件
@@ -181,9 +181,9 @@ ipcMain.handle("updateProvider", async (_, provider: Provider) => {
 
 ipcMain.handle("switchProvider", async (_, providerId: string) => {
   try {
-    const providers = store.get("providers", {} as Record<string, Provider>);
+    const providers = await store.get("providers", {} as Record<string, Provider>);
     const provider = providers[providerId];
-    const currentProviderId = store.get("current", "");
+    const currentProviderId = await store.get("current", "");
 
     if (!provider) {
       console.error(`供应商不存在: ${providerId}`);
@@ -214,7 +214,7 @@ ipcMain.handle("importCurrentConfigAsDefault", async () => {
 
     if (result.success && result.provider) {
       // 将默认供应商添加到store中
-      const providers = store.get("providers", {} as Record<string, Provider>);
+      const providers = await store.get("providers", {} as Record<string, Provider>);
       providers[result.provider.id] = result.provider;
       await store.set("providers", providers);
       

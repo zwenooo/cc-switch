@@ -7,11 +7,13 @@ export class SimpleStore {
   private configPath: string
   private configDir: string
   private data: AppConfig = { providers: {}, current: '' }
+  private initPromise: Promise<void>
 
   constructor() {
     this.configDir = path.join(os.homedir(), '.cc-switch')
     this.configPath = path.join(this.configDir, 'config.json')
-    this.loadData()
+    // 立即开始加载，但不阻塞构造函数
+    this.initPromise = this.loadData()
   }
 
   private async loadData(): Promise<void> {
@@ -36,12 +38,14 @@ export class SimpleStore {
     }
   }
 
-  get<T>(key: keyof AppConfig, defaultValue?: T): T {
+  async get<T>(key: keyof AppConfig, defaultValue?: T): Promise<T> {
+    await this.initPromise // 等待初始化完成
     const value = this.data[key] as T
     return value !== undefined ? value : (defaultValue as T)
   }
 
   async set<K extends keyof AppConfig>(key: K, value: AppConfig[K]): Promise<void> {
+    await this.initPromise // 等待初始化完成
     this.data[key] = value
     await this.saveData()
   }

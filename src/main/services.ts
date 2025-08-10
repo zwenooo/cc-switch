@@ -75,7 +75,7 @@ export async function fileExists(filePath: string): Promise<boolean> {
 }
 
 /**
- * 切换供应商配置（基于文件重命名）
+ * 切换供应商配置（基于文件复制）
  */
 export async function switchProvider(
   provider: Provider,
@@ -104,21 +104,14 @@ export async function switchProvider(
           currentProviderId,
           currentProvider.name
         );
-        await fs.rename(settingsPath, currentProviderPath);
+        // 使用复制而不是重命名，避免删除原文件
+        await fs.copyFile(settingsPath, currentProviderPath);
         console.log(`已备份当前供应商配置: ${currentProvider.name}`);
-      } else {
-        // 如果没有当前供应商ID，创建临时备份
-        const backupPath = path.join(
-          configDir,
-          `settings-backup-${Date.now()}.json`
-        );
-        await fs.rename(settingsPath, backupPath);
-        console.log(`已备份当前配置到: ${backupPath}`);
       }
     }
 
-    // 2. 将目标供应商配置重命名为settings.json
-    await fs.rename(newSettingsPath, settingsPath);
+    // 2. 复制新配置到settings.json（保留原文件）
+    await fs.copyFile(newSettingsPath, settingsPath);
 
     console.log(`成功切换到供应商: ${provider.name}`);
     return true;
