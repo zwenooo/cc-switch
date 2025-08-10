@@ -59,6 +59,7 @@ jobs:
           pnpm run dist
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
       
       - name: List build files (debug)
         shell: bash
@@ -84,20 +85,23 @@ jobs:
             ### 下载
             
             #### Windows 用户
-            - **安装版 (推荐)**: `CC.Switch.Setup.${{ github.ref_name }}.exe`
-            - **便携版**: `CC.Switch.${{ github.ref_name }}.exe`
+            - **安装版 (推荐)**: `CC Switch Setup ${{ github.ref_name }}.exe`
+            - **便携版**: `CC Switch ${{ github.ref_name }}.exe`
             
-            #### macOS 用户  
-            - **ARM64 (M1/M2/M3)**: `CC.Switch-${{ github.ref_name }}-arm64-mac.zip`
-            - **Intel x64**: `CC.Switch-${{ github.ref_name }}-mac.zip`
+            #### macOS 用户（推荐使用通用版本）
+            - **通用版本**: `CC Switch-${{ github.ref_name }}-mac.zip` - 兼容所有Mac（Intel + M系列）
             
             #### Linux 用户
-            - **AppImage**: `CC.Switch-${{ github.ref_name }}.AppImage`
+            - **AppImage**: `CC Switch-${{ github.ref_name }}.AppImage`
             
-            ### 使用说明
-            1. 下载对应平台的文件
-            2. Windows 推荐使用安装版获得最佳体验
-            3. macOS 下载 ZIP 后解压即可使用
-            4. Linux 下载后添加执行权限: `chmod +x CC.Switch-*.AppImage`
+            ### macOS 安装说明
+            1. 下载 ZIP 文件后解压
+            2. 首次打开可能出现"未知开发者"警告
+            3. 前往"系统设置" → "隐私与安全性" → 点击"仍要打开"
+            4. 或者使用命令: `xattr -cr "/path/to/CC Switch.app"`
+            
+            ### 注意事项
+            - macOS 版本使用 Intel 架构，通过 Rosetta 2 在 M 系列芯片上运行
+            - 兼容性和稳定性最佳，性能损失minimal
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
