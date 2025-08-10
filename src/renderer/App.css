@@ -12,6 +12,9 @@
   justify-content: space-between;
   align-items: center;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  /* 允许作为 Electron 的拖拽区域（macOS 隐藏标题栏时生效） */
+  -webkit-app-region: drag;
+  user-select: none;
 }
 
 .app-header h1 {
@@ -22,6 +25,8 @@
 .header-actions {
   display: flex;
   gap: 1rem;
+  /* header 内的交互元素需要排除拖拽，否则无法点击 */
+  -webkit-app-region: no-drag;
 }
 
 .refresh-btn, .add-btn {
@@ -31,6 +36,8 @@
   cursor: pointer;
   font-size: 0.9rem;
   transition: all 0.2s;
+  /* 明确按钮不可拖拽，确保可点击 */
+  -webkit-app-region: no-drag;
 }
 
 .refresh-btn {

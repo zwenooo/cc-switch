@@ -19,3 +19,12 @@ body {
   display: flex;
   flex-direction: column;
 }
+
+/* 仅在 macOS 下为顶部预留交通灯空间 */
+/* 保持 mac 下与内容区域左对齐（不额外偏移） */
+
+/* 在 macOS 下稍微增加 banner 高度，拉开与交通灯的垂直距离 */
+body.is-mac .app-header {
+  padding-top: 1.4rem;
+  padding-bottom: 1.4rem;
+}

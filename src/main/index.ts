@@ -15,6 +15,7 @@ import {
 import { store } from "./store";
 
 let mainWindow: BrowserWindow | null = null;
+const isMac = process.platform === "darwin";
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -27,7 +28,8 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
     },
-    titleBarStyle: "hiddenInset",
+    // 使用 macOS 隐藏式标题栏，仅在 macOS 启用
+    ...(isMac ? { titleBarStyle: "hiddenInset" as const } : {}),
     autoHideMenuBar: true,
   });
 

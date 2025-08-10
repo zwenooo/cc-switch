@@ -14,3 +14,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openConfigFolder: () => ipcRenderer.invoke('openConfigFolder'),
   openExternal: (url: string) => ipcRenderer.invoke('openExternal', url)
 })
+
+// 暴露平台信息给渲染进程，用于平台特定样式控制
+contextBridge.exposeInMainWorld('platform', {
+  isMac: process.platform === 'darwin'
+})
