@@ -9,6 +9,18 @@ export interface ProviderPreset {
 
 export const providerPresets: ProviderPreset[] = [
   {
+    name: "DeepSeek v3.1",
+    websiteUrl: "https://platform.deepseek.com/",
+    settingsConfig: {
+      env: {
+        ANTHROPIC_BASE_URL: "https://api.deepseek.com/anthropic",
+        ANTHROPIC_AUTH_TOKEN: "sk-your-api-key-here",
+        ANTHROPIC_MODEL: "deepseek-chat",
+        ANTHROPIC_SMALL_FAST_MODEL: "deepseek-chat",
+      },
+    },
+  },
+  {
     name: "智谱GLM",
     websiteUrl: "https://open.bigmodel.cn",
     settingsConfig: {
@@ -26,18 +38,6 @@ export const providerPresets: ProviderPreset[] = [
         ANTHROPIC_BASE_URL:
           "https://dashscope.aliyuncs.com/api/v2/apps/claude-code-proxy",
         ANTHROPIC_AUTH_TOKEN: "sk-your-api-key-here",
-      },
-    },
-  },
-  {
-    name: "DeepSeek v3.1",
-    websiteUrl: "https://platform.deepseek.com/",
-    settingsConfig: {
-      env: {
-        ANTHROPIC_BASE_URL: "https://api.deepseek.com/anthropic",
-        ANTHROPIC_AUTH_TOKEN: "sk-your-api-key-here",
-        ANTHROPIC_MODEL: "deepseek-chat",
-        ANTHROPIC_SMALL_FAST_MODEL: "deepseek-chat",
       },
     },
   },
