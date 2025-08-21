@@ -30,6 +30,18 @@ export const providerPresets: ProviderPreset[] = [
     },
   },
   {
+    name: "DeepSeek v3.1",
+    websiteUrl: "https://platform.deepseek.com/",
+    settingsConfig: {
+      env: {
+        ANTHROPIC_BASE_URL: "https://api.deepseek.com/anthropic",
+        ANTHROPIC_AUTH_TOKEN: "sk-your-api-key-here",
+        ANTHROPIC_MODEL: "deepseek-chat",
+        ANTHROPIC_SMALL_FAST_MODEL: "deepseek-chat",
+      },
+    },
+  },
+  {
     name: "PackyCode",
     websiteUrl: "https://www.packycode.com",
     settingsConfig: {
