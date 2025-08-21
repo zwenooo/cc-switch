@@ -69,7 +69,8 @@
   transition: all 0.2s;
 }
 
-.preset-btn:hover {
+.preset-btn:hover,
+.preset-btn.selected {
   background: #3498db;
   color: white;
 }

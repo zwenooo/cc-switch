@@ -28,6 +28,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   })
   const [error, setError] = useState('')
   const [disableCoAuthored, setDisableCoAuthored] = useState(false)
+  const [selectedPreset, setSelectedPreset] = useState<number | null>(null)
 
   // 初始化时检查禁用签名状态
   useEffect(() => {
@@ -107,7 +108,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     })
   }
 
-  const applyPreset = (preset: typeof providerPresets[0]) => {
+  const applyPreset = (preset: typeof providerPresets[0], index: number) => {
     const configString = JSON.stringify(preset.settingsConfig, null, 2)
     
     setFormData({
@@ -115,6 +116,9 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       websiteUrl: preset.websiteUrl,
       settingsConfig: configString
     })
+    
+    // 设置选中的预设
+    setSelectedPreset(index)
     
     // 同步选择框状态
     const hasCoAuthoredDisabled = checkCoAuthoredSetting(configString)
@@ -136,8 +140,8 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                 <button
                   key={index}
                   type="button"
-                  className="preset-btn"
-                  onClick={() => applyPreset(preset)}
+                  className={`preset-btn ${selectedPreset === index ? 'selected' : ''}`}
+                  onClick={() => applyPreset(preset, index)}
                 >
                   {preset.name}
                 </button>
