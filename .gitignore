@@ -7,3 +7,4 @@ release/
 .env.local
 *.tsbuildinfo
 .npmrc
+CLAUDE.md
