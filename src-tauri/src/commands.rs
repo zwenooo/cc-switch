@@ -1,12 +1,11 @@
 use std::collections::HashMap;
 use tauri::State;
-use serde_json::Value;
 
 use crate::config::{
-    get_claude_config_status, import_current_config_as_default, get_claude_settings_path,
+    import_current_config_as_default, get_claude_settings_path,
     ConfigStatus,
 };
-use crate::provider::{Provider, ProviderManager};
+use crate::provider::Provider;
 use crate::store::AppState;
 
 /// 获取所有供应商
@@ -136,7 +135,7 @@ pub async fn import_default_config(
 /// 获取 Claude Code 配置状态
 #[tauri::command]
 pub async fn get_claude_config_status() -> Result<ConfigStatus, String> {
-    Ok(get_claude_config_status())
+    Ok(crate::config::get_claude_config_status())
 }
 
 /// 获取 Claude Code 配置文件路径

@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::config::{
     copy_file, delete_file, get_provider_config_path, read_json_file, write_json_file,
-    get_claude_settings_path, backup_config, sanitize_provider_name
+    get_claude_settings_path, backup_config
 };
 
 /// 供应商结构体

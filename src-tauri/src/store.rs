@@ -1,6 +1,6 @@
 use std::sync::Mutex;
-use crate::config::{get_app_config_path, read_json_file, write_json_file};
-use crate::provider::{Provider, ProviderManager};
+use crate::config::get_app_config_path;
+use crate::provider::ProviderManager;
 
 /// 全局应用状态
 pub struct AppState {
