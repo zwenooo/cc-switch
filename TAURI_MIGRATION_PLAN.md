@@ -111,7 +111,7 @@ async fn get_claude_config_status() -> Result<ConfigStatus, String>
 
 #### 4.1 API 层重构
 
-- [ ] 创建 `src/lib/tauri-api.ts`
+- [x] 创建 `src/lib/tauri-api.ts`
   - 替换 Electron IPC 调用为 Tauri invoke
   - 保持 API 接口一致，减少组件改动
 
@@ -127,9 +127,9 @@ invoke("get_providers");
 
 #### 4.2 最小化前端改动
 
-- [ ] 更新 preload 桥接逻辑
-- [ ] 调整窗口控制相关代码
-- [ ] 处理文件路径差异
+- [x] 更新 preload 桥接逻辑
+- [x] 调整窗口控制相关代码
+- [x] 处理文件路径差异
 
 ### Phase 5: 测试与优化 (Day 3 上午)
 
@@ -241,4 +241,4 @@ invoke("get_providers");
 
 _最后更新：2024-12-23_
 _负责人：Jason Young_
-_状态：进行中 - Phase 3 已完成_
+_状态：进行中 - Phase 4 已完成_
