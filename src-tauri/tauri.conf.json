@@ -4,10 +4,10 @@
   "version": "3.0.0-beta.1",
   "identifier": "com.ccswitch.app",
   "build": {
-    "frontendDist": "../build",
-    "devUrl": "http://localhost:3000",
-    "beforeDevCommand": "pnpm dev",
-    "beforeBuildCommand": "pnpm build"
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "pnpm run dev:renderer",
+    "beforeBuildCommand": "pnpm run build:renderer"
   },
   "app": {
     "windows": [
