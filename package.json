@@ -2,19 +2,12 @@
   "name": "cc-switch",
   "version": "2.0.3",
   "description": "Claude Code 供应商切换工具",
-  "main": "dist/main/index.js",
   "scripts": {
     "dev": "pnpm tauri dev",
     "build": "pnpm tauri build",
     "tauri": "tauri",
     "dev:renderer": "vite",
-    "build:renderer": "vite build",
-    "dev:electron": "tsc -p tsconfig.main.json && electron .",
-    "dev:electron:watch": "tsc -p tsconfig.main.json && concurrently -k \"tsc -w -p tsconfig.main.json\" \"npm:electron\"",
-    "electron": "electron .",
-    "build:main": "tsc -p tsconfig.main.json",
-    "start:electron": "electron .",
-    "dist:electron": "electron-builder"
+    "build:renderer": "vite build"
   },
   "keywords": [],
   "author": "Jason Young",
@@ -24,9 +17,6 @@
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@vitejs/plugin-react": "^4.2.0",
-    "concurrently": "^8.2.0",
-    "electron": "^32.3.3",
-    "electron-builder": "^24.0.0",
     "typescript": "^5.3.0",
     "vite": "^5.0.0"
   },
@@ -35,60 +25,5 @@
     "@tauri-apps/plugin-shell": "^2.3.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
-  },
-  "build": {
-    "appId": "com.ccswitch.app",
-    "productName": "CC Switch",
-    "compression": "maximum",
-    "publish": null,
-    "directories": {
-      "output": "release"
-    },
-    "icon": "build/icon.ico",
-    "files": [
-      "dist/**/*",
-      "node_modules/**/*"
-    ],
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true
-    },
-    "mac": {
-      "category": "public.app-category.developer-tools",
-      "icon": "build/icon.icns",
-      "identity": "-",
-      "hardenedRuntime": false,
-      "entitlements": null,
-      "entitlementsInherit": null,
-      "target": [
-        {
-          "target": "zip",
-          "arch": [
-            "x64"
-          ]
-        }
-      ]
-    },
-    "win": {
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        },
-        {
-          "target": "portable",
-          "arch": [
-            "x64"
-          ]
-        }
-      ],
-      "icon": "build/icon.ico"
-    },
-    "linux": {
-      "target": "AppImage",
-      "icon": "build/icon.png"
-    }
   }
 }
