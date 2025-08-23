@@ -7,10 +7,13 @@ export default defineConfig({
   root: resolve(__dirname, 'src/renderer'),
   base: './',
   build: {
-    outDir: resolve(__dirname, 'dist/renderer'),
+    outDir: resolve(__dirname, 'build'),
     emptyOutDir: true
   },
   server: {
-    port: 3000
-  }
+    port: 3000,
+    strictPort: true
+  },
+  clearScreen: false,
+  envPrefix: ['VITE_', 'TAURI_']
 })
