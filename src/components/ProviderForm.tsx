@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Provider } from "../../shared/types";
+import { Provider } from "../types";
 import {
   updateCoAuthoredSetting,
   checkCoAuthoredSetting,

@@ -1,6 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { open } from '@tauri-apps/plugin-shell';
-import { Provider } from '../../shared/types';
+import { Provider } from '../types';
 
 // 定义配置状态类型
 interface ConfigStatus {

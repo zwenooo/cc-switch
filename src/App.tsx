@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Provider } from "../shared/types";
+import { Provider } from "./types";
 import ProviderList from "./components/ProviderList";
 import AddProviderModal from "./components/AddProviderModal";
 import EditProviderModal from "./components/EditProviderModal";

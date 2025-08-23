@@ -1,5 +1,5 @@
 import React from 'react'
-import { Provider } from '../../shared/types'
+import { Provider } from '../types'
 import ProviderForm from './ProviderForm'
 
 interface EditProviderModalProps {
