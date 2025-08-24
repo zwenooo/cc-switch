@@ -25,7 +25,7 @@ function App() {
     message: string;
     onConfirm: () => void;
   } | null>(null);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 设置通知的辅助函数
   const showNotification = (
