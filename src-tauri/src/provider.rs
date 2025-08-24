@@ -154,6 +154,12 @@ impl ProviderManager {
             }
         }
         
+        // 确保主配置父目录存在
+        if let Some(parent) = settings_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("创建目录失败: {}", e))?;
+        }
+
         // 复制新供应商配置到主配置
         copy_file(&provider_config_path, &settings_path)?;
         
