@@ -10,7 +10,7 @@ function App() {
   const [providers, setProviders] = useState<Record<string, Provider>>({});
   const [currentProviderId, setCurrentProviderId] = useState<string>("");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [configPath, setConfigPath] = useState<string>("");
+  const [configStatus, setConfigStatus] = useState<{ exists: boolean; path: string } | null>(null);
   const [editingProviderId, setEditingProviderId] = useState<string | null>(
     null
   );
@@ -56,7 +56,7 @@ function App() {
   // 加载供应商列表
   useEffect(() => {
     loadProviders();
-    loadConfigPath();
+    loadConfigStatus();
   }, []);
 
   // 清理定时器
@@ -80,9 +80,9 @@ function App() {
     }
   };
 
-  const loadConfigPath = async () => {
-    const path = await window.electronAPI.getClaudeCodeConfigPath();
-    setConfigPath(path);
+  const loadConfigStatus = async () => {
+    const status = await window.electronAPI.getClaudeConfigStatus();
+    setConfigStatus({ exists: Boolean(status?.exists), path: String(status?.path || "") });
   };
 
   // 生成唯一ID
@@ -199,9 +199,12 @@ function App() {
           />
         </div>
 
-        {configPath && (
+        {configStatus && (
           <div className="config-path">
-            <span>配置文件位置: {configPath}</span>
+            <span>
+              配置文件位置: {configStatus.path}
+              {!configStatus.exists ? "（未创建，切换或保存时会自动创建）" : ""}
+            </span>
             <button
               className="browse-btn"
               onClick={handleOpenConfigFolder}
