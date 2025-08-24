@@ -103,6 +103,17 @@ pub async fn switch_provider(
 pub async fn import_default_config(
     state: State<'_, AppState>,
 ) -> Result<bool, String> {
+    // 若已存在 default 供应商，则直接返回，避免重复导入
+    {
+        let manager = state
+            .provider_manager
+            .lock()
+            .map_err(|e| format!("获取锁失败: {}", e))?;
+        if manager.get_all_providers().contains_key("default") {
+            return Ok(true);
+        }
+    }
+
     // 导入配置
     let settings_config = import_current_config_as_default()?;
     
