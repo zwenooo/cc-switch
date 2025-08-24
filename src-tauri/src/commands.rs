@@ -197,6 +197,12 @@ pub async fn open_config_folder() -> Result<bool, String> {
 /// 打开外部链接
 #[tauri::command]
 pub async fn open_external(url: String) -> Result<bool, String> {
+    // 规范化 URL，缺少协议时默认加 https://
+    let url = if url.starts_with("http://") || url.starts_with("https://") {
+        url
+    } else {
+        format!("https://{}", url)
+    };
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("cmd")
