@@ -4,6 +4,7 @@ mod store;
 mod commands;
 
 use store::AppState;
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -18,7 +19,7 @@ pub fn run() {
                 )?;
             }
             
-            // 初始化应用状态
+            // 初始化应用状态（仅创建一次，并在本函数末尾注入 manage）
             let app_state = AppState::new();
             
             // 如果没有供应商且存在 Claude Code 配置，自动导入
@@ -51,9 +52,10 @@ pub fn run() {
                 }
             }
             
+            // 将同一个实例注入到全局状态，避免重复创建导致的不一致
+            app.manage(app_state);
             Ok(())
         })
-        .manage(AppState::new())
         .invoke_handler(tauri::generate_handler![
             commands::get_providers,
             commands::get_current_provider,

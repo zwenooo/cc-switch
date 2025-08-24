@@ -144,15 +144,10 @@ export const tauriAPI = {
 
 // 创建全局 API 对象，兼容现有代码
 if (typeof window !== 'undefined') {
-  // 检测是否在 Tauri 环境中
-  const isTauri = '__TAURI__' in window;
-  
-  if (isTauri) {
-    // 在 Tauri 环境中，将 API 绑定到 window.electronAPI
-    // 保持代码兼容性，无需修改组件代码
-    (window as any).electronAPI = tauriAPI;
-  }
-  
+  // 始终绑定到 window.electronAPI，以避免环境判断失误导致未绑定而报错
+  // API 内部已做 try/catch，非 Tauri 环境下也会安全返回默认值
+  (window as any).electronAPI = tauriAPI;
+
   // 提供平台信息
   (window as any).platform = {
     isMac: navigator.platform.toLowerCase().includes('mac')

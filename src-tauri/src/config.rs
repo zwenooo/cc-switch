@@ -12,7 +12,13 @@ pub fn get_claude_config_dir() -> PathBuf {
 
 /// 获取 Claude Code 主配置文件路径
 pub fn get_claude_settings_path() -> PathBuf {
-    get_claude_config_dir().join("settings.json")
+    let dir = get_claude_config_dir();
+    let settings = dir.join("settings.json");
+    if settings.exists() {
+        return settings;
+    }
+    // 兼容旧版命名：claude.json
+    dir.join("claude.json")
 }
 
 /// 获取应用配置目录路径 (~/.cc-switch)
