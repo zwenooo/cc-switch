@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use tauri::State;
+use tauri_plugin_opener::OpenerExt;
 
 use crate::config::{
     import_current_config_as_default, get_claude_settings_path,
@@ -157,7 +158,7 @@ pub async fn get_claude_code_config_path() -> Result<String, String> {
 
 /// 打开配置文件夹
 #[tauri::command]
-pub async fn open_config_folder() -> Result<bool, String> {
+pub async fn open_config_folder(app: tauri::AppHandle) -> Result<bool, String> {
     let config_dir = crate::config::get_claude_config_dir();
     
     // 确保目录存在
@@ -166,66 +167,28 @@ pub async fn open_config_folder() -> Result<bool, String> {
             .map_err(|e| format!("创建目录失败: {}", e))?;
     }
     
-    // 在不同平台上打开文件夹
-    #[cfg(target_os = "windows")]
-    {
-        std::process::Command::new("explorer")
-            .arg(&config_dir)
-            .spawn()
-            .map_err(|e| format!("打开文件夹失败: {}", e))?;
-    }
-    
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("open")
-            .arg(&config_dir)
-            .spawn()
-            .map_err(|e| format!("打开文件夹失败: {}", e))?;
-    }
-    
-    #[cfg(target_os = "linux")]
-    {
-        std::process::Command::new("xdg-open")
-            .arg(&config_dir)
-            .spawn()
-            .map_err(|e| format!("打开文件夹失败: {}", e))?;
-    }
+    // 使用 opener 插件打开文件夹
+    app.opener()
+        .open_path(config_dir.to_string_lossy().to_string(), None::<String>)
+        .map_err(|e| format!("打开文件夹失败: {}", e))?;
     
     Ok(true)
 }
 
 /// 打开外部链接
 #[tauri::command]
-pub async fn open_external(url: String) -> Result<bool, String> {
+pub async fn open_external(app: tauri::AppHandle, url: String) -> Result<bool, String> {
     // 规范化 URL，缺少协议时默认加 https://
     let url = if url.starts_with("http://") || url.starts_with("https://") {
         url
     } else {
         format!("https://{}", url)
     };
-    #[cfg(target_os = "windows")]
-    {
-        std::process::Command::new("cmd")
-            .args(&["/C", "start", "", &url])
-            .spawn()
-            .map_err(|e| format!("打开链接失败: {}", e))?;
-    }
     
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("open")
-            .arg(&url)
-            .spawn()
-            .map_err(|e| format!("打开链接失败: {}", e))?;
-    }
-    
-    #[cfg(target_os = "linux")]
-    {
-        std::process::Command::new("xdg-open")
-            .arg(&url)
-            .spawn()
-            .map_err(|e| format!("打开链接失败: {}", e))?;
-    }
+    // 使用 opener 插件打开链接
+    app.opener()
+        .open_url(&url, None::<String>)
+        .map_err(|e| format!("打开链接失败: {}", e))?;
     
     Ok(true)
 }

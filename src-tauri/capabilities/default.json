@@ -6,6 +6,9 @@
     "main"
   ],
   "permissions": [
-    "core:default"
+    "core:default",
+    "shell:allow-open",
+    "shell:allow-execute",
+    "opener:default"
   ]
 }
