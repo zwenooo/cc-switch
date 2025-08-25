@@ -148,10 +148,6 @@ if (typeof window !== 'undefined') {
   // API 内部已做 try/catch，非 Tauri 环境下也会安全返回默认值
   (window as any).api = tauriAPI;
 
-  // 提供平台信息
-  (window as any).platform = {
-    isMac: navigator.platform.toLowerCase().includes('mac')
-  };
 }
 
 export default tauriAPI;
