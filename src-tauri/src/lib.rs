@@ -12,6 +12,37 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            #[cfg(target_os = "macos")]
+            {
+                // 设置 macOS 标题栏背景色为主界面蓝色
+                if let Some(window) = app.get_webview_window("main") {
+                    use objc2::runtime::AnyObject;
+                    use objc2::rc::Retained;
+                    use objc2_app_kit::NSColor;
+                    
+                    let ns_window_ptr = window.ns_window().unwrap();
+                    let ns_window: Retained<AnyObject> = unsafe { 
+                        Retained::retain(ns_window_ptr as *mut AnyObject).unwrap()
+                    };
+                    
+                    // 使用与主界面 banner 相同的蓝色 #3498db
+                    // #3498db = RGB(52, 152, 219)
+                    let bg_color = unsafe {
+                        NSColor::colorWithRed_green_blue_alpha(
+                            52.0/255.0,   // R: 52
+                            152.0/255.0,  // G: 152  
+                            219.0/255.0,  // B: 219
+                            1.0,          // Alpha: 1.0
+                        )
+                    };
+                    
+                    unsafe {
+                        use objc2::msg_send;
+                        let _: () = msg_send![&*ns_window, setBackgroundColor: &*bg_color];
+                    }
+                }
+            }
+            
             // 初始化日志
             if cfg!(debug_assertions) {
                 app.handle().plugin(
