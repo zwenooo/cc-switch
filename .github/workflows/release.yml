@@ -11,97 +11,67 @@ permissions:
 jobs:
   release:
     runs-on: ${{ matrix.os }}
-    
     strategy:
       matrix:
         include:
           - os: windows-latest
-            platform: win32
-          - os: ubuntu-latest  
-            platform: linux
+          - os: ubuntu-latest
           - os: macos-latest
-            platform: darwin
-    
+
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-      
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v2
         with:
           version: 10.12.3
           run_install: false
-      
+
       - name: Get pnpm store directory
         shell: bash
-        run: |
-          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-      
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
       - name: Setup pnpm cache
         uses: actions/cache@v3
         with:
           path: ${{ env.STORE_PATH }}
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
-      
-      - name: Install dependencies
+          restore-keys: ${{ runner.os }}-pnpm-store-
+
+      - name: Install frontend deps
         run: pnpm install --frozen-lockfile
-      
-      - name: Build application
-        run: |
-          pnpm run build
-          pnpm run dist
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_IDENTITY_AUTO_DISCOVERY: false
-      
-      - name: List build files (debug)
-        shell: bash
-        run: |
-          echo "Listing release directory:"
-          ls -la release/ || echo "No release directory found"
-          find . -name "*.exe" -o -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" || echo "No build files found"
-      
-      - name: Upload Release Assets
-        uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          files: |
-            release/*.exe
-            release/*.zip
-            release/*.AppImage
-          name: "CC Switch ${{ github.ref_name }}"
-          body: |
-            ## CC Switch ${{ github.ref_name }}
-            
-            Claude Code 供应商切换工具
-            
-            ### 下载
-            
-            #### Windows 用户
-            - **安装版 (推荐)**: `CC Switch Setup ${{ github.ref_name }}.exe`
-            - **便携版**: `CC Switch ${{ github.ref_name }}.exe`
-            
-            #### macOS 用户（推荐使用通用版本）
-            - **通用版本**: `CC Switch-${{ github.ref_name }}-mac.zip` - 兼容所有Mac（Intel + M系列）
-            
-            #### Linux 用户
-            - **AppImage**: `CC Switch-${{ github.ref_name }}.AppImage`
-            
-            ### macOS 安装说明
-            1. 下载 ZIP 文件后解压
-            2. 首次打开可能出现"未知开发者"警告
-            3. 前往"系统设置" → "隐私与安全性" → 点击"仍要打开"
-            4. 或者使用命令: `xattr -cr "/path/to/CC Switch.app"`
-            
-            ### 注意事项
-            - macOS 版本使用 Intel 架构，通过 Rosetta 2 在 M 系列芯片上运行
-            - 兼容性和稳定性最佳，性能损失minimal
+
+      - name: Build and Release (Tauri)
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: CC Switch ${{ github.ref_name }}
+          releaseBody: |
+            ## CC Switch ${{ github.ref_name }}
+
+            Claude Code 供应商切换工具（Tauri 构建）
+
+            - Windows: .msi / NSIS 安装包
+            - macOS: .dmg / .app 压缩包
+            - Linux: AppImage / deb / rpm
+
+            如遇未知开发者提示，请在系统隐私与安全设置中选择“仍要打开”。
+          tauriScript: pnpm tauri
+
+      - name: List generated bundles (debug)
+        if: always()
+        shell: bash
+        run: |
+          echo "Listing bundles in src-tauri/target..."
+          find src-tauri/target -maxdepth 4 -type f -name "*.*" 2>/dev/null || true
