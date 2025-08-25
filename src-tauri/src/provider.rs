@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::Path;
-use uuid::Uuid;
 
 use crate::config::{
     copy_file, delete_file, get_provider_config_path, read_json_file, write_json_file,
@@ -22,16 +21,6 @@ pub struct Provider {
 }
 
 impl Provider {
-    /// 创建新的供应商
-    pub fn new(name: String, settings_config: Value, website_url: Option<String>) -> Self {
-        Self {
-            id: Uuid::new_v4().to_string(),
-            name,
-            settings_config,
-            website_url,
-        }
-    }
-    
     /// 从现有ID创建供应商
     pub fn with_id(id: String, name: String, settings_config: Value, website_url: Option<String>) -> Self {
         Self {
@@ -168,15 +157,6 @@ impl ProviderManager {
         
         log::info!("成功切换到供应商: {}", provider.name);
         Ok(())
-    }
-    
-    /// 获取当前供应商
-    pub fn get_current_provider(&self) -> Option<&Provider> {
-        if self.current.is_empty() {
-            None
-        } else {
-            self.providers.get(&self.current)
-        }
     }
     
     /// 获取所有供应商

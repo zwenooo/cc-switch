@@ -31,15 +31,5 @@ impl AppState {
         manager.save_to_file(&config_path)
     }
     
-    /// 重新加载配置
-    pub fn reload(&self) -> Result<(), String> {
-        let config_path = get_app_config_path();
-        let new_manager = ProviderManager::load_from_file(&config_path)?;
-        
-        let mut manager = self.provider_manager.lock()
-            .map_err(|e| format!("获取锁失败: {}", e))?;
-        
-        *manager = new_manager;
-        Ok(())
-    }
+    // 保留按需扩展：若未来需要热加载，可在此实现
 }
