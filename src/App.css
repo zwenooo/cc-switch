@@ -7,12 +7,13 @@
 .app-header {
   background: #3498db;
   color: white;
-  padding: 1rem 2rem;
+  padding: 0.75rem 2rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   user-select: none;
+  min-height: 3rem;
 }
 
 .app-header h1 {
