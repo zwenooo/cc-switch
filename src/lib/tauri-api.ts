@@ -14,7 +14,7 @@ interface ImportResult {
   message?: string;
 }
 
-// Tauri API 封装，保持与 Electron API 相同的接口
+// Tauri API 封装，提供统一的全局 API 接口
 export const tauriAPI = {
   // 获取所有供应商
   getProviders: async (): Promise<Record<string, Provider>> => {
@@ -144,9 +144,9 @@ export const tauriAPI = {
 
 // 创建全局 API 对象，兼容现有代码
 if (typeof window !== 'undefined') {
-  // 始终绑定到 window.electronAPI，以避免环境判断失误导致未绑定而报错
+  // 绑定到 window.api，避免 Electron 命名造成误解
   // API 内部已做 try/catch，非 Tauri 环境下也会安全返回默认值
-  (window as any).electronAPI = tauriAPI;
+  (window as any).api = tauriAPI;
 
   // 提供平台信息
   (window as any).platform = {

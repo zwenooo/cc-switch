@@ -2,7 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
 import './index.css'
-// 导入 Tauri API（自动绑定到 window.electronAPI）
+// 导入 Tauri API（自动绑定到 window.api）
 import './lib/tauri-api'
 
 // 根据平台添加 body class，便于平台特定样式

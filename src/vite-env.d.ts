@@ -15,7 +15,7 @@ interface ConfigStatus {
 
 declare global {
   interface Window {
-    electronAPI: {
+    api: {
       getProviders: () => Promise<Record<string, Provider>>;
       getCurrentProvider: () => Promise<string>;
       addProvider: (provider: Provider) => Promise<boolean>;

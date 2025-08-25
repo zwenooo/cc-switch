@@ -32,7 +32,7 @@ const ProviderList: React.FC<ProviderListProps> = ({
 
   const handleUrlClick = async (url: string) => {
     try {
-      await window.electronAPI.openExternal(url)
+      await window.api.openExternal(url)
     } catch (error) {
       console.error('打开链接失败:', error)
     }

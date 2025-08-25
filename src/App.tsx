@@ -69,8 +69,8 @@ function App() {
   }, []);
 
   const loadProviders = async () => {
-    const loadedProviders = await window.electronAPI.getProviders();
-    const currentId = await window.electronAPI.getCurrentProvider();
+    const loadedProviders = await window.api.getProviders();
+    const currentId = await window.api.getCurrentProvider();
     setProviders(loadedProviders);
     setCurrentProviderId(currentId);
     
@@ -81,7 +81,7 @@ function App() {
   };
 
   const loadConfigStatus = async () => {
-    const status = await window.electronAPI.getClaudeConfigStatus();
+    const status = await window.api.getClaudeConfigStatus();
     setConfigStatus({ exists: Boolean(status?.exists), path: String(status?.path || "") });
   };
 
@@ -95,14 +95,14 @@ function App() {
       ...provider,
       id: generateId(),
     };
-    await window.electronAPI.addProvider(newProvider);
+    await window.api.addProvider(newProvider);
     await loadProviders();
     setIsAddModalOpen(false);
   };
 
   const handleEditProvider = async (provider: Provider) => {
     try {
-      await window.electronAPI.updateProvider(provider);
+      await window.api.updateProvider(provider);
       await loadProviders();
       setEditingProviderId(null);
       // 显示编辑成功提示
@@ -121,7 +121,7 @@ function App() {
       title: "删除供应商",
       message: `确定要删除供应商 "${provider?.name}" 吗？此操作无法撤销。`,
       onConfirm: async () => {
-        await window.electronAPI.deleteProvider(id);
+        await window.api.deleteProvider(id);
         await loadProviders();
         setConfirmDialog(null);
         showNotification("供应商删除成功", "success");
@@ -130,7 +130,7 @@ function App() {
   };
 
   const handleSwitchProvider = async (id: string) => {
-    const success = await window.electronAPI.switchProvider(id);
+    const success = await window.api.switchProvider(id);
     if (success) {
       setCurrentProviderId(id);
       // 显示重启提示
@@ -147,7 +147,7 @@ function App() {
   // 自动导入现有配置为"default"供应商
   const handleAutoImportDefault = async () => {
     try {
-      const result = await window.electronAPI.importCurrentConfigAsDefault()
+      const result = await window.api.importCurrentConfigAsDefault()
       
       if (result.success) {
         await loadProviders()
@@ -161,7 +161,7 @@ function App() {
   }
 
   const handleOpenConfigFolder = async () => {
-    await window.electronAPI.openConfigFolder();
+    await window.api.openConfigFolder();
   };
 
   return (
