@@ -10,7 +10,7 @@ export interface ProviderPreset {
 export const providerPresets: ProviderPreset[] = [
   {
     name: "DeepSeek v3.1",
-    websiteUrl: "https://platform.deepseek.com/",
+    websiteUrl: "https://platform.deepseek.com",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.deepseek.com/anthropic",
@@ -42,6 +42,18 @@ export const providerPresets: ProviderPreset[] = [
     },
   },
   {
+    name: "Kimi k2",
+    websiteUrl: "https://platform.moonshot.cn/console",
+    settingsConfig: {
+      env: {
+        ANTHROPIC_BASE_URL: "https://api.moonshot.cn/anthropic",
+        ANTHROPIC_AUTH_TOKEN: "sk-your-api-key-here",
+        ANTHROPIC_MODEL: "kimi-k2-turbo-preview",
+        ANTHROPIC_SMALL_FAST_MODEL: "kimi-k2-turbo-preview",
+      },
+    },
+  },
+  {
     name: "PackyCode",
     websiteUrl: "https://www.packycode.com",
     settingsConfig: {
@@ -51,14 +63,5 @@ export const providerPresets: ProviderPreset[] = [
       },
     },
   },
-  {
-    name: "AnyRouter",
-    websiteUrl: "https://anyrouter.top",
-    settingsConfig: {
-      env: {
-        ANTHROPIC_BASE_URL: "https://anyrouter.top",
-        ANTHROPIC_AUTH_TOKEN: "sk-your-api-key-here",
-      },
-    },
-  },
+  
 ];
