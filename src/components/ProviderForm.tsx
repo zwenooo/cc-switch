@@ -184,21 +184,28 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   // 支持按下 ESC 关闭弹窗
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         e.preventDefault();
         onClose();
       }
     };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
   return (
-    <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div
+      className="modal-overlay"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div className="modal-content">
         <div className="modal-titlebar">
           <div className="modal-spacer" />
-          <div className="modal-title" title={title}>{title}</div>
+          <div className="modal-title" title={title}>
+            {title}
+          </div>
           <button
             type="button"
             className="modal-close-btn"
@@ -212,112 +219,112 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
 
         <form onSubmit={handleSubmit} className="modal-form">
           <div className="modal-body">
-          {error && <div className="error-message">{error}</div>}
+            {error && <div className="error-message">{error}</div>}
 
-          {showPresets && (
-            <div className="presets">
-              <label>快速选择模板：</label>
-              <div className="preset-buttons">
-                {providerPresets.map((preset, index) => (
-                  <button
-                    key={index}
-                    type="button"
-                    className={`preset-btn ${
-                      selectedPreset === index ? "selected" : ""
-                    }`}
-                    onClick={() => applyPreset(preset, index)}
-                  >
-                    {preset.name}
-                  </button>
-                ))}
+            {showPresets && (
+              <div className="presets">
+                <label>一键导入（只需要填写 key）</label>
+                <div className="preset-buttons">
+                  {providerPresets.map((preset, index) => (
+                    <button
+                      key={index}
+                      type="button"
+                      className={`preset-btn ${
+                        selectedPreset === index ? "selected" : ""
+                      }`}
+                      onClick={() => applyPreset(preset, index)}
+                    >
+                      {preset.name}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          <div className="form-group">
-            <label htmlFor="name">供应商名称 *</label>
-            <input
-              type="text"
-              id="name"
-              name="name"
-              value={formData.name}
-              onChange={handleChange}
-              placeholder="例如：Anthropic 官方"
-              required
-              autoComplete="off"
-            />
-          </div>
-
-          {showApiKey && (
             <div className="form-group">
-              <label htmlFor="apiKey">API Key *</label>
+              <label htmlFor="name">供应商名称 *</label>
               <input
                 type="text"
-                id="apiKey"
-                value={apiKey}
-                onChange={(e) => handleApiKeyChange(e.target.value)}
-                placeholder="只需要填这里，下方配置会自动填充"
+                id="name"
+                name="name"
+                value={formData.name}
+                onChange={handleChange}
+                placeholder="例如：Anthropic 官方"
+                required
                 autoComplete="off"
               />
             </div>
-          )}
 
-          <div className="form-group">
-            <label htmlFor="websiteUrl">官网地址</label>
-            <input
-              type="url"
-              id="websiteUrl"
-              name="websiteUrl"
-              value={formData.websiteUrl}
-              onChange={handleChange}
-              placeholder="https://example.com（可选）"
-              autoComplete="off"
-            />
-          </div>
-
-          <div className="form-group">
-            <div className="label-with-checkbox">
-              <label htmlFor="settingsConfig">Claude Code 配置 (JSON) *</label>
-              <label className="checkbox-label">
+            {showApiKey && (
+              <div className="form-group">
+                <label htmlFor="apiKey">API Key *</label>
                 <input
-                  type="checkbox"
-                  checked={disableCoAuthored}
-                  onChange={(e) => handleCoAuthoredToggle(e.target.checked)}
+                  type="text"
+                  id="apiKey"
+                  value={apiKey}
+                  onChange={(e) => handleApiKeyChange(e.target.value)}
+                  placeholder="只需要填这里，下方配置会自动填充"
+                  autoComplete="off"
                 />
-                禁止 Claude Code 签名
-              </label>
+              </div>
+            )}
+
+            <div className="form-group">
+              <label htmlFor="websiteUrl">官网地址</label>
+              <input
+                type="url"
+                id="websiteUrl"
+                name="websiteUrl"
+                value={formData.websiteUrl}
+                onChange={handleChange}
+                placeholder="https://example.com（可选）"
+                autoComplete="off"
+              />
             </div>
-            <textarea
-              id="settingsConfig"
-              name="settingsConfig"
-              value={formData.settingsConfig}
-              onChange={handleChange}
-              placeholder={`{
+
+            <div className="form-group">
+              <div className="label-with-checkbox">
+                <label htmlFor="settingsConfig">
+                  Claude Code 配置 (JSON) *
+                </label>
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={disableCoAuthored}
+                    onChange={(e) => handleCoAuthoredToggle(e.target.checked)}
+                  />
+                  禁止 Claude Code 签名
+                </label>
+              </div>
+              <textarea
+                id="settingsConfig"
+                name="settingsConfig"
+                value={formData.settingsConfig}
+                onChange={handleChange}
+                placeholder={`{
   "env": {
     "ANTHROPIC_BASE_URL": "https://api.anthropic.com",
     "ANTHROPIC_AUTH_TOKEN": "sk-your-api-key-here"
   }
 }`}
-              rows={12}
-              style={{ fontFamily: "monospace", fontSize: "14px" }}
-              required
-            />
-            <small className="field-hint">
-              完整的 Claude Code settings.json 配置内容
-            </small>
-          </div>
-
+                rows={12}
+                style={{ fontFamily: "monospace", fontSize: "14px" }}
+                required
+              />
+              <small className="field-hint">
+                完整的 Claude Code settings.json 配置内容
+              </small>
+            </div>
           </div>
 
           <div className="modal-footer">
-              <button type="button" className="cancel-btn" onClick={onClose}>
-                取消
-              </button>
-              <button type="submit" className="submit-btn">
-                {submitText}
-              </button>
+            <button type="button" className="cancel-btn" onClick={onClose}>
+              取消
+            </button>
+            <button type="submit" className="submit-btn">
+              {submitText}
+            </button>
           </div>
-
         </form>
       </div>
     </div>
