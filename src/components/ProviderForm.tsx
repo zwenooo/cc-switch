@@ -181,34 +181,59 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 支持按下 ESC 关闭弹窗
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
   return (
-    <div className="modal-overlay">
+    <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal-content">
-        <h2>{title}</h2>
+        <div className="modal-titlebar">
+          <div className="modal-spacer" />
+          <div className="modal-title" title={title}>{title}</div>
+          <button
+            type="button"
+            className="modal-close-btn"
+            aria-label="关闭"
+            onClick={onClose}
+            title="关闭"
+          >
+            ×
+          </button>
+        </div>
 
-        {error && <div className="error-message">{error}</div>}
+        <form onSubmit={handleSubmit} className="modal-form">
+          <div className="modal-body">
+          {error && <div className="error-message">{error}</div>}
 
-        {showPresets && (
-          <div className="presets">
-            <label>快速选择模板：</label>
-            <div className="preset-buttons">
-              {providerPresets.map((preset, index) => (
-                <button
-                  key={index}
-                  type="button"
-                  className={`preset-btn ${
-                    selectedPreset === index ? "selected" : ""
-                  }`}
-                  onClick={() => applyPreset(preset, index)}
-                >
-                  {preset.name}
-                </button>
-              ))}
+          {showPresets && (
+            <div className="presets">
+              <label>快速选择模板：</label>
+              <div className="preset-buttons">
+                {providerPresets.map((preset, index) => (
+                  <button
+                    key={index}
+                    type="button"
+                    className={`preset-btn ${
+                      selectedPreset === index ? "selected" : ""
+                    }`}
+                    onClick={() => applyPreset(preset, index)}
+                  >
+                    {preset.name}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label htmlFor="name">供应商名称 *</label>
             <input
@@ -282,14 +307,17 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
             </small>
           </div>
 
-          <div className="form-actions">
-            <button type="button" className="cancel-btn" onClick={onClose}>
-              取消
-            </button>
-            <button type="submit" className="submit-btn">
-              {submitText}
-            </button>
           </div>
+
+          <div className="modal-footer">
+              <button type="button" className="cancel-btn" onClick={onClose}>
+                取消
+              </button>
+              <button type="submit" className="submit-btn">
+                {submitText}
+              </button>
+          </div>
+
         </form>
       </div>
     </div>

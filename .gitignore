@@ -7,4 +7,4 @@ release/
 .env.local
 *.tsbuildinfo
 .npmrc
-CLAUDE.md
+CLAUDE.mdAGENTS.md

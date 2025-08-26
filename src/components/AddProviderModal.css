@@ -13,20 +13,74 @@
 
 .modal-content {
   background: white;
-  border-radius: 8px;
-  padding: 2rem;
+  border-radius: 10px;
+  padding: 0;
   width: 90%;
-  max-width: 600px;
+  max-width: 640px;
   max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  overflow: hidden; /* 由 body 滚动，标题栏固定 */
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2);
   position: relative;
   z-index: 1001;
+  display: flex;            /* 纵向布局，便于底栏固定 */
+  flex-direction: column;
 }
 
-.modal-content h2 {
-  margin-bottom: 1.5rem;
-  color: #2c3e50;
+/* 模拟窗口标题栏 */
+.modal-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 3rem; /* 与主窗口标题栏一致 */
+  padding: 0 12px; /* 接近主头部的水平留白 */
+  background: #3498db; /* 与 .app-header 相同 */
+  color: #fff;
+  border-top-left-radius: 10px;
+  border-top-right-radius: 10px;
+}
+
+/* 左侧占位以保证标题居中（与右侧关闭按钮宽度相当） */
+.modal-spacer { width: 32px; flex: 0 0 32px; }
+
+.modal-title {
+  flex: 1;
+  text-align: center;
+  color: #fff;
+  font-weight: 600;
+  font-size: 1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.modal-close-btn {
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 20px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.modal-close-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+
+.modal-form {            /* 表单外层包裹 body + footer */
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;         /* 允许子元素正确计算高度 */
+}
+
+.modal-body {
+  padding: 1.25rem 1.5rem 1.5rem;
+  overflow: auto;        /* 仅内容区滚动 */
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .error-message {
@@ -109,11 +163,13 @@
   border-color: #3498db;
 }
 
-.form-actions {
+.modal-footer {          /* 固定在弹窗底部（非滚动区） */
   display: flex;
   gap: 1rem;
   justify-content: flex-end;
-  margin-top: 2rem;
+  padding: 0.75rem 1.5rem;
+  border-top: 1px solid #ecf0f1;
+  background: #fff;
 }
 
 .cancel-btn,
