@@ -4,6 +4,9 @@ import {
   updateCoAuthoredSetting,
   checkCoAuthoredSetting,
   extractWebsiteUrl,
+  getApiKeyFromConfig,
+  hasApiKeyField,
+  setApiKeyInConfig,
 } from "../utils/providerConfigUtils";
 import { providerPresets } from "../config/providerPresets";
 import "./AddProviderModal.css";
@@ -89,6 +92,10 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       const hasCoAuthoredDisabled = checkCoAuthoredSetting(value);
       setDisableCoAuthored(hasCoAuthoredDisabled);
 
+      // 同步 API Key 输入框显示与值
+      const parsedKey = getApiKeyFromConfig(value);
+      setApiKey(parsedKey);
+
       setFormData({
         ...formData,
         [name]: value,
@@ -142,29 +149,37 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   const handleApiKeyChange = (key: string) => {
     setApiKey(key);
 
-    if (selectedPreset !== null && key.trim()) {
-      // 获取当前选中的预设配置
-      const preset = providerPresets[selectedPreset];
-      const updatedConfig = JSON.parse(JSON.stringify(preset.settingsConfig));
+    const configString = setApiKeyInConfig(
+      formData.settingsConfig,
+      key.trim(),
+      { createIfMissing: selectedPreset !== null }
+    );
 
-      // 替换配置中的 API Key
-      if (updatedConfig.env && updatedConfig.env.ANTHROPIC_AUTH_TOKEN) {
-        updatedConfig.env.ANTHROPIC_AUTH_TOKEN = key.trim();
-      }
+    // 更新表单配置
+    setFormData((prev) => ({
+      ...prev,
+      settingsConfig: configString,
+    }));
 
-      const configString = JSON.stringify(updatedConfig, null, 2);
-
-      // 更新表单配置
-      setFormData((prev) => ({
-        ...prev,
-        settingsConfig: configString,
-      }));
-
-      // 同步选择框状态
-      const hasCoAuthoredDisabled = checkCoAuthoredSetting(configString);
-      setDisableCoAuthored(hasCoAuthoredDisabled);
-    }
+    // 同步选择框状态
+    const hasCoAuthoredDisabled = checkCoAuthoredSetting(configString);
+    setDisableCoAuthored(hasCoAuthoredDisabled);
   };
+
+  // 根据当前配置决定是否展示 API Key 输入框
+  const showApiKey =
+    selectedPreset !== null || hasApiKeyField(formData.settingsConfig);
+
+  // 初始时从配置中同步 API Key（编辑模式）
+  useEffect(() => {
+    if (initialData) {
+      const parsedKey = getApiKeyFromConfig(
+        JSON.stringify(initialData.settingsConfig)
+      );
+      if (parsedKey) setApiKey(parsedKey);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="modal-overlay">
@@ -208,7 +223,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
             />
           </div>
 
-          {selectedPreset !== null && (
+          {showApiKey && (
             <div className="form-group">
               <label htmlFor="apiKey">API Key *</label>
               <input

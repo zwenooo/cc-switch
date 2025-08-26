@@ -45,3 +45,47 @@ export const extractWebsiteUrl = (jsonString: string): string => {
   }
   return ''
 }
+
+// 读取配置中的 API Key（env.ANTHROPIC_AUTH_TOKEN）
+export const getApiKeyFromConfig = (jsonString: string): string => {
+  try {
+    const config = JSON.parse(jsonString)
+    const key = config?.env?.ANTHROPIC_AUTH_TOKEN
+    return typeof key === 'string' ? key : ''
+  } catch (err) {
+    return ''
+  }
+}
+
+// 判断配置中是否存在 API Key 字段
+export const hasApiKeyField = (jsonString: string): boolean => {
+  try {
+    const config = JSON.parse(jsonString)
+    return Object.prototype.hasOwnProperty.call(config?.env ?? {}, 'ANTHROPIC_AUTH_TOKEN')
+  } catch (err) {
+    return false
+  }
+}
+
+// 写入/更新配置中的 API Key，默认不新增缺失字段
+export const setApiKeyInConfig = (
+  jsonString: string,
+  apiKey: string,
+  options: { createIfMissing?: boolean } = {}
+): string => {
+  const { createIfMissing = false } = options
+  try {
+    const config = JSON.parse(jsonString)
+    if (!config.env) {
+      if (!createIfMissing) return jsonString
+      config.env = {}
+    }
+    if (!('ANTHROPIC_AUTH_TOKEN' in config.env) && !createIfMissing) {
+      return jsonString
+    }
+    config.env.ANTHROPIC_AUTH_TOKEN = apiKey
+    return JSON.stringify(config, null, 2)
+  } catch (err) {
+    return jsonString
+  }
+}
