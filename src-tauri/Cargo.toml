@@ -1,17 +1,17 @@
 [package]
-name = "app"
-version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
-license = ""
-repository = ""
-edition = "2021"
-rust-version = "1.77.2"
+name = "cc-switch"
+version = "3.0.0"
+description = "Claude Code MCP 服务器配置管理工具"
+authors = ["Jason Young"]
+license = "MIT"
+repository = "https://github.com/jasonyoung/cc-switch"
+edition = "2024"
+rust-version = "1.85.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
-name = "app_lib"
+name = "cc_switch_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
