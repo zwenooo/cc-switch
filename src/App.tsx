@@ -10,9 +10,12 @@ function App() {
   const [providers, setProviders] = useState<Record<string, Provider>>({});
   const [currentProviderId, setCurrentProviderId] = useState<string>("");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [configStatus, setConfigStatus] = useState<{ exists: boolean; path: string } | null>(null);
+  const [configStatus, setConfigStatus] = useState<{
+    exists: boolean;
+    path: string;
+  } | null>(null);
   const [editingProviderId, setEditingProviderId] = useState<string | null>(
-    null
+    null,
   );
   const [notification, setNotification] = useState<{
     message: string;
@@ -31,7 +34,7 @@ function App() {
   const showNotification = (
     message: string,
     type: "success" | "error",
-    duration = 3000
+    duration = 3000,
   ) => {
     // 清除之前的定时器
     if (timeoutRef.current) {
@@ -73,7 +76,7 @@ function App() {
     const currentId = await window.api.getCurrentProvider();
     setProviders(loadedProviders);
     setCurrentProviderId(currentId);
-    
+
     // 如果供应商列表为空，尝试自动导入现有配置为"default"供应商
     if (Object.keys(loadedProviders).length === 0) {
       await handleAutoImportDefault();
@@ -82,7 +85,10 @@ function App() {
 
   const loadConfigStatus = async () => {
     const status = await window.api.getClaudeConfigStatus();
-    setConfigStatus({ exists: Boolean(status?.exists), path: String(status?.path || "") });
+    setConfigStatus({
+      exists: Boolean(status?.exists),
+      path: String(status?.path || ""),
+    });
   };
 
   // 生成唯一ID
@@ -137,7 +143,7 @@ function App() {
       showNotification(
         "切换成功！请重启 Claude Code 终端以生效",
         "success",
-        2000
+        2000,
       );
     } else {
       showNotification("切换失败，请检查配置", "error");
@@ -147,18 +153,22 @@ function App() {
   // 自动导入现有配置为"default"供应商
   const handleAutoImportDefault = async () => {
     try {
-      const result = await window.api.importCurrentConfigAsDefault()
-      
+      const result = await window.api.importCurrentConfigAsDefault();
+
       if (result.success) {
-        await loadProviders()
-        showNotification("已自动导入现有配置为 default 供应商", "success", 3000)
+        await loadProviders();
+        showNotification(
+          "已自动导入现有配置为 default 供应商",
+          "success",
+          3000,
+        );
       }
       // 如果导入失败（比如没有现有配置），静默处理，不显示错误
     } catch (error) {
-      console.error('自动导入默认配置失败:', error)
+      console.error("自动导入默认配置失败:", error);
       // 静默处理，不影响用户体验
     }
-  }
+  };
 
   const handleOpenConfigFolder = async () => {
     await window.api.openConfigFolder();

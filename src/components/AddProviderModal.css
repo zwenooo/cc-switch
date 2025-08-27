@@ -22,7 +22,7 @@
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2);
   position: relative;
   z-index: 1001;
-  display: flex;            /* 纵向布局，便于底栏固定 */
+  display: flex; /* 纵向布局，便于底栏固定 */
   flex-direction: column;
 }
 
@@ -40,7 +40,10 @@
 }
 
 /* 左侧占位以保证标题居中（与右侧关闭按钮宽度相当） */
-.modal-spacer { width: 32px; flex: 0 0 32px; }
+.modal-spacer {
+  width: 32px;
+  flex: 0 0 32px;
+}
 
 .modal-title {
   flex: 1;
@@ -69,16 +72,17 @@
   color: #fff;
 }
 
-.modal-form {            /* 表单外层包裹 body + footer */
+.modal-form {
+  /* 表单外层包裹 body + footer */
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
-  min-height: 0;         /* 允许子元素正确计算高度 */
+  min-height: 0; /* 允许子元素正确计算高度 */
 }
 
 .modal-body {
   padding: 1.25rem 1.5rem 1.5rem;
-  overflow: auto;        /* 仅内容区滚动 */
+  overflow: auto; /* 仅内容区滚动 */
   flex: 1 1 auto;
   min-height: 0;
 }
@@ -175,7 +179,8 @@
   border-color: #3498db;
 }
 
-.modal-footer {          /* 固定在弹窗底部（非滚动区） */
+.modal-footer {
+  /* 固定在弹窗底部（非滚动区） */
   display: flex;
   gap: 1rem;
   justify-content: flex-end;

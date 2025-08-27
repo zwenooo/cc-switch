@@ -1,13 +1,13 @@
-import React from 'react'
-import { Provider } from '../types'
-import './ProviderList.css'
+import React from "react";
+import { Provider } from "../types";
+import "./ProviderList.css";
 
 interface ProviderListProps {
-  providers: Record<string, Provider>
-  currentProviderId: string
-  onSwitch: (id: string) => void
-  onDelete: (id: string) => void
-  onEdit: (id: string) => void
+  providers: Record<string, Provider>;
+  currentProviderId: string;
+  onSwitch: (id: string) => void;
+  onDelete: (id: string) => void;
+  onEdit: (id: string) => void;
 }
 
 const ProviderList: React.FC<ProviderListProps> = ({
@@ -15,28 +15,28 @@ const ProviderList: React.FC<ProviderListProps> = ({
   currentProviderId,
   onSwitch,
   onDelete,
-  onEdit
+  onEdit,
 }) => {
   // 提取API地址
   const getApiUrl = (provider: Provider): string => {
     try {
-      const config = provider.settingsConfig
+      const config = provider.settingsConfig;
       if (config?.env?.ANTHROPIC_BASE_URL) {
-        return config.env.ANTHROPIC_BASE_URL
+        return config.env.ANTHROPIC_BASE_URL;
       }
-      return '未设置'
+      return "未设置";
     } catch {
-      return '配置错误'
+      return "配置错误";
     }
-  }
+  };
 
   const handleUrlClick = async (url: string) => {
     try {
-      await window.api.openExternal(url)
+      await window.api.openExternal(url);
     } catch (error) {
-      console.error('打开链接失败:', error)
+      console.error("打开链接失败:", error);
     }
-  }
+  };
 
   return (
     <div className="provider-list">
@@ -48,25 +48,27 @@ const ProviderList: React.FC<ProviderListProps> = ({
       ) : (
         <div className="provider-items">
           {Object.values(providers).map((provider) => {
-            const isCurrent = provider.id === currentProviderId
-            
+            const isCurrent = provider.id === currentProviderId;
+
             return (
-              <div 
-                key={provider.id} 
-                className={`provider-item ${isCurrent ? 'current' : ''}`}
+              <div
+                key={provider.id}
+                className={`provider-item ${isCurrent ? "current" : ""}`}
               >
                 <div className="provider-info">
                   <div className="provider-name">
                     <span>{provider.name}</span>
-                    {isCurrent && <span className="current-badge">当前使用</span>}
+                    {isCurrent && (
+                      <span className="current-badge">当前使用</span>
+                    )}
                   </div>
                   <div className="provider-url">
                     {provider.websiteUrl ? (
-                      <a 
-                        href="#" 
+                      <a
+                        href="#"
                         onClick={(e) => {
-                          e.preventDefault()
-                          handleUrlClick(provider.websiteUrl!)
+                          e.preventDefault();
+                          handleUrlClick(provider.websiteUrl!);
                         }}
                         className="url-link"
                         title={`访问 ${provider.websiteUrl}`}
@@ -80,23 +82,23 @@ const ProviderList: React.FC<ProviderListProps> = ({
                     )}
                   </div>
                 </div>
-                
+
                 <div className="provider-actions">
-                  <button 
+                  <button
                     className="enable-btn"
                     onClick={() => onSwitch(provider.id)}
                     disabled={isCurrent}
                   >
                     启用
                   </button>
-                  <button 
+                  <button
                     className="edit-btn"
                     onClick={() => onEdit(provider.id)}
                     disabled={isCurrent}
                   >
                     编辑
                   </button>
-                  <button 
+                  <button
                     className="delete-btn"
                     onClick={() => onDelete(provider.id)}
                     disabled={isCurrent}
@@ -105,12 +107,12 @@ const ProviderList: React.FC<ProviderListProps> = ({
                   </button>
                 </div>
               </div>
-            )
+            );
           })}
         </div>
       )}
     </div>
-  )
-}
+  );
+};
 
-export default ProviderList
+export default ProviderList;

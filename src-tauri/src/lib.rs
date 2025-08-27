@@ -1,7 +1,7 @@
+mod commands;
 mod config;
 mod provider;
 mod store;
-mod commands;
 
 use store::AppState;
 use tauri::Manager;
@@ -16,33 +16,32 @@ pub fn run() {
             {
                 // 设置 macOS 标题栏背景色为主界面蓝色
                 if let Some(window) = app.get_webview_window("main") {
-                    use objc2::runtime::AnyObject;
                     use objc2::rc::Retained;
+                    use objc2::runtime::AnyObject;
                     use objc2_app_kit::NSColor;
-                    
+
                     let ns_window_ptr = window.ns_window().unwrap();
-                    let ns_window: Retained<AnyObject> = unsafe { 
-                        Retained::retain(ns_window_ptr as *mut AnyObject).unwrap()
-                    };
-                    
+                    let ns_window: Retained<AnyObject> =
+                        unsafe { Retained::retain(ns_window_ptr as *mut AnyObject).unwrap() };
+
                     // 使用与主界面 banner 相同的蓝色 #3498db
                     // #3498db = RGB(52, 152, 219)
                     let bg_color = unsafe {
                         NSColor::colorWithRed_green_blue_alpha(
-                            52.0/255.0,   // R: 52
-                            152.0/255.0,  // G: 152  
-                            219.0/255.0,  // B: 219
-                            1.0,          // Alpha: 1.0
+                            52.0 / 255.0,  // R: 52
+                            152.0 / 255.0, // G: 152
+                            219.0 / 255.0, // B: 219
+                            1.0,           // Alpha: 1.0
                         )
                     };
-                    
+
                     unsafe {
                         use objc2::msg_send;
                         let _: () = msg_send![&*ns_window, setBackgroundColor: &*bg_color];
                     }
                 }
             }
-            
+
             // 初始化日志
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -51,20 +50,20 @@ pub fn run() {
                         .build(),
                 )?;
             }
-            
+
             // 初始化应用状态（仅创建一次，并在本函数末尾注入 manage）
             let app_state = AppState::new();
-            
+
             // 如果没有供应商且存在 Claude Code 配置，自动导入
             {
                 let manager = app_state.provider_manager.lock().unwrap();
                 if manager.providers.is_empty() {
                     drop(manager); // 释放锁
-                    
+
                     let settings_path = config::get_claude_settings_path();
                     if settings_path.exists() {
                         log::info!("检测到 Claude Code 配置，自动导入为默认供应商");
-                        
+
                         if let Ok(settings_config) = config::import_current_config_as_default() {
                             let mut manager = app_state.provider_manager.lock().unwrap();
                             let provider = provider::Provider::with_id(
@@ -73,7 +72,7 @@ pub fn run() {
                                 settings_config,
                                 None,
                             );
-                            
+
                             if manager.add_provider(provider).is_ok() {
                                 manager.current = "default".to_string();
                                 drop(manager);
@@ -84,7 +83,7 @@ pub fn run() {
                     }
                 }
             }
-            
+
             // 将同一个实例注入到全局状态，避免重复创建导致的不一致
             app.manage(app_state);
             Ok(())

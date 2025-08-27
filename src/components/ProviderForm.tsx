@@ -80,7 +80,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   };
 
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
     const { name, value } = e.target;
 
@@ -117,7 +117,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     // 更新JSON配置
     const updatedConfig = updateCoAuthoredSetting(
       formData.settingsConfig,
-      checked
+      checked,
     );
     setFormData({
       ...formData,
@@ -152,7 +152,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     const configString = setApiKeyInConfig(
       formData.settingsConfig,
       key.trim(),
-      { createIfMissing: selectedPreset !== null }
+      { createIfMissing: selectedPreset !== null },
     );
 
     // 更新表单配置
@@ -174,7 +174,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   useEffect(() => {
     if (initialData) {
       const parsedKey = getApiKeyFromConfig(
-        JSON.stringify(initialData.settingsConfig)
+        JSON.stringify(initialData.settingsConfig),
       );
       if (parsedKey) setApiKey(parsedKey);
     }
@@ -255,7 +255,9 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
               />
             </div>
 
-            <div className={`form-group api-key-group ${!showApiKey ? 'hidden' : ''}`}>
+            <div
+              className={`form-group api-key-group ${!showApiKey ? "hidden" : ""}`}
+            >
               <label htmlFor="apiKey">API Key *</label>
               <input
                 type="text"

@@ -1,5 +1,5 @@
-import React from 'react';
-import './ConfirmDialog.css';
+import React from "react";
+import "./ConfirmDialog.css";
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -15,10 +15,10 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   isOpen,
   title,
   message,
-  confirmText = '确定',
-  cancelText = '取消',
+  confirmText = "确定",
+  cancelText = "取消",
   onConfirm,
-  onCancel
+  onCancel,
 }) => {
   if (!isOpen) return null;
 
@@ -32,15 +32,15 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           <p>{message}</p>
         </div>
         <div className="confirm-actions">
-          <button 
-            className="confirm-btn cancel-btn" 
+          <button
+            className="confirm-btn cancel-btn"
             onClick={onCancel}
             autoFocus
           >
             {cancelText}
           </button>
-          <button 
-            className="confirm-btn confirm-btn-primary" 
+          <button
+            className="confirm-btn confirm-btn-primary"
             onClick={onConfirm}
           >
             {confirmText}

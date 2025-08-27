@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import { Provider } from './types';
+import { Provider } from "./types";
 
 interface ImportResult {
   success: boolean;

@@ -1,20 +1,24 @@
-import React from 'react'
-import { Provider } from '../types'
-import ProviderForm from './ProviderForm'
+import React from "react";
+import { Provider } from "../types";
+import ProviderForm from "./ProviderForm";
 
 interface EditProviderModalProps {
-  provider: Provider
-  onSave: (provider: Provider) => void
-  onClose: () => void
+  provider: Provider;
+  onSave: (provider: Provider) => void;
+  onClose: () => void;
 }
 
-const EditProviderModal: React.FC<EditProviderModalProps> = ({ provider, onSave, onClose }) => {
-  const handleSubmit = (data: Omit<Provider, 'id'>) => {
+const EditProviderModal: React.FC<EditProviderModalProps> = ({
+  provider,
+  onSave,
+  onClose,
+}) => {
+  const handleSubmit = (data: Omit<Provider, "id">) => {
     onSave({
       ...provider,
-      ...data
-    })
-  }
+      ...data,
+    });
+  };
 
   return (
     <ProviderForm
@@ -25,7 +29,7 @@ const EditProviderModal: React.FC<EditProviderModalProps> = ({ provider, onSave,
       onSubmit={handleSubmit}
       onClose={onClose}
     />
-  )
-}
+  );
+};
 
-export default EditProviderModal
+export default EditProviderModal;

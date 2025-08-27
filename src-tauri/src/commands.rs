@@ -2,46 +2,48 @@ use std::collections::HashMap;
 use tauri::State;
 use tauri_plugin_opener::OpenerExt;
 
-use crate::config::{
-    import_current_config_as_default, get_claude_settings_path,
-    ConfigStatus,
-};
+use crate::config::{ConfigStatus, get_claude_settings_path, import_current_config_as_default};
 use crate::provider::Provider;
 use crate::store::AppState;
 
 /// 获取所有供应商
 #[tauri::command]
-pub async fn get_providers(state: State<'_, AppState>) -> Result<HashMap<String, Provider>, String> {
-    let manager = state.provider_manager.lock()
+pub async fn get_providers(
+    state: State<'_, AppState>,
+) -> Result<HashMap<String, Provider>, String> {
+    let manager = state
+        .provider_manager
+        .lock()
         .map_err(|e| format!("获取锁失败: {}", e))?;
-    
+
     Ok(manager.get_all_providers().clone())
 }
 
 /// 获取当前供应商ID
 #[tauri::command]
 pub async fn get_current_provider(state: State<'_, AppState>) -> Result<String, String> {
-    let manager = state.provider_manager.lock()
+    let manager = state
+        .provider_manager
+        .lock()
         .map_err(|e| format!("获取锁失败: {}", e))?;
-    
+
     Ok(manager.current.clone())
 }
 
 /// 添加供应商
 #[tauri::command]
-pub async fn add_provider(
-    state: State<'_, AppState>,
-    provider: Provider,
-) -> Result<bool, String> {
-    let mut manager = state.provider_manager.lock()
+pub async fn add_provider(state: State<'_, AppState>, provider: Provider) -> Result<bool, String> {
+    let mut manager = state
+        .provider_manager
+        .lock()
         .map_err(|e| format!("获取锁失败: {}", e))?;
-    
+
     manager.add_provider(provider)?;
-    
+
     // 保存配置
     drop(manager); // 释放锁
     state.save()?;
-    
+
     Ok(true)
 }
 
@@ -51,59 +53,57 @@ pub async fn update_provider(
     state: State<'_, AppState>,
     provider: Provider,
 ) -> Result<bool, String> {
-    let mut manager = state.provider_manager.lock()
+    let mut manager = state
+        .provider_manager
+        .lock()
         .map_err(|e| format!("获取锁失败: {}", e))?;
-    
+
     manager.update_provider(provider)?;
-    
+
     // 保存配置
     drop(manager); // 释放锁
     state.save()?;
-    
+
     Ok(true)
 }
 
 /// 删除供应商
 #[tauri::command]
-pub async fn delete_provider(
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<bool, String> {
-    let mut manager = state.provider_manager.lock()
+pub async fn delete_provider(state: State<'_, AppState>, id: String) -> Result<bool, String> {
+    let mut manager = state
+        .provider_manager
+        .lock()
         .map_err(|e| format!("获取锁失败: {}", e))?;
-    
+
     manager.delete_provider(&id)?;
-    
+
     // 保存配置
     drop(manager); // 释放锁
     state.save()?;
-    
+
     Ok(true)
 }
 
 /// 切换供应商
 #[tauri::command]
-pub async fn switch_provider(
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<bool, String> {
-    let mut manager = state.provider_manager.lock()
+pub async fn switch_provider(state: State<'_, AppState>, id: String) -> Result<bool, String> {
+    let mut manager = state
+        .provider_manager
+        .lock()
         .map_err(|e| format!("获取锁失败: {}", e))?;
-    
+
     manager.switch_provider(&id)?;
-    
+
     // 保存配置
     drop(manager); // 释放锁
     state.save()?;
-    
+
     Ok(true)
 }
 
 /// 导入当前配置为默认供应商
 #[tauri::command]
-pub async fn import_default_config(
-    state: State<'_, AppState>,
-) -> Result<bool, String> {
+pub async fn import_default_config(state: State<'_, AppState>) -> Result<bool, String> {
     // 若已存在 default 供应商，则直接返回，避免重复导入
     {
         let manager = state
@@ -117,7 +117,7 @@ pub async fn import_default_config(
 
     // 导入配置
     let settings_config = import_current_config_as_default()?;
-    
+
     // 创建默认供应商
     let provider = Provider::with_id(
         "default".to_string(),
@@ -125,22 +125,24 @@ pub async fn import_default_config(
         settings_config,
         None,
     );
-    
+
     // 添加到管理器
-    let mut manager = state.provider_manager.lock()
+    let mut manager = state
+        .provider_manager
+        .lock()
         .map_err(|e| format!("获取锁失败: {}", e))?;
-    
+
     manager.add_provider(provider)?;
-    
+
     // 如果没有当前供应商，设置为 default
     if manager.current.is_empty() {
         manager.current = "default".to_string();
     }
-    
+
     // 保存配置
     drop(manager); // 释放锁
     state.save()?;
-    
+
     Ok(true)
 }
 
@@ -160,18 +162,17 @@ pub async fn get_claude_code_config_path() -> Result<String, String> {
 #[tauri::command]
 pub async fn open_config_folder(app: tauri::AppHandle) -> Result<bool, String> {
     let config_dir = crate::config::get_claude_config_dir();
-    
+
     // 确保目录存在
     if !config_dir.exists() {
-        std::fs::create_dir_all(&config_dir)
-            .map_err(|e| format!("创建目录失败: {}", e))?;
+        std::fs::create_dir_all(&config_dir).map_err(|e| format!("创建目录失败: {}", e))?;
     }
-    
+
     // 使用 opener 插件打开文件夹
     app.opener()
         .open_path(config_dir.to_string_lossy().to_string(), None::<String>)
         .map_err(|e| format!("打开文件夹失败: {}", e))?;
-    
+
     Ok(true)
 }
 
@@ -184,11 +185,11 @@ pub async fn open_external(app: tauri::AppHandle, url: String) -> Result<bool, S
     } else {
         format!("https://{}", url)
     };
-    
+
     // 使用 opener 插件打开链接
     app.opener()
         .open_url(&url, None::<String>)
         .map_err(|e| format!("打开链接失败: {}", e))?;
-    
+
     Ok(true)
 }
