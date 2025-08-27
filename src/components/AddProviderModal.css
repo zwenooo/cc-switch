@@ -140,6 +140,18 @@
   font-weight: 500;
 }
 
+/* API Key 输入框容器 - 预留空间避免抖动 */
+.form-group.api-key-group {
+  min-height: 88px; /* 固定高度：label + input + 间距 */
+  transition: opacity 0.2s ease;
+}
+
+.form-group.api-key-group.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .form-group input,
 .form-group textarea {
   width: 100%;

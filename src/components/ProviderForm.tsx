@@ -255,19 +255,17 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
               />
             </div>
 
-            {showApiKey && (
-              <div className="form-group">
-                <label htmlFor="apiKey">API Key *</label>
-                <input
-                  type="text"
-                  id="apiKey"
-                  value={apiKey}
-                  onChange={(e) => handleApiKeyChange(e.target.value)}
-                  placeholder="只需要填这里，下方配置会自动填充"
-                  autoComplete="off"
-                />
-              </div>
-            )}
+            <div className={`form-group api-key-group ${!showApiKey ? 'hidden' : ''}`}>
+              <label htmlFor="apiKey">API Key *</label>
+              <input
+                type="text"
+                id="apiKey"
+                value={apiKey}
+                onChange={(e) => handleApiKeyChange(e.target.value)}
+                placeholder="只需要填这里，下方配置会自动填充"
+                autoComplete="off"
+              />
+            </div>
 
             <div className="form-group">
               <label htmlFor="websiteUrl">官网地址</label>
