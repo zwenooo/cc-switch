@@ -17,8 +17,13 @@ pub fn get_claude_settings_path() -> PathBuf {
     if settings.exists() {
         return settings;
     }
-    // 兼容旧版命名：claude.json
-    dir.join("claude.json")
+    // 兼容旧版命名：若存在旧文件则继续使用
+    let legacy = dir.join("claude.json");
+    if legacy.exists() {
+        return legacy;
+    }
+    // 默认新建：回落到标准文件名 settings.json（不再生成 claude.json）
+    settings
 }
 
 /// 获取应用配置目录路径 (~/.cc-switch)
