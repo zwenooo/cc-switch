@@ -14,6 +14,7 @@
 - 一键切换不同供应商
 - Qwen coder、kimi k2、智谱 GLM、DeepSeek v3.1、packycode 等预设供应商只需要填写 key 即可一键配置
 - 支持添加自定义供应商
+- 随时切换官方登录
 - 简洁美观的图形界面
 - 信息存储在本地 ~/.cc-switch/config.json，无隐私风险
 - 超小体积 - 仅 ~5MB 安装包
@@ -38,23 +39,17 @@
 
 ### Windows 用户
 
-从 [Releases](../../releases) 页面下载最新版本的 `CC-Switch_3.0.0_x64.msi` 或 `.exe` 安装包。
+从 [Releases](../../releases) 页面下载最新版本的 `CC-Switch-Setup.msi` 安装包或者 `CC-Switch-Windows-Portable.zip` 绿色版。
 
 ### macOS 用户
 
-从 [Releases](../../releases) 页面下载最新版本：
+从 [Releases](../../releases) 页面下载 `CC-Switch-macOS.zip` 解压使用。
 
-- **推荐**: `CC-Switch.zip` - 解压即用，无需安装
-- `CC-Switch_3.0.0_aarch64.dmg` (Apple Silicon) - 需要安装
-
-> **注意**：由于应用未签名，macOS 可能提示"已损坏"。解决方法：
-> 1. **推荐**：下载 zip 版本，解压后直接使用
-> 2. 或在终端运行：`xattr -cr "/Applications/CC Switch.app"`
-> 3. 或在"系统设置 > 隐私与安全"中选择"仍要打开"
+> **注意**：由于作者没有苹果开发者账号，首次打开可能出现"未知开发者"警告，请先关闭，然后前往"系统设置" → "隐私与安全性" → 点击"仍要打开"，之后便可以正常打开
 
 ### Linux 用户
 
-从 [Releases](../../releases) 页面下载最新版本的 `.AppImage` 或 `.deb` 包。
+从 [Releases](../../releases) 页面下载最新版本的 `.deb` 包。
 
 ## 使用说明
 
@@ -62,6 +57,7 @@
 2. 选择要使用的供应商，点击单选按钮切换
 3. 配置会自动保存到 Claude Code 的配置文件中
 4. 重启或者新打开终端以生效
+5. 如果需要切回 Claude 官方登录，可以添加预设供应商里的“Claude 官方登录”并切换，重启终端后即可进行正常的 /login 登录
 
 ## 开发
 
@@ -142,6 +138,12 @@ cargo test
 ## 更新日志
 
 查看 [CHANGELOG.md](CHANGELOG.md) 了解版本更新详情。
+
+## Electron 旧版
+
+[Releases](../../releases) 里保留 v2.0.3 Electron 旧版
+
+如果需要旧版 Electron 代码，可以拉取 electron-legacy 分支
 
 ## 贡献
 
