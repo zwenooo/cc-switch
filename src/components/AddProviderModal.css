@@ -133,6 +133,18 @@
   color: white;
 }
 
+/* 官方按钮橙色主题（Anthropic 风格） */
+.preset-btn.official {
+  border: 1px solid #d97706;
+  color: #d97706;
+}
+
+.preset-btn.official:hover,
+.preset-btn.official.selected {
+  background: #d97706;
+  color: white;
+}
+
 .form-group {
   margin-bottom: 1.25rem;
 }

@@ -170,6 +170,10 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   const showApiKey =
     selectedPreset !== null || hasApiKeyField(formData.settingsConfig);
 
+  // 判断当前选中的预设是否是官方
+  const isOfficialPreset = selectedPreset !== null && 
+    providerPresets[selectedPreset]?.isOfficial === true;
+
   // 初始时从配置中同步 API Key（编辑模式）
   useEffect(() => {
     if (initialData) {
@@ -225,18 +229,20 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
               <div className="presets">
                 <label>一键导入（只需要填写 key）</label>
                 <div className="preset-buttons">
-                  {providerPresets.map((preset, index) => (
-                    <button
-                      key={index}
-                      type="button"
-                      className={`preset-btn ${
-                        selectedPreset === index ? "selected" : ""
-                      }`}
-                      onClick={() => applyPreset(preset, index)}
-                    >
-                      {preset.name}
-                    </button>
-                  ))}
+                  {providerPresets.map((preset, index) => {
+                    return (
+                      <button
+                        key={index}
+                        type="button"
+                        className={`preset-btn ${
+                          selectedPreset === index ? "selected" : ""
+                        } ${preset.isOfficial ? "official" : ""}`}
+                        onClick={() => applyPreset(preset, index)}
+                      >
+                        {preset.name}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -264,8 +270,17 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                 id="apiKey"
                 value={apiKey}
                 onChange={(e) => handleApiKeyChange(e.target.value)}
-                placeholder="只需要填这里，下方配置会自动填充"
+                placeholder={isOfficialPreset 
+                  ? "官方登录无需填写 API Key，直接保存即可"
+                  : "只需要填这里，下方配置会自动填充"
+                }
+                disabled={isOfficialPreset}
                 autoComplete="off"
+                style={isOfficialPreset ? { 
+                  backgroundColor: '#f5f5f5', 
+                  cursor: 'not-allowed',
+                  color: '#999'
+                } : {}}
               />
             </div>
 
