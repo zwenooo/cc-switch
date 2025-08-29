@@ -12,7 +12,7 @@
 
 - **极速启动** - 基于 Tauri 2.0，原生性能，秒开应用
 - 一键切换不同供应商
-- 智谱 GLM、Qwen coder、DeepSeek v3.1、packycode 等预设供应商只需要填写 key 即可一键配置
+- Qwen coder、kimi k2、智谱 GLM、DeepSeek v3.1、packycode 等预设供应商只需要填写 key 即可一键配置
 - 支持添加自定义供应商
 - 简洁美观的图形界面
 - 信息存储在本地 ~/.cc-switch/config.json，无隐私风险

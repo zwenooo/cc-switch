@@ -13,8 +13,7 @@ export const providerPresets: ProviderPreset[] = [
     name: "Claude官方登录",
     websiteUrl: "https://www.anthropic.com/claude-code",
     settingsConfig: {
-      env: {
-      },
+      env: {},
     },
     isOfficial: true, // 明确标识为官方预设
   },
