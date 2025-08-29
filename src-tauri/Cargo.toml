@@ -1,0 +1,31 @@
+[package]
+name = "cc-switch"
+version = "3.0.0"
+description = "Claude Code MCP 服务器配置管理工具"
+authors = ["Jason Young"]
+license = "MIT"
+repository = "https://github.com/jasonyoung/cc-switch"
+edition = "2024"
+rust-version = "1.85.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "cc_switch_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.4.0", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.8.2", features = [] }
+tauri-plugin-log = "2"
+tauri-plugin-opener = "2"
+dirs = "5.0"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.5"
+objc2-app-kit = { version = "0.2", features = ["NSColor"] }

@@ -8,3 +8,4 @@ release/
 *.tsbuildinfo
 .npmrc
 CLAUDE.md
+AGENTS.md
