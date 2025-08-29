@@ -42,7 +42,15 @@
 
 ### macOS 用户
 
-从 [Releases](../../releases) 页面下载最新版本的 `CC-Switch_3.0.0_x64.dmg` (Intel) 或 `CC-Switch_3.0.0_aarch64.dmg` (Apple Silicon)。
+从 [Releases](../../releases) 页面下载最新版本：
+
+- **推荐**: `CC-Switch.zip` - 解压即用，无需安装
+- `CC-Switch_3.0.0_aarch64.dmg` (Apple Silicon) - 需要安装
+
+> **注意**：由于应用未签名，macOS 可能提示"已损坏"。解决方法：
+> 1. **推荐**：下载 zip 版本，解压后直接使用
+> 2. 或在终端运行：`xattr -cr "/Applications/CC Switch.app"`
+> 3. 或在"系统设置 > 隐私与安全"中选择"仍要打开"
 
 ### Linux 用户
 
