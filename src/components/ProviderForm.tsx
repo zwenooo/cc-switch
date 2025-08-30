@@ -10,6 +10,7 @@ import {
   setApiKeyInConfig,
 } from "../utils/providerConfigUtils";
 import { providerPresets } from "../config/providerPresets";
+import { codexProviderPresets } from "../config/codexProviderPresets";
 import "./AddProviderModal.css";
 
 interface ProviderFormProps {
@@ -45,6 +46,10 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   // Codex 特有的状态
   const [codexAuth, setCodexAuth] = useState("");
   const [codexConfig, setCodexConfig] = useState("");
+  const [codexApiKey, setCodexApiKey] = useState("");
+  const [selectedCodexPreset, setSelectedCodexPreset] = useState<number | null>(
+    null,
+  );
 
   // 初始化 Codex 配置
   useEffect(() => {
@@ -53,6 +58,14 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       if (typeof config === "object" && config !== null) {
         setCodexAuth(JSON.stringify(config.auth || {}, null, 2));
         setCodexConfig(config.config || "");
+        try {
+          const auth = config.auth || {};
+          if (auth && typeof auth.api_key === "string") {
+            setCodexApiKey(auth.api_key);
+          }
+        } catch {
+          // ignore
+        }
       }
     }
   }, [isCodex, initialData]);
@@ -186,6 +199,33 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     setDisableCoAuthored(hasCoAuthoredDisabled);
   };
 
+  // Codex: 应用预设
+  const applyCodexPreset = (
+    preset: (typeof codexProviderPresets)[0],
+    index: number,
+  ) => {
+    const authString = JSON.stringify(preset.auth || {}, null, 2);
+    setCodexAuth(authString);
+    setCodexConfig(preset.config || "");
+
+    setFormData({
+      name: preset.name,
+      websiteUrl: preset.websiteUrl,
+      settingsConfig: formData.settingsConfig,
+    });
+
+    setSelectedCodexPreset(index);
+
+    // 同步 API Key 输入框
+    try {
+      const auth = JSON.parse(authString);
+      const key = typeof auth.api_key === "string" ? auth.api_key : "";
+      setCodexApiKey(key);
+    } catch {
+      setCodexApiKey("");
+    }
+  };
+
   // 处理 API Key 输入并自动更新配置
   const handleApiKeyChange = (key: string) => {
     setApiKey(key);
@@ -207,6 +247,18 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     setDisableCoAuthored(hasCoAuthoredDisabled);
   };
 
+  // Codex: 处理 API Key 输入并写回 auth.json
+  const handleCodexApiKeyChange = (key: string) => {
+    setCodexApiKey(key);
+    try {
+      const auth = JSON.parse(codexAuth || "{}");
+      auth.api_key = key.trim();
+      setCodexAuth(JSON.stringify(auth, null, 2));
+    } catch {
+      // ignore
+    }
+  };
+
   // 根据当前配置决定是否展示 API Key 输入框
   const showApiKey =
     selectedPreset !== null || hasApiKeyField(formData.settingsConfig);
@@ -215,6 +267,21 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   const isOfficialPreset =
     selectedPreset !== null &&
     providerPresets[selectedPreset]?.isOfficial === true;
+
+  // Codex: 控制显示 API Key 与官方标记
+  const getCodexAuthApiKey = (authString: string): string => {
+    try {
+      const auth = JSON.parse(authString || "{}");
+      return typeof auth.api_key === "string" ? auth.api_key : "";
+    } catch {
+      return "";
+    }
+  };
+  const showCodexApiKey =
+    selectedCodexPreset !== null || getCodexAuthApiKey(codexAuth) !== "";
+  const isCodexOfficialPreset =
+    selectedCodexPreset !== null &&
+    codexProviderPresets[selectedCodexPreset]?.isOfficial === true;
 
   // 初始时从配置中同步 API Key（编辑模式）
   useEffect(() => {
@@ -289,6 +356,26 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
               </div>
             )}
 
+            {showPresets && isCodex && (
+              <div className="presets">
+                <label>一键导入（只需要填写 key）</label>
+                <div className="preset-buttons">
+                  {codexProviderPresets.map((preset, index) => (
+                    <button
+                      key={index}
+                      type="button"
+                      className={`preset-btn ${
+                        selectedCodexPreset === index ? "selected" : ""
+                      } ${preset.isOfficial ? "official" : ""}`}
+                      onClick={() => applyCodexPreset(preset, index)}
+                    >
+                      {preset.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="form-group">
               <label htmlFor="name">供应商名称 *</label>
               <input
@@ -333,6 +420,36 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
               </div>
             )}
 
+            {isCodex && (
+              <div
+                className={`form-group api-key-group ${!showCodexApiKey ? "hidden" : ""}`}
+              >
+                <label htmlFor="codexApiKey">API Key *</label>
+                <input
+                  type="text"
+                  id="codexApiKey"
+                  value={codexApiKey}
+                  onChange={(e) => handleCodexApiKeyChange(e.target.value)}
+                  placeholder={
+                    isCodexOfficialPreset
+                      ? "官方无需填写 API Key，直接保存即可"
+                      : "只需要填这里，上方 auth.json 会自动填充"
+                  }
+                  disabled={isCodexOfficialPreset}
+                  autoComplete="off"
+                  style={
+                    isCodexOfficialPreset
+                      ? {
+                          backgroundColor: "#f5f5f5",
+                          cursor: "not-allowed",
+                          color: "#999",
+                        }
+                      : {}
+                  }
+                />
+              </div>
+            )}
+
             <div className="form-group">
               <label htmlFor="websiteUrl">官网地址</label>
               <input
@@ -355,7 +472,17 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                   <textarea
                     id="codexAuth"
                     value={codexAuth}
-                    onChange={(e) => setCodexAuth(e.target.value)}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setCodexAuth(value);
+                      try {
+                        const auth = JSON.parse(value || "{}");
+                        const key = typeof auth.api_key === "string" ? auth.api_key : "";
+                        setCodexApiKey(key);
+                      } catch {
+                        // ignore
+                      }
+                    }}
                     placeholder={`{
   "api_key": "your-codex-api-key"
 }`}
