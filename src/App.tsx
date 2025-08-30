@@ -180,21 +180,44 @@ function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <div className="app-tabs">
-          <button
-            className={`app-tab ${activeApp === "claude" ? "active" : ""}`}
-            onClick={() => setActiveApp("claude")}
-          >
-            Claude Code
-          </button>
-          <button
-            className={`app-tab ${activeApp === "codex" ? "active" : ""}`}
-            onClick={() => setActiveApp("codex")}
-          >
-            Codex
-          </button>
-        </div>
         <h1>{activeApp === "claude" ? "Claude Code" : "Codex"} 供应商切换器</h1>
+        <div className="app-tabs">
+          <div
+            className="segmented"
+            role="tablist"
+            aria-label="选择应用"
+          >
+            <span
+              className="segmented-thumb"
+              style={{
+                transform:
+                  activeApp === "claude" ? "translateX(0%)" : "translateX(100%)",
+              }}
+            />
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeApp === "claude"}
+              className={`segmented-item ${
+                activeApp === "claude" ? "active" : ""
+              }`}
+              onClick={() => setActiveApp("claude")}
+            >
+              Claude Code
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeApp === "codex"}
+              className={`segmented-item ${
+                activeApp === "codex" ? "active" : ""
+              }`}
+              onClick={() => setActiveApp("codex")}
+            >
+              Codex
+            </button>
+          </div>
+        </div>
         <div className="header-actions">
           <button className="add-btn" onClick={() => setIsAddModalOpen(true)}>
             添加供应商

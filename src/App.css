@@ -5,67 +5,90 @@
 }
 
 .app-header {
-  background: #3498db;
+  background: linear-gradient(180deg, #3498db 0%, #2d89c7 100%);
   color: white;
-  padding: 0.75rem 2rem;
-  display: flex;
-  justify-content: space-between;
+  padding: 0.35rem 2rem 0.45rem;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  grid-template-areas:
+    "title actions"
+    "tabs actions";
   align-items: center;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  row-gap: 0.45rem; /* 间隔增大一点，标题与开关分离 */
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
   user-select: none;
-  min-height: 3rem;
-  position: relative;
 }
 
 .app-tabs {
-  position: absolute;
-  left: 2rem;
-  top: 0;
-  display: flex;
-  height: 100%;
+  grid-area: tabs;
 }
 
-.app-tab {
-  background: transparent;
-  color: rgba(255, 255, 255, 0.7);
-  border: none;
-  padding: 0 1.5rem;
-  cursor: pointer;
-  font-size: 0.95rem;
-  font-weight: 500;
-  transition: all 0.2s;
+/* Segmented control */
+.segmented {
+  --seg-bg: rgba(255, 255, 255, 0.16);
+  --seg-thumb: #ffffff;
+  --seg-color: rgba(255, 255, 255, 0.85);
+  --seg-active: #2d89c7;
   position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: 280px;
+  background: var(--seg-bg);
+  border-radius: 999px;
+  padding: 4px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+  backdrop-filter: saturate(140%) blur(2px);
 }
 
-.app-tab:hover {
-  color: white;
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.app-tab.active {
-  color: white;
-  background: rgba(255, 255, 255, 0.15);
-}
-
-.app-tab.active::after {
-  content: "";
+.segmented-thumb {
   position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: white;
+  top: 4px;
+  left: 4px;
+  width: calc(50% - 4px);
+  height: calc(100% - 8px);
+  background: var(--seg-thumb);
+  border-radius: 999px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+  transition: transform 220ms ease, width 220ms ease;
+  will-change: transform;
+}
+
+.segmented-item {
+  position: relative;
+  z-index: 1;
+  background: transparent;
+  border: none;
+  border-radius: 999px;
+  padding: 6px 16px; /* 更紧凑的高度 */
+  color: var(--seg-color);
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  transition: color 200ms ease;
+}
+
+.segmented-item.active {
+  color: var(--seg-active);
+}
+
+.segmented-item:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.8);
+  outline-offset: 2px;
 }
 
 .app-header h1 {
   font-size: 1.5rem;
   font-weight: 500;
-  margin: 0 auto;
+  margin: 0;
+  grid-area: title;
 }
 
 .header-actions {
   display: flex;
   gap: 1rem;
+  grid-area: actions;
 }
 
 .refresh-btn,
