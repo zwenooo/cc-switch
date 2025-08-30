@@ -216,14 +216,8 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
 
     setSelectedCodexPreset(index);
 
-    // 同步 API Key 输入框
-    try {
-      const auth = JSON.parse(authString);
-      const key = typeof auth.api_key === "string" ? auth.api_key : "";
-      setCodexApiKey(key);
-    } catch {
-      setCodexApiKey("");
-    }
+    // 清空 API Key，让用户重新输入
+    setCodexApiKey("");
   };
 
   // 处理 API Key 输入并自动更新配置
