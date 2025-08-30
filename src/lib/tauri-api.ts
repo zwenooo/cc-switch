@@ -1,6 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Provider } from "../types";
 
+// 应用类型
+export type AppType = "claude" | "codex";
+
 // 定义配置状态类型
 interface ConfigStatus {
   exists: boolean;
@@ -17,9 +20,9 @@ interface ImportResult {
 // Tauri API 封装，提供统一的全局 API 接口
 export const tauriAPI = {
   // 获取所有供应商
-  getProviders: async (): Promise<Record<string, Provider>> => {
+  getProviders: async (app?: AppType): Promise<Record<string, Provider>> => {
     try {
-      return await invoke("get_providers");
+      return await invoke("get_providers", { app });
     } catch (error) {
       console.error("获取供应商列表失败:", error);
       return {};
@@ -27,9 +30,9 @@ export const tauriAPI = {
   },
 
   // 获取当前供应商ID
-  getCurrentProvider: async (): Promise<string> => {
+  getCurrentProvider: async (app?: AppType): Promise<string> => {
     try {
-      return await invoke("get_current_provider");
+      return await invoke("get_current_provider", { app });
     } catch (error) {
       console.error("获取当前供应商失败:", error);
       return "";
@@ -37,9 +40,9 @@ export const tauriAPI = {
   },
 
   // 添加供应商
-  addProvider: async (provider: Provider): Promise<boolean> => {
+  addProvider: async (provider: Provider, app?: AppType): Promise<boolean> => {
     try {
-      return await invoke("add_provider", { provider });
+      return await invoke("add_provider", { provider, app });
     } catch (error) {
       console.error("添加供应商失败:", error);
       throw error;
@@ -47,9 +50,12 @@ export const tauriAPI = {
   },
 
   // 更新供应商
-  updateProvider: async (provider: Provider): Promise<boolean> => {
+  updateProvider: async (
+    provider: Provider,
+    app?: AppType,
+  ): Promise<boolean> => {
     try {
-      return await invoke("update_provider", { provider });
+      return await invoke("update_provider", { provider, app });
     } catch (error) {
       console.error("更新供应商失败:", error);
       throw error;
@@ -57,9 +63,9 @@ export const tauriAPI = {
   },
 
   // 删除供应商
-  deleteProvider: async (id: string): Promise<boolean> => {
+  deleteProvider: async (id: string, app?: AppType): Promise<boolean> => {
     try {
-      return await invoke("delete_provider", { id });
+      return await invoke("delete_provider", { id, app });
     } catch (error) {
       console.error("删除供应商失败:", error);
       throw error;
@@ -67,9 +73,12 @@ export const tauriAPI = {
   },
 
   // 切换供应商
-  switchProvider: async (providerId: string): Promise<boolean> => {
+  switchProvider: async (
+    providerId: string,
+    app?: AppType,
+  ): Promise<boolean> => {
     try {
-      return await invoke("switch_provider", { id: providerId });
+      return await invoke("switch_provider", { id: providerId, app });
     } catch (error) {
       console.error("切换供应商失败:", error);
       return false;
@@ -77,9 +86,11 @@ export const tauriAPI = {
   },
 
   // 导入当前配置为默认供应商
-  importCurrentConfigAsDefault: async (): Promise<ImportResult> => {
+  importCurrentConfigAsDefault: async (
+    app?: AppType,
+  ): Promise<ImportResult> => {
     try {
-      const success = await invoke<boolean>("import_default_config");
+      const success = await invoke<boolean>("import_default_config", { app });
       return {
         success,
         message: success ? "成功导入默认配置" : "导入失败",
@@ -117,10 +128,24 @@ export const tauriAPI = {
     }
   },
 
-  // 打开配置文件夹
-  openConfigFolder: async (): Promise<void> => {
+  // 获取应用配置状态（通用）
+  getConfigStatus: async (app?: AppType): Promise<ConfigStatus> => {
     try {
-      await invoke("open_config_folder");
+      return await invoke("get_config_status", { appType: app });
+    } catch (error) {
+      console.error("获取配置状态失败:", error);
+      return {
+        exists: false,
+        path: "",
+        error: String(error),
+      };
+    }
+  },
+
+  // 打开配置文件夹
+  openConfigFolder: async (app?: AppType): Promise<void> => {
+    try {
+      await invoke("open_config_folder", { appType: app });
     } catch (error) {
       console.error("打开配置文件夹失败:", error);
     }

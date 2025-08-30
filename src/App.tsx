@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Provider } from "./types";
+import { AppType } from "./lib/tauri-api";
 import ProviderList from "./components/ProviderList";
 import AddProviderModal from "./components/AddProviderModal";
 import EditProviderModal from "./components/EditProviderModal";
@@ -7,6 +8,7 @@ import { ConfirmDialog } from "./components/ConfirmDialog";
 import "./App.css";
 
 function App() {
+  const [activeApp, setActiveApp] = useState<AppType>("claude");
   const [providers, setProviders] = useState<Record<string, Provider>>({});
   const [currentProviderId, setCurrentProviderId] = useState<string>("");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -60,7 +62,7 @@ function App() {
   useEffect(() => {
     loadProviders();
     loadConfigStatus();
-  }, []);
+  }, [activeApp]); // 当切换应用时重新加载
 
   // 清理定时器
   useEffect(() => {
@@ -72,8 +74,8 @@ function App() {
   }, []);
 
   const loadProviders = async () => {
-    const loadedProviders = await window.api.getProviders();
-    const currentId = await window.api.getCurrentProvider();
+    const loadedProviders = await window.api.getProviders(activeApp);
+    const currentId = await window.api.getCurrentProvider(activeApp);
     setProviders(loadedProviders);
     setCurrentProviderId(currentId);
 
@@ -84,7 +86,7 @@ function App() {
   };
 
   const loadConfigStatus = async () => {
-    const status = await window.api.getClaudeConfigStatus();
+    const status = await window.api.getConfigStatus(activeApp);
     setConfigStatus({
       exists: Boolean(status?.exists),
       path: String(status?.path || ""),
@@ -101,14 +103,14 @@ function App() {
       ...provider,
       id: generateId(),
     };
-    await window.api.addProvider(newProvider);
+    await window.api.addProvider(newProvider, activeApp);
     await loadProviders();
     setIsAddModalOpen(false);
   };
 
   const handleEditProvider = async (provider: Provider) => {
     try {
-      await window.api.updateProvider(provider);
+      await window.api.updateProvider(provider, activeApp);
       await loadProviders();
       setEditingProviderId(null);
       // 显示编辑成功提示
@@ -127,7 +129,7 @@ function App() {
       title: "删除供应商",
       message: `确定要删除供应商 "${provider?.name}" 吗？此操作无法撤销。`,
       onConfirm: async () => {
-        await window.api.deleteProvider(id);
+        await window.api.deleteProvider(id, activeApp);
         await loadProviders();
         setConfirmDialog(null);
         showNotification("供应商删除成功", "success");
@@ -136,12 +138,13 @@ function App() {
   };
 
   const handleSwitchProvider = async (id: string) => {
-    const success = await window.api.switchProvider(id);
+    const success = await window.api.switchProvider(id, activeApp);
     if (success) {
       setCurrentProviderId(id);
       // 显示重启提示
+      const appName = activeApp === "claude" ? "Claude Code" : "Codex";
       showNotification(
-        "切换成功！请重启 Claude Code 终端以生效",
+        `切换成功！请重启 ${appName} 终端以生效`,
         "success",
         2000,
       );
@@ -153,7 +156,7 @@ function App() {
   // 自动导入现有配置为"default"供应商
   const handleAutoImportDefault = async () => {
     try {
-      const result = await window.api.importCurrentConfigAsDefault();
+      const result = await window.api.importCurrentConfigAsDefault(activeApp);
 
       if (result.success) {
         await loadProviders();
@@ -171,13 +174,27 @@ function App() {
   };
 
   const handleOpenConfigFolder = async () => {
-    await window.api.openConfigFolder();
+    await window.api.openConfigFolder(activeApp);
   };
 
   return (
     <div className="app">
       <header className="app-header">
-        <h1>Claude Code 供应商切换器</h1>
+        <div className="app-tabs">
+          <button
+            className={`app-tab ${activeApp === "claude" ? "active" : ""}`}
+            onClick={() => setActiveApp("claude")}
+          >
+            Claude Code
+          </button>
+          <button
+            className={`app-tab ${activeApp === "codex" ? "active" : ""}`}
+            onClick={() => setActiveApp("codex")}
+          >
+            Codex
+          </button>
+        </div>
+        <h1>{activeApp === "claude" ? "Claude Code" : "Codex"} 供应商切换器</h1>
         <div className="header-actions">
           <button className="add-btn" onClick={() => setIsAddModalOpen(true)}>
             添加供应商
@@ -228,6 +245,7 @@ function App() {
 
       {isAddModalOpen && (
         <AddProviderModal
+          appType={activeApp}
           onAdd={handleAddProvider}
           onClose={() => setIsAddModalOpen(false)}
         />
@@ -235,6 +253,7 @@ function App() {
 
       {editingProviderId && providers[editingProviderId] && (
         <EditProviderModal
+          appType={activeApp}
           provider={providers[editingProviderId]}
           onSave={handleEditProvider}
           onClose={() => setEditingProviderId(null)}
