@@ -5,6 +5,7 @@ import ProviderList from "./components/ProviderList";
 import AddProviderModal from "./components/AddProviderModal";
 import EditProviderModal from "./components/EditProviderModal";
 import { ConfirmDialog } from "./components/ConfirmDialog";
+import { AppSwitcher } from "./components/AppSwitcher";
 import "./App.css";
 
 function App() {
@@ -182,39 +183,10 @@ function App() {
       <header className="app-header">
         <h1>{activeApp === "claude" ? "Claude Code" : "Codex"} 供应商切换器</h1>
         <div className="app-tabs">
-          <div className="segmented" role="tablist" aria-label="选择应用">
-            <span
-              className="segmented-thumb"
-              style={{
-                transform:
-                  activeApp === "claude"
-                    ? "translateX(0%)"
-                    : "translateX(100%)",
-              }}
-            />
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeApp === "claude"}
-              className={`segmented-item ${
-                activeApp === "claude" ? "active" : ""
-              }`}
-              onClick={() => setActiveApp("claude")}
-            >
-              Claude Code
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeApp === "codex"}
-              className={`segmented-item ${
-                activeApp === "codex" ? "active" : ""
-              }`}
-              onClick={() => setActiveApp("codex")}
-            >
-              Codex
-            </button>
-          </div>
+          <AppSwitcher
+            activeApp={activeApp}
+            onSwitch={setActiveApp}
+          />
         </div>
         <div className="header-actions">
           <button className="add-btn" onClick={() => setIsAddModalOpen(true)}>
