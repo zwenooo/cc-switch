@@ -4,7 +4,7 @@
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/jasonyoung/cc-switch/releases)
 [![Built with Tauri](https://img.shields.io/badge/built%20with-Tauri%202.0-orange.svg)](https://tauri.app/)
 
-一个用于管理和切换 Claude Code 不同供应商配置的桌面应用。
+一个用于管理和切换 Claude Code 与 Codex 不同供应商配置的桌面应用。
 
 > **v3.0.0 重大更新**：从 Electron 完全迁移到 Tauri 2.0，应用体积减少 85%（从 ~80MB 降至 ~12MB），启动速度提升 10 倍！
 
@@ -55,9 +55,18 @@
 
 1. 点击"添加供应商"添加你的 API 配置
 2. 选择要使用的供应商，点击单选按钮切换
-3. 配置会自动保存到 Claude Code 的配置文件中
+3. 配置会自动保存到对应应用的配置文件中
 4. 重启或者新打开终端以生效
 5. 如果需要切回 Claude 官方登录，可以添加预设供应商里的“Claude 官方登录”并切换，重启终端后即可进行正常的 /login 登录
+
+### Codex 说明
+
+- 配置目录：`~/.codex/`
+  - 主配置文件：`auth.json`（必需）、`config.toml`（可为空）
+  - 供应商副本：`auth-<name>.json`、`config-<name>.toml`
+- API Key 字段：`auth.json` 中使用 `OPENAI_API_KEY`
+- 切换策略：将选中供应商的副本覆盖到主配置（`auth.json`、`config.toml`）。若供应商没有 `config-*.toml`，会创建空的 `config.toml`。
+- 导入默认：若 `~/.codex/auth.json` 存在，会将当前主配置导入为 `default` 供应商；`config.toml` 不存在时按空处理。
 
 ## 开发
 
