@@ -103,6 +103,23 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
 
       try {
         const authJson = JSON.parse(codexAuth);
+
+        // 非官方预设强制要求 OPENAI_API_KEY
+        if (selectedCodexPreset !== null) {
+          const preset = codexProviderPresets[selectedCodexPreset];
+          const isOfficial = Boolean(preset?.isOfficial);
+          if (!isOfficial) {
+            const key =
+              typeof authJson.OPENAI_API_KEY === "string"
+                ? authJson.OPENAI_API_KEY.trim()
+                : "";
+            if (!key) {
+              setError("请填写 OPENAI_API_KEY");
+              return;
+            }
+          }
+        }
+
         settingsConfig = {
           auth: authJson,
           config: codexConfig ?? "",
@@ -430,6 +447,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                       : "只需要填这里，下方 auth.json 会自动填充"
                   }
                   disabled={isCodexOfficialPreset}
+                  required={selectedCodexPreset !== null && !isCodexOfficialPreset}
                   autoComplete="off"
                   style={
                     isCodexOfficialPreset
