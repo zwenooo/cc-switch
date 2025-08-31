@@ -60,8 +60,8 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
         setCodexConfig(config.config || "");
         try {
           const auth = config.auth || {};
-          if (auth && typeof auth.api_key === "string") {
-            setCodexApiKey(auth.api_key);
+          if (auth && typeof auth.OPENAI_API_KEY === "string") {
+            setCodexApiKey(auth.OPENAI_API_KEY);
           }
         } catch {
           // ignore
@@ -95,9 +95,9 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     let settingsConfig: Record<string, any>;
 
     if (isCodex) {
-      // Codex: 验证两个文件
-      if (!codexAuth.trim() || !codexConfig.trim()) {
-        setError("请填写 auth.json 和 config.toml 配置");
+      // Codex: 仅要求 auth.json 必填；config.toml 可为空
+      if (!codexAuth.trim()) {
+        setError("请填写 auth.json 配置");
         return;
       }
 
@@ -105,7 +105,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
         const authJson = JSON.parse(codexAuth);
         settingsConfig = {
           auth: authJson,
-          config: codexConfig,
+          config: codexConfig ?? "",
         };
       } catch (err) {
         setError("auth.json 格式错误，请检查JSON语法");
@@ -246,7 +246,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     setCodexApiKey(key);
     try {
       const auth = JSON.parse(codexAuth || "{}");
-      auth.api_key = key.trim();
+      auth.OPENAI_API_KEY = key.trim();
       setCodexAuth(JSON.stringify(auth, null, 2));
     } catch {
       // ignore
@@ -266,7 +266,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   const getCodexAuthApiKey = (authString: string): string => {
     try {
       const auth = JSON.parse(authString || "{}");
-      return typeof auth.api_key === "string" ? auth.api_key : "";
+      return typeof auth.OPENAI_API_KEY === "string" ? auth.OPENAI_API_KEY : "";
     } catch {
       return "";
     }
@@ -472,7 +472,9 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                       try {
                         const auth = JSON.parse(value || "{}");
                         const key =
-                          typeof auth.api_key === "string" ? auth.api_key : "";
+                          typeof auth.OPENAI_API_KEY === "string"
+                            ? auth.OPENAI_API_KEY
+                            : "";
                         setCodexApiKey(key);
                       } catch {
                         // ignore
@@ -489,7 +491,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="codexConfig">config.toml (TOML) *</label>
+                  <label htmlFor="codexConfig">config.toml (TOML)</label>
                   <textarea
                     id="codexConfig"
                     value={codexConfig}
@@ -497,10 +499,9 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                     placeholder={``}
                     rows={8}
                     style={{ fontFamily: "monospace", fontSize: "14px" }}
-                    required
                   />
                   <small className="field-hint">
-                    Codex config.toml 配置内容
+                    Codex config.toml 配置内容（可留空）
                   </small>
                 </div>
               </>

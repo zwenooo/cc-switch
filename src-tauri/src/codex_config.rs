@@ -104,7 +104,7 @@ pub fn restore_codex_provider_config(provider_id: &str, provider_name: &str) -> 
         fs::create_dir_all(parent).map_err(|e| format!("创建 Codex 目录失败: {}", e))?;
     }
 
-    // 复制 auth.json
+    // 复制 auth.json（必需）
     if provider_auth_path.exists() {
         copy_file(&provider_auth_path, &auth_path)?;
         log::info!("已恢复 Codex auth.json");
@@ -115,15 +115,14 @@ pub fn restore_codex_provider_config(provider_id: &str, provider_name: &str) -> 
         ));
     }
 
-    // 复制 config.toml
+    // 复制 config.toml（可选，允许为空；不存在则创建空文件以保持一致性）
     if provider_config_path.exists() {
         copy_file(&provider_config_path, &config_path)?;
         log::info!("已恢复 Codex config.toml");
     } else {
-        return Err(format!(
-            "供应商 config.toml 不存在: {}",
-            provider_config_path.display()
-        ));
+        // 写入空文件
+        fs::write(&config_path, "").map_err(|e| format!("创建空的 config.toml 失败: {}", e))?;
+        log::info!("供应商 config.toml 缺失，已创建空文件");
     }
 
     Ok(())
@@ -134,17 +133,21 @@ pub fn import_current_codex_config() -> Result<Value, String> {
     let auth_path = get_codex_auth_path();
     let config_path = get_codex_config_path();
 
-    // 参考 Claude Code 行为：主配置缺失时不导入
-    if !auth_path.exists() || !config_path.exists() {
+    // 行为放宽：仅要求 auth.json 存在；config.toml 可缺失
+    if !auth_path.exists() {
         return Err("Codex 配置文件不存在".to_string());
     }
 
     // 读取 auth.json
     let auth = read_json_file::<Value>(&auth_path)?;
 
-    // 读取 config.toml
-    let config_str = fs::read_to_string(&config_path)
-        .map_err(|e| format!("读取 config.toml 失败: {}", e))?;
+    // 读取 config.toml（允许不存在或读取失败时为空）
+    let config_str = if config_path.exists() {
+        fs::read_to_string(&config_path)
+            .map_err(|e| format!("读取 config.toml 失败: {}", e))?
+    } else {
+        String::new()
+    };
 
     // 组合成完整配置
     let settings_config = serde_json::json!({

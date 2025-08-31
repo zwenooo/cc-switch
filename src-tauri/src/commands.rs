@@ -383,21 +383,28 @@ pub async fn get_claude_config_status() -> Result<ConfigStatus, String> {
 }
 
 /// 获取应用配置状态（通用）
+/// 兼容两种参数：`app_type`（推荐）或 `app`（字符串）
 #[tauri::command]
-pub async fn get_config_status(app_type: Option<AppType>) -> Result<ConfigStatus, String> {
-    let app = app_type.unwrap_or(AppType::Claude);
-    
+pub async fn get_config_status(
+    app_type: Option<AppType>,
+    app: Option<String>,
+    appType: Option<String>,
+) -> Result<ConfigStatus, String> {
+    let app = app_type
+        .or_else(|| app.as_deref().map(|s| s.into()))
+        .or_else(|| appType.as_deref().map(|s| s.into()))
+        .unwrap_or(AppType::Claude);
+
     match app {
         AppType::Claude => Ok(crate::config::get_claude_config_status()),
         AppType::Codex => {
-            use crate::codex_config::{get_codex_auth_path, get_codex_config_path};
+            use crate::codex_config::{get_codex_auth_path, get_codex_config_dir};
             let auth_path = get_codex_auth_path();
-            let config_path = get_codex_config_path();
-            
-            // Codex 需要两个文件都存在才算配置存在
-            let exists = auth_path.exists() && config_path.exists();
-            let path = format!("~/.codex/");
-            
+
+            // 放宽：只要 auth.json 存在即可认为已配置；config.toml 允许为空
+            let exists = auth_path.exists();
+            let path = get_codex_config_dir().to_string_lossy().to_string();
+
             Ok(ConfigStatus { exists, path })
         }
     }
@@ -410,9 +417,18 @@ pub async fn get_claude_code_config_path() -> Result<String, String> {
 }
 
 /// 打开配置文件夹
+/// 兼容两种参数：`app_type`（推荐）或 `app`（字符串）
 #[tauri::command]
-pub async fn open_config_folder(app: tauri::AppHandle, app_type: Option<AppType>) -> Result<bool, String> {
-    let app_type = app_type.unwrap_or(AppType::Claude);
+pub async fn open_config_folder(
+    app: tauri::AppHandle,
+    app_type: Option<AppType>,
+    app_str: Option<String>,
+    appType: Option<String>,
+) -> Result<bool, String> {
+    let app_type = app_type
+        .or_else(|| app_str.as_deref().map(|s| s.into()))
+        .or_else(|| appType.as_deref().map(|s| s.into()))
+        .unwrap_or(AppType::Claude);
     
     let config_dir = match app_type {
         AppType::Claude => crate::config::get_claude_config_dir(),

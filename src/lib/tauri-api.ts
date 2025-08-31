@@ -131,7 +131,7 @@ export const tauriAPI = {
   // 获取应用配置状态（通用）
   getConfigStatus: async (app?: AppType): Promise<ConfigStatus> => {
     try {
-      return await invoke("get_config_status", { appType: app });
+      return await invoke("get_config_status", { app_type: app, app });
     } catch (error) {
       console.error("获取配置状态失败:", error);
       return {
@@ -145,7 +145,7 @@ export const tauriAPI = {
   // 打开配置文件夹
   openConfigFolder: async (app?: AppType): Promise<void> => {
     try {
-      await invoke("open_config_folder", { appType: app });
+      await invoke("open_config_folder", { app_type: app, app });
     } catch (error) {
       console.error("打开配置文件夹失败:", error);
     }
