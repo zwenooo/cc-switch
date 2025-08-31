@@ -48,7 +48,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   const [codexConfig, setCodexConfig] = useState("");
   const [codexApiKey, setCodexApiKey] = useState("");
   const [selectedCodexPreset, setSelectedCodexPreset] = useState<number | null>(
-    null
+    null,
   );
 
   // 初始化 Codex 配置
@@ -151,7 +151,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   };
 
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
     const { name, value } = e.target;
 
@@ -188,7 +188,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     // 更新JSON配置
     const updatedConfig = updateCoAuthoredSetting(
       formData.settingsConfig,
-      checked
+      checked,
     );
     setFormData({
       ...formData,
@@ -219,7 +219,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   // Codex: 应用预设
   const applyCodexPreset = (
     preset: (typeof codexProviderPresets)[0],
-    index: number
+    index: number,
   ) => {
     const authString = JSON.stringify(preset.auth || {}, null, 2);
     setCodexAuth(authString);
@@ -244,7 +244,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     const configString = setApiKeyInConfig(
       formData.settingsConfig,
       key.trim(),
-      { createIfMissing: selectedPreset !== null }
+      { createIfMissing: selectedPreset !== null },
     );
 
     // 更新表单配置
@@ -298,7 +298,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   useEffect(() => {
     if (initialData) {
       const parsedKey = getApiKeyFromConfig(
-        JSON.stringify(initialData.settingsConfig)
+        JSON.stringify(initialData.settingsConfig),
       );
       if (parsedKey) setApiKey(parsedKey);
     }
@@ -447,7 +447,9 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                       : "只需要填这里，下方 auth.json 会自动填充"
                   }
                   disabled={isCodexOfficialPreset}
-                  required={selectedCodexPreset !== null && !isCodexOfficialPreset}
+                  required={
+                    selectedCodexPreset !== null && !isCodexOfficialPreset
+                  }
                   autoComplete="off"
                   style={
                     isCodexOfficialPreset

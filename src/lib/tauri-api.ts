@@ -78,7 +78,11 @@ export const tauriAPI = {
     app?: AppType,
   ): Promise<boolean> => {
     try {
-      return await invoke("switch_provider", { id: providerId, app_type: app, app });
+      return await invoke("switch_provider", {
+        id: providerId,
+        app_type: app,
+        app,
+      });
     } catch (error) {
       console.error("切换供应商失败:", error);
       return false;
@@ -90,7 +94,10 @@ export const tauriAPI = {
     app?: AppType,
   ): Promise<ImportResult> => {
     try {
-      const success = await invoke<boolean>("import_default_config", { app_type: app, app });
+      const success = await invoke<boolean>("import_default_config", {
+        app_type: app,
+        app,
+      });
       return {
         success,
         message: success ? "成功导入默认配置" : "导入失败",

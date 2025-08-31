@@ -182,16 +182,14 @@ function App() {
       <header className="app-header">
         <h1>{activeApp === "claude" ? "Claude Code" : "Codex"} 供应商切换器</h1>
         <div className="app-tabs">
-          <div
-            className="segmented"
-            role="tablist"
-            aria-label="选择应用"
-          >
+          <div className="segmented" role="tablist" aria-label="选择应用">
             <span
               className="segmented-thumb"
               style={{
                 transform:
-                  activeApp === "claude" ? "translateX(0%)" : "translateX(100%)",
+                  activeApp === "claude"
+                    ? "translateX(0%)"
+                    : "translateX(100%)",
               }}
             />
             <button

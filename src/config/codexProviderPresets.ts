@@ -16,7 +16,7 @@ export const codexProviderPresets: CodexProviderPreset[] = [
     isOfficial: true,
     // 官方的 key 为null
     auth: {
-      "OPENAI_API_KEY": null,
+      OPENAI_API_KEY: null,
     },
     config: ``,
   },
@@ -25,7 +25,7 @@ export const codexProviderPresets: CodexProviderPreset[] = [
     websiteUrl: "https://codex.packycode.com/",
     // PackyCode 一般通过 API Key；请将占位符替换为你的实际 key
     auth: {
-      "OPENAI_API_KEY": "sk-your-api-key-here",
+      OPENAI_API_KEY: "sk-your-api-key-here",
     },
     config: `model_provider = "packycode"
 model = "gpt-5"
@@ -38,4 +38,3 @@ wire_api = "responses"
 env_key = "packycode"`,
   },
 ];
-

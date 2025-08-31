@@ -50,7 +50,9 @@
   background: var(--seg-thumb);
   border-radius: 999px;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
-  transition: transform 220ms ease, width 220ms ease;
+  transition:
+    transform 220ms ease,
+    width 220ms ease;
   will-change: transform;
 }
 

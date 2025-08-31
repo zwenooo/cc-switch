@@ -455,13 +455,13 @@ pub async fn get_claude_code_config_path() -> Result<String, String> {
 /// 兼容两种参数：`app_type`（推荐）或 `app`（字符串）
 #[tauri::command]
 pub async fn open_config_folder(
-    app: tauri::AppHandle,
+    handle: tauri::AppHandle,
     app_type: Option<AppType>,
-    app_str: Option<String>,
+    app: Option<String>,
     appType: Option<String>,
 ) -> Result<bool, String> {
     let app_type = app_type
-        .or_else(|| app_str.as_deref().map(|s| s.into()))
+        .or_else(|| app.as_deref().map(|s| s.into()))
         .or_else(|| appType.as_deref().map(|s| s.into()))
         .unwrap_or(AppType::Claude);
     
@@ -476,7 +476,7 @@ pub async fn open_config_folder(
     }
 
     // 使用 opener 插件打开文件夹
-    app.opener()
+    handle.opener()
         .open_path(config_dir.to_string_lossy().to_string(), None::<String>)
         .map_err(|e| format!("打开文件夹失败: {}", e))?;
 
