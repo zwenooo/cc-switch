@@ -181,7 +181,7 @@ function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>{activeApp === "claude" ? "Claude Code" : "Codex"} 供应商切换器</h1>
+        <h1>CC Switch</h1>
         <div className="app-tabs">
           <AppSwitcher
             activeApp={activeApp}
