@@ -22,7 +22,7 @@ export const tauriAPI = {
   // 获取所有供应商
   getProviders: async (app?: AppType): Promise<Record<string, Provider>> => {
     try {
-      return await invoke("get_providers", { app });
+      return await invoke("get_providers", { app_type: app, app });
     } catch (error) {
       console.error("获取供应商列表失败:", error);
       return {};
@@ -32,7 +32,7 @@ export const tauriAPI = {
   // 获取当前供应商ID
   getCurrentProvider: async (app?: AppType): Promise<string> => {
     try {
-      return await invoke("get_current_provider", { app });
+      return await invoke("get_current_provider", { app_type: app, app });
     } catch (error) {
       console.error("获取当前供应商失败:", error);
       return "";
@@ -42,7 +42,7 @@ export const tauriAPI = {
   // 添加供应商
   addProvider: async (provider: Provider, app?: AppType): Promise<boolean> => {
     try {
-      return await invoke("add_provider", { provider, app });
+      return await invoke("add_provider", { provider, app_type: app, app });
     } catch (error) {
       console.error("添加供应商失败:", error);
       throw error;
@@ -55,7 +55,7 @@ export const tauriAPI = {
     app?: AppType,
   ): Promise<boolean> => {
     try {
-      return await invoke("update_provider", { provider, app });
+      return await invoke("update_provider", { provider, app_type: app, app });
     } catch (error) {
       console.error("更新供应商失败:", error);
       throw error;
@@ -65,7 +65,7 @@ export const tauriAPI = {
   // 删除供应商
   deleteProvider: async (id: string, app?: AppType): Promise<boolean> => {
     try {
-      return await invoke("delete_provider", { id, app });
+      return await invoke("delete_provider", { id, app_type: app, app });
     } catch (error) {
       console.error("删除供应商失败:", error);
       throw error;
@@ -78,7 +78,7 @@ export const tauriAPI = {
     app?: AppType,
   ): Promise<boolean> => {
     try {
-      return await invoke("switch_provider", { id: providerId, app });
+      return await invoke("switch_provider", { id: providerId, app_type: app, app });
     } catch (error) {
       console.error("切换供应商失败:", error);
       return false;
@@ -90,7 +90,7 @@ export const tauriAPI = {
     app?: AppType,
   ): Promise<ImportResult> => {
     try {
-      const success = await invoke<boolean>("import_default_config", { app });
+      const success = await invoke<boolean>("import_default_config", { app_type: app, app });
       return {
         success,
         message: success ? "成功导入默认配置" : "导入失败",

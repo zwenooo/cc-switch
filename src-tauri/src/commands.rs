@@ -12,9 +12,14 @@ use crate::store::AppState;
 #[tauri::command]
 pub async fn get_providers(
     state: State<'_, AppState>,
+    app_type: Option<AppType>,
     app: Option<String>,
+    appType: Option<String>,
 ) -> Result<HashMap<String, Provider>, String> {
-    let app_type = app.as_deref().map(|s| s.into()).unwrap_or(AppType::Claude);
+    let app_type = app_type
+        .or_else(|| app.as_deref().map(|s| s.into()))
+        .or_else(|| appType.as_deref().map(|s| s.into()))
+        .unwrap_or(AppType::Claude);
 
     let config = state
         .config
@@ -32,9 +37,14 @@ pub async fn get_providers(
 #[tauri::command]
 pub async fn get_current_provider(
     state: State<'_, AppState>,
+    app_type: Option<AppType>,
     app: Option<String>,
+    appType: Option<String>,
 ) -> Result<String, String> {
-    let app_type = app.as_deref().map(|s| s.into()).unwrap_or(AppType::Claude);
+    let app_type = app_type
+        .or_else(|| app.as_deref().map(|s| s.into()))
+        .or_else(|| appType.as_deref().map(|s| s.into()))
+        .unwrap_or(AppType::Claude);
 
     let config = state
         .config
@@ -52,10 +62,15 @@ pub async fn get_current_provider(
 #[tauri::command]
 pub async fn add_provider(
     state: State<'_, AppState>,
+    app_type: Option<AppType>,
     app: Option<String>,
+    appType: Option<String>,
     provider: Provider,
 ) -> Result<bool, String> {
-    let app_type = app.as_deref().map(|s| s.into()).unwrap_or(AppType::Claude);
+    let app_type = app_type
+        .or_else(|| app.as_deref().map(|s| s.into()))
+        .or_else(|| appType.as_deref().map(|s| s.into()))
+        .unwrap_or(AppType::Claude);
 
     let mut config = state
         .config
@@ -97,10 +112,15 @@ pub async fn add_provider(
 #[tauri::command]
 pub async fn update_provider(
     state: State<'_, AppState>,
+    app_type: Option<AppType>,
     app: Option<String>,
+    appType: Option<String>,
     provider: Provider,
 ) -> Result<bool, String> {
-    let app_type = app.as_deref().map(|s| s.into()).unwrap_or(AppType::Claude);
+    let app_type = app_type
+        .or_else(|| app.as_deref().map(|s| s.into()))
+        .or_else(|| appType.as_deref().map(|s| s.into()))
+        .unwrap_or(AppType::Claude);
 
     let mut config = state
         .config
@@ -164,10 +184,15 @@ pub async fn update_provider(
 #[tauri::command]
 pub async fn delete_provider(
     state: State<'_, AppState>,
+    app_type: Option<AppType>,
     app: Option<String>,
+    appType: Option<String>,
     id: String,
 ) -> Result<bool, String> {
-    let app_type = app.as_deref().map(|s| s.into()).unwrap_or(AppType::Claude);
+    let app_type = app_type
+        .or_else(|| app.as_deref().map(|s| s.into()))
+        .or_else(|| appType.as_deref().map(|s| s.into()))
+        .unwrap_or(AppType::Claude);
 
     let mut config = state
         .config
@@ -216,10 +241,15 @@ pub async fn delete_provider(
 #[tauri::command]
 pub async fn switch_provider(
     state: State<'_, AppState>,
+    app_type: Option<AppType>,
     app: Option<String>,
+    appType: Option<String>,
     id: String,
 ) -> Result<bool, String> {
-    let app_type = app.as_deref().map(|s| s.into()).unwrap_or(AppType::Claude);
+    let app_type = app_type
+        .or_else(|| app.as_deref().map(|s| s.into()))
+        .or_else(|| appType.as_deref().map(|s| s.into()))
+        .unwrap_or(AppType::Claude);
 
     let mut config = state
         .config
@@ -304,9 +334,14 @@ pub async fn switch_provider(
 #[tauri::command]
 pub async fn import_default_config(
     state: State<'_, AppState>,
+    app_type: Option<AppType>,
     app: Option<String>,
+    appType: Option<String>,
 ) -> Result<bool, String> {
-    let app_type = app.as_deref().map(|s| s.into()).unwrap_or(AppType::Claude);
+    let app_type = app_type
+        .or_else(|| app.as_deref().map(|s| s.into()))
+        .or_else(|| appType.as_deref().map(|s| s.into()))
+        .unwrap_or(AppType::Claude);
 
     // 若已存在 default 供应商，则直接返回，避免重复导入
     {
