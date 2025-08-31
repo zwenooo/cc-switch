@@ -246,6 +246,7 @@ function App() {
             onSwitch={handleSwitchProvider}
             onDelete={handleDeleteProvider}
             onEdit={setEditingProviderId}
+            appType={activeApp}
           />
         </div>
 

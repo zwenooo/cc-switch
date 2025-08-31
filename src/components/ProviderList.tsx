@@ -1,5 +1,6 @@
 import React from "react";
 import { Provider } from "../types";
+import { AppType } from "../lib/tauri-api";
 import "./ProviderList.css";
 
 interface ProviderListProps {
@@ -8,6 +9,7 @@ interface ProviderListProps {
   onSwitch: (id: string) => void;
   onDelete: (id: string) => void;
   onEdit: (id: string) => void;
+  appType?: AppType;
 }
 
 const ProviderList: React.FC<ProviderListProps> = ({
@@ -16,14 +18,37 @@ const ProviderList: React.FC<ProviderListProps> = ({
   onSwitch,
   onDelete,
   onEdit,
+  appType = "claude",
 }) => {
   // 提取API地址
   const getApiUrl = (provider: Provider): string => {
     try {
       const config = provider.settingsConfig;
-      if (config?.env?.ANTHROPIC_BASE_URL) {
-        return config.env.ANTHROPIC_BASE_URL;
+      // Claude: 显示 ANTHROPIC_BASE_URL
+      if (appType === "claude") {
+        if (config?.env?.ANTHROPIC_BASE_URL) {
+          return config.env.ANTHROPIC_BASE_URL;
+        }
+        return "未设置";
       }
+
+      // Codex: 从 TOML 中提取 base_url 或 model_provider
+      const tomlText: string | undefined =
+        typeof config?.config === "string" ? config.config : undefined;
+      if (!tomlText) return "未设置";
+
+      // 简单解析：base_url = "..."
+      const baseUrlMatch = tomlText.match(/base_url\s*=\s*"([^"]+)"/);
+      if (baseUrlMatch && baseUrlMatch[1]) return baseUrlMatch[1];
+
+      // 回退：model_provider = "..."
+      const providerMatch = tomlText.match(/model_provider\s*=\s*"([^"]+)"/);
+      if (providerMatch && providerMatch[1]) return `provider: ${providerMatch[1]}`;
+
+      // 再回退：model = "..."
+      const modelMatch = tomlText.match(/\bmodel\s*=\s*"([^"]+)"/);
+      if (modelMatch && modelMatch[1]) return `model: ${modelMatch[1]}`;
+
       return "未设置";
     } catch {
       return "配置错误";
