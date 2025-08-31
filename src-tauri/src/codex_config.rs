@@ -74,6 +74,11 @@ pub fn save_codex_provider_config(
     // 保存 config.toml
     if let Some(config) = settings_config.get("config") {
         if let Some(config_str) = config.as_str() {
+            // 若非空则进行 TOML 语法校验
+            if !config_str.trim().is_empty() {
+                toml::from_str::<toml::Table>(config_str)
+                    .map_err(|e| format!("config.toml 格式错误: {}", e))?;
+            }
             fs::write(&config_path, config_str)
                 .map_err(|e| format!("写入供应商 config.toml 失败: {}", e))?;
         }
@@ -143,8 +148,13 @@ pub fn import_current_codex_config() -> Result<Value, String> {
 
     // 读取 config.toml（允许不存在或读取失败时为空）
     let config_str = if config_path.exists() {
-        fs::read_to_string(&config_path)
-            .map_err(|e| format!("读取 config.toml 失败: {}", e))?
+        let s = fs::read_to_string(&config_path)
+            .map_err(|e| format!("读取 config.toml 失败: {}", e))?;
+        if !s.trim().is_empty() {
+            toml::from_str::<toml::Table>(&s)
+                .map_err(|e| format!("config.toml 语法错误: {}", e))?;
+        }
+        s
     } else {
         String::new()
     };
