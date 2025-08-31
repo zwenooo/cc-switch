@@ -10,9 +10,12 @@
   padding: 0.35rem 2rem 0.45rem;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
+  grid-template-rows: auto auto;
   grid-template-areas:
-    "tabs title actions";
+    ". title ."
+    "tabs . actions";
   align-items: center;
+  row-gap: 0.6rem;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
   user-select: none;
 }
