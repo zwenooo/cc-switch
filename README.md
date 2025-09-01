@@ -1,4 +1,4 @@
-# Claude Code 供应商切换器
+# Claude Code & Codex 供应商切换器
 
 [![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)](https://github.com/jasonyoung/cc-switch/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/jasonyoung/cc-switch/releases)
@@ -6,12 +6,15 @@
 
 一个用于管理和切换 Claude Code 与 Codex 不同供应商配置的桌面应用。
 
-> **v3.0.0 重大更新**：从 Electron 完全迁移到 Tauri 2.0，应用体积减少 85%（从 ~80MB 降至 ~12MB），启动速度提升 10 倍！
+> v3.1.0 ：新增 Codex 供应商管理与一键切换，支持导入当前 Codex 配置为默认供应商，并在内部配置从 v1 → v2 迁移前自动备份（详见下文““迁移与备份”）。
+
+> v3.0.0 重大更新：从 Electron 完全迁移到 Tauri 2.0，应用体积减少 85%（从 ~80MB 降至 ~12MB），启动速度提升 10 倍！
 
 ## 功能特性
 
 - **极速启动** - 基于 Tauri 2.0，原生性能，秒开应用
 - 一键切换不同供应商
+- 同时支持 Claude Code 与 Codex 的供应商切换与导入
 - Qwen coder、kimi k2、智谱 GLM、DeepSeek v3.1、packycode 等预设供应商只需要填写 key 即可一键配置
 - 支持添加自定义供应商
 - 随时切换官方登录
@@ -67,6 +70,22 @@
 - API Key 字段：`auth.json` 中使用 `OPENAI_API_KEY`
 - 切换策略：将选中供应商的副本覆盖到主配置（`auth.json`、`config.toml`）。若供应商没有 `config-*.toml`，会创建空的 `config.toml`。
 - 导入默认：若 `~/.codex/auth.json` 存在，会将当前主配置导入为 `default` 供应商；`config.toml` 不存在时按空处理。
+- 官方登录：可切换到预设“Codex 官方登录”，重启终端后可选择使用 ChatGPT 账号完成登录。
+
+### Claude Code 说明
+
+- 配置目录：`~/.claude/`
+  - 主配置文件：`settings.json`（推荐）或 `claude.json`（旧版兼容，若存在则继续使用）
+  - 供应商副本：`settings-<name>.json`
+- API Key 字段：`env.ANTHROPIC_AUTH_TOKEN`
+- 切换策略：将选中供应商的副本覆盖到主配置（`settings.json`/`claude.json`）。如当前有配置且存在“当前供应商”，会先将主配置备份回该供应商的副本文件。
+- 导入默认：若 `~/.claude/settings.json` 或 `~/.claude/claude.json` 存在，会将当前主配置导入为 `default` 供应商副本。
+- 官方登录：可切换到预设“Claude 官方登录”，重启终端后可使用 `/login` 完成登录。
+
+### 迁移与备份
+
+- cc-switch 自身配置从 v1 → v2 迁移时，将在 `~/.cc-switch/` 目录自动创建时间戳备份：`config.v1.backup.<timestamp>.json`。
+- 实际生效的应用配置文件（如 `~/.claude/settings.json`、`~/.codex/auth.json`/`config.toml`）不会被修改，切换仅在用户点击“切换”时按副本覆盖到主配置。
 
 ## 开发
 
