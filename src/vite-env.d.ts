@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 import { Provider } from "./types";
+import { AppType } from "./lib/tauri-api";
 
 interface ImportResult {
   success: boolean;
@@ -16,17 +17,18 @@ interface ConfigStatus {
 declare global {
   interface Window {
     api: {
-      getProviders: () => Promise<Record<string, Provider>>;
-      getCurrentProvider: () => Promise<string>;
-      addProvider: (provider: Provider) => Promise<boolean>;
-      deleteProvider: (id: string) => Promise<boolean>;
-      updateProvider: (provider: Provider) => Promise<boolean>;
-      switchProvider: (providerId: string) => Promise<boolean>;
-      importCurrentConfigAsDefault: () => Promise<ImportResult>;
+      getProviders: (app?: AppType) => Promise<Record<string, Provider>>;
+      getCurrentProvider: (app?: AppType) => Promise<string>;
+      addProvider: (provider: Provider, app?: AppType) => Promise<boolean>;
+      deleteProvider: (id: string, app?: AppType) => Promise<boolean>;
+      updateProvider: (provider: Provider, app?: AppType) => Promise<boolean>;
+      switchProvider: (providerId: string, app?: AppType) => Promise<boolean>;
+      importCurrentConfigAsDefault: (app?: AppType) => Promise<ImportResult>;
       getClaudeCodeConfigPath: () => Promise<string>;
       getClaudeConfigStatus: () => Promise<ConfigStatus>;
+      getConfigStatus: (app?: AppType) => Promise<ConfigStatus>;
       selectConfigFile: () => Promise<string | null>;
-      openConfigFolder: () => Promise<void>;
+      openConfigFolder: (app?: AppType) => Promise<void>;
       openExternal: (url: string) => Promise<void>;
     };
     platform: {

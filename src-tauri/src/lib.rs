@@ -1,3 +1,5 @@
+mod app_config;
+mod codex_config;
 mod commands;
 mod config;
 mod provider;
@@ -55,33 +57,50 @@ pub fn run() {
 
             // 如果没有供应商且存在 Claude Code 配置，自动导入
             {
-                let manager = app_state.provider_manager.lock().unwrap();
-                if manager.providers.is_empty() {
-                    drop(manager); // 释放锁
+                let mut config = app_state.config.lock().unwrap();
 
+                // 检查 Claude 供应商
+                let need_import = if let Some(claude_manager) =
+                    config.get_manager(&app_config::AppType::Claude)
+                {
+                    claude_manager.providers.is_empty()
+                } else {
+                    // 确保 Claude 应用存在
+                    config.ensure_app(&app_config::AppType::Claude);
+                    true
+                };
+
+                if need_import {
                     let settings_path = config::get_claude_settings_path();
                     if settings_path.exists() {
                         log::info!("检测到 Claude Code 配置，自动导入为默认供应商");
 
                         if let Ok(settings_config) = config::import_current_config_as_default() {
-                            let mut manager = app_state.provider_manager.lock().unwrap();
-                            let provider = provider::Provider::with_id(
-                                "default".to_string(),
-                                "default".to_string(),
-                                settings_config,
-                                None,
-                            );
+                            if let Some(manager) =
+                                config.get_manager_mut(&app_config::AppType::Claude)
+                            {
+                                let provider = provider::Provider::with_id(
+                                    "default".to_string(),
+                                    "default".to_string(),
+                                    settings_config,
+                                    None,
+                                );
 
-                            if manager.add_provider(provider).is_ok() {
-                                manager.current = "default".to_string();
-                                drop(manager);
-                                let _ = app_state.save();
-                                log::info!("成功导入默认供应商");
+                                if manager.add_provider(provider).is_ok() {
+                                    manager.current = "default".to_string();
+                                    log::info!("成功导入默认供应商");
+                                }
                             }
                         }
                     }
                 }
+
+                // 确保 Codex 应用存在
+                config.ensure_app(&app_config::AppType::Codex);
             }
+
+            // 保存配置
+            let _ = app_state.save();
 
             // 将同一个实例注入到全局状态，避免重复创建导致的不一致
             app.manage(app_state);
@@ -96,6 +115,7 @@ pub fn run() {
             commands::switch_provider,
             commands::import_default_config,
             commands::get_claude_config_status,
+            commands::get_config_status,
             commands::get_claude_code_config_path,
             commands::open_config_folder,
             commands::open_external,

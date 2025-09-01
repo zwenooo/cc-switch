@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Provider } from "../types";
+import { AppType } from "../lib/tauri-api";
 import {
   updateCoAuthoredSetting,
   checkCoAuthoredSetting,
@@ -9,9 +10,11 @@ import {
   setApiKeyInConfig,
 } from "../utils/providerConfigUtils";
 import { providerPresets } from "../config/providerPresets";
+import { codexProviderPresets } from "../config/codexProviderPresets";
 import "./AddProviderModal.css";
 
 interface ProviderFormProps {
+  appType?: AppType;
   title: string;
   submitText: string;
   initialData?: Provider;
@@ -21,6 +24,7 @@ interface ProviderFormProps {
 }
 
 const ProviderForm: React.FC<ProviderFormProps> = ({
+  appType = "claude",
   title,
   submitText,
   initialData,
@@ -28,6 +32,9 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   onSubmit,
   onClose,
 }) => {
+  // 对于 Codex，需要分离 auth 和 config
+  const isCodex = appType === "codex";
+
   const [formData, setFormData] = useState({
     name: initialData?.name || "",
     websiteUrl: initialData?.websiteUrl || "",
@@ -35,6 +42,33 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       ? JSON.stringify(initialData.settingsConfig, null, 2)
       : "",
   });
+
+  // Codex 特有的状态
+  const [codexAuth, setCodexAuth] = useState("");
+  const [codexConfig, setCodexConfig] = useState("");
+  const [codexApiKey, setCodexApiKey] = useState("");
+  const [selectedCodexPreset, setSelectedCodexPreset] = useState<number | null>(
+    null,
+  );
+
+  // 初始化 Codex 配置
+  useEffect(() => {
+    if (isCodex && initialData) {
+      const config = initialData.settingsConfig;
+      if (typeof config === "object" && config !== null) {
+        setCodexAuth(JSON.stringify(config.auth || {}, null, 2));
+        setCodexConfig(config.config || "");
+        try {
+          const auth = config.auth || {};
+          if (auth && typeof auth.OPENAI_API_KEY === "string") {
+            setCodexApiKey(auth.OPENAI_API_KEY);
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }, [isCodex, initialData]);
   const [error, setError] = useState("");
   const [disableCoAuthored, setDisableCoAuthored] = useState(false);
   const [selectedPreset, setSelectedPreset] = useState<number | null>(null);
@@ -58,18 +92,55 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       return;
     }
 
-    if (!formData.settingsConfig.trim()) {
-      setError("请填写配置内容");
-      return;
-    }
-
     let settingsConfig: Record<string, any>;
 
-    try {
-      settingsConfig = JSON.parse(formData.settingsConfig);
-    } catch (err) {
-      setError("配置JSON格式错误，请检查语法");
-      return;
+    if (isCodex) {
+      // Codex: 仅要求 auth.json 必填；config.toml 可为空
+      if (!codexAuth.trim()) {
+        setError("请填写 auth.json 配置");
+        return;
+      }
+
+      try {
+        const authJson = JSON.parse(codexAuth);
+
+        // 非官方预设强制要求 OPENAI_API_KEY
+        if (selectedCodexPreset !== null) {
+          const preset = codexProviderPresets[selectedCodexPreset];
+          const isOfficial = Boolean(preset?.isOfficial);
+          if (!isOfficial) {
+            const key =
+              typeof authJson.OPENAI_API_KEY === "string"
+                ? authJson.OPENAI_API_KEY.trim()
+                : "";
+            if (!key) {
+              setError("请填写 OPENAI_API_KEY");
+              return;
+            }
+          }
+        }
+
+        settingsConfig = {
+          auth: authJson,
+          config: codexConfig ?? "",
+        };
+      } catch (err) {
+        setError("auth.json 格式错误，请检查JSON语法");
+        return;
+      }
+    } else {
+      // Claude: 原有逻辑
+      if (!formData.settingsConfig.trim()) {
+        setError("请填写配置内容");
+        return;
+      }
+
+      try {
+        settingsConfig = JSON.parse(formData.settingsConfig);
+      } catch (err) {
+        setError("配置JSON格式错误，请检查语法");
+        return;
+      }
     }
 
     onSubmit({
@@ -145,6 +216,27 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     setDisableCoAuthored(hasCoAuthoredDisabled);
   };
 
+  // Codex: 应用预设
+  const applyCodexPreset = (
+    preset: (typeof codexProviderPresets)[0],
+    index: number,
+  ) => {
+    const authString = JSON.stringify(preset.auth || {}, null, 2);
+    setCodexAuth(authString);
+    setCodexConfig(preset.config || "");
+
+    setFormData({
+      name: preset.name,
+      websiteUrl: preset.websiteUrl,
+      settingsConfig: formData.settingsConfig,
+    });
+
+    setSelectedCodexPreset(index);
+
+    // 清空 API Key，让用户重新输入
+    setCodexApiKey("");
+  };
+
   // 处理 API Key 输入并自动更新配置
   const handleApiKeyChange = (key: string) => {
     setApiKey(key);
@@ -166,6 +258,18 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     setDisableCoAuthored(hasCoAuthoredDisabled);
   };
 
+  // Codex: 处理 API Key 输入并写回 auth.json
+  const handleCodexApiKeyChange = (key: string) => {
+    setCodexApiKey(key);
+    try {
+      const auth = JSON.parse(codexAuth || "{}");
+      auth.OPENAI_API_KEY = key.trim();
+      setCodexAuth(JSON.stringify(auth, null, 2));
+    } catch {
+      // ignore
+    }
+  };
+
   // 根据当前配置决定是否展示 API Key 输入框
   const showApiKey =
     selectedPreset !== null || hasApiKeyField(formData.settingsConfig);
@@ -174,6 +278,21 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   const isOfficialPreset =
     selectedPreset !== null &&
     providerPresets[selectedPreset]?.isOfficial === true;
+
+  // Codex: 控制显示 API Key 与官方标记
+  const getCodexAuthApiKey = (authString: string): string => {
+    try {
+      const auth = JSON.parse(authString || "{}");
+      return typeof auth.OPENAI_API_KEY === "string" ? auth.OPENAI_API_KEY : "";
+    } catch {
+      return "";
+    }
+  };
+  const showCodexApiKey =
+    selectedCodexPreset !== null || getCodexAuthApiKey(codexAuth) !== "";
+  const isCodexOfficialPreset =
+    selectedCodexPreset !== null &&
+    codexProviderPresets[selectedCodexPreset]?.isOfficial === true;
 
   // 初始时从配置中同步 API Key（编辑模式）
   useEffect(() => {
@@ -226,7 +345,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
           <div className="modal-body">
             {error && <div className="error-message">{error}</div>}
 
-            {showPresets && (
+            {showPresets && !isCodex && (
               <div className="presets">
                 <label>一键导入（只需要填写 key）</label>
                 <div className="preset-buttons">
@@ -248,6 +367,26 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
               </div>
             )}
 
+            {showPresets && isCodex && (
+              <div className="presets">
+                <label>一键导入（只需要填写 key）</label>
+                <div className="preset-buttons">
+                  {codexProviderPresets.map((preset, index) => (
+                    <button
+                      key={index}
+                      type="button"
+                      className={`preset-btn ${
+                        selectedCodexPreset === index ? "selected" : ""
+                      } ${preset.isOfficial ? "official" : ""}`}
+                      onClick={() => applyCodexPreset(preset, index)}
+                    >
+                      {preset.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="form-group">
               <label htmlFor="name">供应商名称 *</label>
               <input
@@ -262,33 +401,68 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
               />
             </div>
 
-            <div
-              className={`form-group api-key-group ${!showApiKey ? "hidden" : ""}`}
-            >
-              <label htmlFor="apiKey">API Key *</label>
-              <input
-                type="text"
-                id="apiKey"
-                value={apiKey}
-                onChange={(e) => handleApiKeyChange(e.target.value)}
-                placeholder={
-                  isOfficialPreset
-                    ? "官方登录无需填写 API Key，直接保存即可"
-                    : "只需要填这里，下方配置会自动填充"
-                }
-                disabled={isOfficialPreset}
-                autoComplete="off"
-                style={
-                  isOfficialPreset
-                    ? {
-                        backgroundColor: "#f5f5f5",
-                        cursor: "not-allowed",
-                        color: "#999",
-                      }
-                    : {}
-                }
-              />
-            </div>
+            {!isCodex && (
+              <div
+                className={`form-group api-key-group ${!showApiKey ? "hidden" : ""}`}
+              >
+                <label htmlFor="apiKey">API Key *</label>
+                <input
+                  type="text"
+                  id="apiKey"
+                  value={apiKey}
+                  onChange={(e) => handleApiKeyChange(e.target.value)}
+                  placeholder={
+                    isOfficialPreset
+                      ? "官方登录无需填写 API Key，直接保存即可"
+                      : "只需要填这里，下方配置会自动填充"
+                  }
+                  disabled={isOfficialPreset}
+                  autoComplete="off"
+                  style={
+                    isOfficialPreset
+                      ? {
+                          backgroundColor: "#f5f5f5",
+                          cursor: "not-allowed",
+                          color: "#999",
+                        }
+                      : {}
+                  }
+                />
+              </div>
+            )}
+
+            {isCodex && (
+              <div
+                className={`form-group api-key-group ${!showCodexApiKey ? "hidden" : ""}`}
+              >
+                <label htmlFor="codexApiKey">API Key *</label>
+                <input
+                  type="text"
+                  id="codexApiKey"
+                  value={codexApiKey}
+                  onChange={(e) => handleCodexApiKeyChange(e.target.value)}
+                  placeholder={
+                    isCodexOfficialPreset
+                      ? "官方无需填写 API Key，直接保存即可"
+                      : "只需要填这里，下方 auth.json 会自动填充"
+                  }
+                  disabled={isCodexOfficialPreset}
+                  required={
+                    selectedCodexPreset !== null && !isCodexOfficialPreset
+                  }
+                  autoComplete="off"
+                  style={
+                    isCodexOfficialPreset
+                      ? {
+                          backgroundColor: "#f5f5f5",
+                          cursor: "not-allowed",
+                          color: "#999",
+                        }
+                      : {}
+                  }
+                />
+              </div>
+            )}
 
             <div className="form-group">
               <label htmlFor="websiteUrl">官网地址</label>
@@ -303,39 +477,90 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
               />
             </div>
 
-            <div className="form-group">
-              <div className="label-with-checkbox">
-                <label htmlFor="settingsConfig">
-                  Claude Code 配置 (JSON) *
-                </label>
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={disableCoAuthored}
-                    onChange={(e) => handleCoAuthoredToggle(e.target.checked)}
+            {/* Claude 或 Codex 的配置部分 */}
+            {isCodex ? (
+              // Codex: 双编辑器
+              <>
+                <div className="form-group">
+                  <label htmlFor="codexAuth">auth.json (JSON) *</label>
+                  <textarea
+                    id="codexAuth"
+                    value={codexAuth}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setCodexAuth(value);
+                      try {
+                        const auth = JSON.parse(value || "{}");
+                        const key =
+                          typeof auth.OPENAI_API_KEY === "string"
+                            ? auth.OPENAI_API_KEY
+                            : "";
+                        setCodexApiKey(key);
+                      } catch {
+                        // ignore
+                      }
+                    }}
+                    placeholder={`{
+  "OPENAI_API_KEY": "sk-your-api-key-here"
+}`}
+                    rows={6}
+                    style={{ fontFamily: "monospace", fontSize: "14px" }}
+                    required
                   />
-                  禁止 Claude Code 签名
-                </label>
-              </div>
-              <textarea
-                id="settingsConfig"
-                name="settingsConfig"
-                value={formData.settingsConfig}
-                onChange={handleChange}
-                placeholder={`{
+                  <small className="field-hint">Codex auth.json 配置内容</small>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="codexConfig">config.toml (TOML)</label>
+                  <textarea
+                    id="codexConfig"
+                    value={codexConfig}
+                    onChange={(e) => setCodexConfig(e.target.value)}
+                    placeholder={``}
+                    rows={8}
+                    style={{ fontFamily: "monospace", fontSize: "14px" }}
+                  />
+                  <small className="field-hint">
+                    Codex config.toml 配置内容（可留空）
+                  </small>
+                </div>
+              </>
+            ) : (
+              // Claude: 原有的单编辑器
+              <div className="form-group">
+                <div className="label-with-checkbox">
+                  <label htmlFor="settingsConfig">
+                    Claude Code 配置 (JSON) *
+                  </label>
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={disableCoAuthored}
+                      onChange={(e) => handleCoAuthoredToggle(e.target.checked)}
+                    />
+                    禁止 Claude Code 签名
+                  </label>
+                </div>
+                <textarea
+                  id="settingsConfig"
+                  name="settingsConfig"
+                  value={formData.settingsConfig}
+                  onChange={handleChange}
+                  placeholder={`{
   "env": {
     "ANTHROPIC_BASE_URL": "https://api.anthropic.com",
     "ANTHROPIC_AUTH_TOKEN": "sk-your-api-key-here"
   }
 }`}
-                rows={12}
-                style={{ fontFamily: "monospace", fontSize: "14px" }}
-                required
-              />
-              <small className="field-hint">
-                完整的 Claude Code settings.json 配置内容
-              </small>
-            </div>
+                  rows={12}
+                  style={{ fontFamily: "monospace", fontSize: "14px" }}
+                  required
+                />
+                <small className="field-hint">
+                  完整的 Claude Code settings.json 配置内容
+                </small>
+              </div>
+            )}
           </div>
 
           <div className="modal-footer">

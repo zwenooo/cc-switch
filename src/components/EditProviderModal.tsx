@@ -1,14 +1,17 @@
 import React from "react";
 import { Provider } from "../types";
+import { AppType } from "../lib/tauri-api";
 import ProviderForm from "./ProviderForm";
 
 interface EditProviderModalProps {
+  appType: AppType;
   provider: Provider;
   onSave: (provider: Provider) => void;
   onClose: () => void;
 }
 
 const EditProviderModal: React.FC<EditProviderModalProps> = ({
+  appType,
   provider,
   onSave,
   onClose,
@@ -22,6 +25,7 @@ const EditProviderModal: React.FC<EditProviderModalProps> = ({
 
   return (
     <ProviderForm
+      appType={appType}
       title="编辑供应商"
       submitText="保存"
       initialData={provider}

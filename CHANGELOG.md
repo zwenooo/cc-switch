@@ -44,6 +44,11 @@ For users upgrading from v2.x (Electron version):
 - The app will automatically migrate your existing provider configurations
 - Window position and size preferences have been reset to defaults
 
+#### Backup on v1→v2 Migration (cc-switch internal config)
+- When the app detects an old v1 config structure at `~/.cc-switch/config.json`, it now creates a timestamped backup before writing the new v2 structure.
+- Backup location: `~/.cc-switch/config.v1.backup.<timestamp>.json`
+- This only concerns cc-switch's own metadata file; your actual provider files under `~/.claude/` and `~/.codex/` are untouched.
+
 ### 🛠️ Development
 - Added `pnpm typecheck` command for TypeScript validation
 - Added `pnpm format` and `pnpm format:check` for code formatting
