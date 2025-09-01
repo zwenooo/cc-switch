@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::config::{get_app_config_path, write_json_file};
+use crate::config::{copy_file, get_app_config_dir, get_app_config_path, write_json_file};
 use crate::provider::ProviderManager;
 
 /// 应用类型
@@ -77,6 +77,23 @@ impl MultiAppConfig {
             apps.insert("codex".to_string(), ProviderManager::default());
 
             let config = Self { version: 2, apps };
+
+            // 迁移前备份旧版(v1)配置文件
+            let backup_dir = get_app_config_dir();
+            let ts = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            let backup_path = backup_dir.join(format!("config.v1.backup.{}.json", ts));
+
+            match copy_file(&config_path, &backup_path) {
+                Ok(()) => log::info!(
+                    "已备份旧版配置文件: {} -> {}",
+                    config_path.display(),
+                    backup_path.display()
+                ),
+                Err(e) => log::warn!("备份旧版配置文件失败: {}", e),
+            }
 
             // 保存迁移后的配置
             config.save()?;

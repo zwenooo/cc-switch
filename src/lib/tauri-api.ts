@@ -167,6 +167,8 @@ export const tauriAPI = {
     }
   },
 
+  // （保留空位，取消迁移提示）
+
   // 选择配置文件（Tauri 暂不实现，保留接口兼容性）
   selectConfigFile: async (): Promise<string | null> => {
     console.warn("selectConfigFile 在 Tauri 版本中暂不支持");
