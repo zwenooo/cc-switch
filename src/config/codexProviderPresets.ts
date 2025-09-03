@@ -30,6 +30,7 @@ export const codexProviderPresets: CodexProviderPreset[] = [
     config: `model_provider = "packycode"
 model = "gpt-5"
 model_reasoning_effort = "high"
+disable_response_storage = true
 
 [model_providers.packycode]
 name = "packycode"
