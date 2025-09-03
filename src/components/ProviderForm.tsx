@@ -47,8 +47,9 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   const [codexAuth, setCodexAuth] = useState("");
   const [codexConfig, setCodexConfig] = useState("");
   const [codexApiKey, setCodexApiKey] = useState("");
+  // -1 表示自定义，null 表示未选择，>= 0 表示预设索引
   const [selectedCodexPreset, setSelectedCodexPreset] = useState<number | null>(
-    null,
+    showPresets && isCodex ? -1 : null,
   );
 
   // 初始化 Codex 配置
@@ -71,7 +72,10 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   }, [isCodex, initialData]);
   const [error, setError] = useState("");
   const [disableCoAuthored, setDisableCoAuthored] = useState(false);
-  const [selectedPreset, setSelectedPreset] = useState<number | null>(null);
+  // -1 表示自定义，null 表示未选择，>= 0 表示预设索引
+  const [selectedPreset, setSelectedPreset] = useState<number | null>(
+    showPresets ? -1 : null
+  );
   const [apiKey, setApiKey] = useState("");
 
   // 初始化时检查禁用签名状态
@@ -216,6 +220,18 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     setDisableCoAuthored(hasCoAuthoredDisabled);
   };
 
+  // 处理点击自定义按钮
+  const handleCustomClick = () => {
+    setSelectedPreset(-1);
+    setFormData({
+      name: "",
+      websiteUrl: "",
+      settingsConfig: "",
+    });
+    setApiKey("");
+    setDisableCoAuthored(false);
+  };
+
   // Codex: 应用预设
   const applyCodexPreset = (
     preset: (typeof codexProviderPresets)[0],
@@ -237,6 +253,19 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     setCodexApiKey("");
   };
 
+  // Codex: 处理点击自定义按钮
+  const handleCodexCustomClick = () => {
+    setSelectedCodexPreset(-1);
+    setFormData({
+      name: "",
+      websiteUrl: "",
+      settingsConfig: "",
+    });
+    setCodexAuth("");
+    setCodexConfig("");
+    setCodexApiKey("");
+  };
+
   // 处理 API Key 输入并自动更新配置
   const handleApiKeyChange = (key: string) => {
     setApiKey(key);
@@ -244,7 +273,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     const configString = setApiKeyInConfig(
       formData.settingsConfig,
       key.trim(),
-      { createIfMissing: selectedPreset !== null },
+      { createIfMissing: selectedPreset !== null && selectedPreset !== -1 },
     );
 
     // 更新表单配置
@@ -271,12 +300,15 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   };
 
   // 根据当前配置决定是否展示 API Key 输入框
+  // 自定义模式(-1)不显示独立的 API Key 输入框
   const showApiKey =
-    selectedPreset !== null || hasApiKeyField(formData.settingsConfig);
+    (selectedPreset !== null && selectedPreset !== -1) || 
+    (!showPresets && hasApiKeyField(formData.settingsConfig));
 
   // 判断当前选中的预设是否是官方
   const isOfficialPreset =
     selectedPreset !== null &&
+    selectedPreset >= 0 &&
     providerPresets[selectedPreset]?.isOfficial === true;
 
   // Codex: 控制显示 API Key 与官方标记
@@ -288,10 +320,13 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       return "";
     }
   };
+  // 自定义模式(-1)不显示独立的 API Key 输入框
   const showCodexApiKey =
-    selectedCodexPreset !== null || getCodexAuthApiKey(codexAuth) !== "";
+    (selectedCodexPreset !== null && selectedCodexPreset !== -1) || 
+    (!showPresets && getCodexAuthApiKey(codexAuth) !== "");
   const isCodexOfficialPreset =
     selectedCodexPreset !== null &&
+    selectedCodexPreset >= 0 &&
     codexProviderPresets[selectedCodexPreset]?.isOfficial === true;
 
   // 初始时从配置中同步 API Key（编辑模式）
@@ -347,8 +382,17 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
 
             {showPresets && !isCodex && (
               <div className="presets">
-                <label>一键导入（只需要填写 key）</label>
+                <label>选择配置类型</label>
                 <div className="preset-buttons">
+                  <button
+                    type="button"
+                    className={`preset-btn ${
+                      selectedPreset === -1 ? "selected" : ""
+                    }`}
+                    onClick={handleCustomClick}
+                  >
+                    自定义
+                  </button>
                   {providerPresets.map((preset, index) => {
                     return (
                       <button
@@ -364,13 +408,34 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                     );
                   })}
                 </div>
+                {selectedPreset === -1 && (
+                  <small className="field-hint" style={{ marginTop: "8px", display: "block" }}>
+                    手动配置供应商，需要填写完整的配置信息
+                  </small>
+                )}
+                {selectedPreset !== -1 && selectedPreset !== null && (
+                  <small className="field-hint" style={{ marginTop: "8px", display: "block" }}>
+                    {isOfficialPreset 
+                      ? "Claude 官方登录，不需要填写 API Key" 
+                      : "使用预设配置，只需填写 API Key"}
+                  </small>
+                )}
               </div>
             )}
 
             {showPresets && isCodex && (
               <div className="presets">
-                <label>一键导入（只需要填写 key）</label>
+                <label>选择配置类型</label>
                 <div className="preset-buttons">
+                  <button
+                    type="button"
+                    className={`preset-btn ${
+                      selectedCodexPreset === -1 ? "selected" : ""
+                    }`}
+                    onClick={handleCodexCustomClick}
+                  >
+                    自定义
+                  </button>
                   {codexProviderPresets.map((preset, index) => (
                     <button
                       key={index}
@@ -384,6 +449,18 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                     </button>
                   ))}
                 </div>
+                {selectedCodexPreset === -1 && (
+                  <small className="field-hint" style={{ marginTop: "8px", display: "block" }}>
+                    手动配置供应商，需要填写完整的配置信息
+                  </small>
+                )}
+                {selectedCodexPreset !== -1 && selectedCodexPreset !== null && (
+                  <small className="field-hint" style={{ marginTop: "8px", display: "block" }}>
+                    {isCodexOfficialPreset 
+                      ? "Codex 官方登录，不需要填写 API Key" 
+                      : "使用预设配置，只需填写 API Key"}
+                  </small>
+                )}
               </div>
             )}
 
@@ -448,7 +525,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                   }
                   disabled={isCodexOfficialPreset}
                   required={
-                    selectedCodexPreset !== null && !isCodexOfficialPreset
+                    selectedCodexPreset !== null && selectedCodexPreset >= 0 && !isCodexOfficialPreset
                   }
                   autoComplete="off"
                   style={
@@ -521,7 +598,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                     style={{ fontFamily: "monospace", fontSize: "14px" }}
                   />
                   <small className="field-hint">
-                    Codex config.toml 配置内容（可留空）
+                    Codex config.toml 配置内容
                   </small>
                 </div>
               </>
