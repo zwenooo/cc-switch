@@ -1,7 +1,7 @@
 [package]
 name = "cc-switch"
-version = "3.0.0"
-description = "Claude Code MCP 服务器配置管理工具"
+version = "3.1.1"
+description = "Claude Code & Codex 供应商配置管理工具"
 authors = ["Jason Young"]
 license = "MIT"
 repository = "https://github.com/jasonyoung/cc-switch"

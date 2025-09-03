@@ -5,6 +5,44 @@ All notable changes to CC Switch will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.1] - 2025-09-03
+
+### 🐛 Bug Fixes
+- Fixed the default codex config.toml to match the latest modifications
+- Improved provider configuration UX with custom option
+
+### 📝 Documentation
+- Updated README with latest information
+
+## [3.1.0] - 2025-09-01
+
+### ✨ New Features
+- **Added Codex application support** - Now supports both Claude Code and Codex configuration management
+  - Manage auth.json and config.toml for Codex
+  - Support for backup and restore operations
+  - Preset providers for Codex (Official, PackyCode)
+  - API Key auto-write to auth.json when using presets
+- **New UI components**
+  - App switcher with segmented control design
+  - Dual editor form for Codex configuration
+  - Pills-style app switcher with consistent button widths
+- **Enhanced configuration management**
+  - Multi-app config v2 structure (claude/codex)
+  - Automatic v1→v2 migration with backup
+  - OPENAI_API_KEY validation for non-official presets
+  - TOML syntax validation for config.toml
+
+### 🔧 Technical Improvements
+- Unified Tauri command API with app_type parameter
+- Backward compatibility for app/appType parameters
+- Added get_config_status/open_config_folder/open_external commands
+- Improved error handling for empty config.toml
+
+### 🐛 Bug Fixes
+- Fixed config path reporting and folder opening for Codex
+- Corrected default import behavior when main config is missing
+- Fixed non_snake_case warnings in commands.rs
+
 ## [3.0.0] - 2025-08-27
 
 ### 🚀 Major Changes
