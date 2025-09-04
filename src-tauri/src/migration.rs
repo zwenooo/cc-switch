@@ -142,7 +142,7 @@ pub fn migrate_copies_into_config(config: &mut MultiAppConfig) -> Result<bool, S
         let settings_path = crate::config::get_claude_settings_path();
         if settings_path.exists() {
             match crate::config::read_json_file::<Value>(&settings_path) {
-                Ok(val) => Some(("default".to_string(), val)),
+                Ok(val) => Some(("current".to_string(), val)),
                 Err(e) => {
                     log::warn!("读取 Claude live 配置失败: {}", e);
                     None
@@ -229,7 +229,7 @@ pub fn migrate_copies_into_config(config: &mut MultiAppConfig) -> Result<bool, S
                     } else {
                         String::new()
                     };
-                    Some(("default".to_string(), serde_json::json!({"auth": auth, "config": cfg})))
+                    Some(("current".to_string(), serde_json::json!({"auth": auth, "config": cfg})))
                 }
                 Err(e) => {
                     log::warn!("读取 Codex live auth.json 失败: {}", e);
