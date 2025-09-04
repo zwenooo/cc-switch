@@ -84,22 +84,7 @@ pub async fn add_provider(
         .ok_or_else(|| format!("应用类型不存在: {:?}", app_type))?;
 
     // 根据应用类型保存配置文件
-    match app_type {
-        AppType::Codex => {
-            // Codex: 保存两个文件
-            codex_config::save_codex_provider_config(
-                &provider.id,
-                &provider.name,
-                &provider.settings_config,
-            )?;
-        }
-        AppType::Claude => {
-            // Claude: 使用原有逻辑
-            use crate::config::{get_provider_config_path, write_json_file};
-            let config_path = get_provider_config_path(&provider.id, Some(&provider.name));
-            write_json_file(&config_path, &provider.settings_config)?;
-        }
-    }
+    // 不再写入供应商副本文件，仅更新内存配置（SSOT）
 
     manager.providers.insert(provider.id.clone(), provider);
 
@@ -138,40 +123,7 @@ pub async fn update_provider(
         return Err(format!("供应商不存在: {}", provider.id));
     }
 
-    // 如果名称改变了，需要处理配置文件
-    if let Some(old_provider) = manager.providers.get(&provider.id) {
-        if old_provider.name != provider.name {
-            // 删除旧配置文件
-            match app_type {
-                AppType::Codex => {
-                    codex_config::delete_codex_provider_config(&provider.id, &old_provider.name)
-                        .ok();
-                }
-                AppType::Claude => {
-                    use crate::config::{delete_file, get_provider_config_path};
-                    let old_config_path =
-                        get_provider_config_path(&provider.id, Some(&old_provider.name));
-                    delete_file(&old_config_path).ok();
-                }
-            }
-        }
-    }
-
-    // 保存新配置文件
-    match app_type {
-        AppType::Codex => {
-            codex_config::save_codex_provider_config(
-                &provider.id,
-                &provider.name,
-                &provider.settings_config,
-            )?;
-        }
-        AppType::Claude => {
-            use crate::config::{get_provider_config_path, write_json_file};
-            let config_path = get_provider_config_path(&provider.id, Some(&provider.name));
-            write_json_file(&config_path, &provider.settings_config)?;
-        }
-    }
+    // 不再写入供应商副本文件，仅更新内存配置（SSOT）
 
     manager.providers.insert(provider.id.clone(), provider);
 
