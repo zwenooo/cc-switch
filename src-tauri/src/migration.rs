@@ -36,6 +36,24 @@ fn next_unique_id(existing: &HashSet<String>, base: &str) -> String {
     format!("{}-dup", base)
 }
 
+fn extract_claude_api_key(value: &Value) -> Option<String> {
+    value
+        .get("env")
+        .and_then(|env| env.get("ANTHROPIC_AUTH_TOKEN"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+}
+
+fn extract_codex_api_key(value: &Value) -> Option<String> {
+    value
+        .get("auth")
+        .and_then(|auth| auth.get("OPENAI_API_KEY").or_else(|| auth.get("openai_api_key")))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+}
+
+// 去重策略：name + 原始 key 直接比较（不做哈希）
+
 fn scan_claude_copies() -> Vec<(String, PathBuf, Value)> {
     let mut items = Vec::new();
     let dir = get_claude_config_dir();
@@ -153,21 +171,27 @@ pub fn migrate_copies_into_config(config: &mut MultiAppConfig) -> Result<bool, S
         }
     };
 
-    // 合并：Claude（优先 live，然后副本）
+    // 合并：Claude（优先 live，然后副本） - 去重键: name + apiKey（直接比较）
     config.ensure_app(&AppType::Claude);
     let manager = config.get_manager_mut(&AppType::Claude).unwrap();
     let mut ids: HashSet<String> = manager.providers.keys().cloned().collect();
     let mut live_claude_id: Option<String> = None;
 
     if let Some((name, value)) = &live_claude {
-        if let Some((id, prov)) = manager
+        let cand_key = extract_claude_api_key(value);
+        let exist_id = manager
             .providers
-            .iter_mut()
-            .find(|(_, p)| p.name == *name)
-        {
-            log::info!("覆盖 Claude 供应商 '{}' 来自 live settings.json", name);
-            prov.settings_config = value.clone();
-            live_claude_id = Some(id.clone());
+            .iter()
+            .find_map(|(id, p)| {
+                let pk = extract_claude_api_key(&p.settings_config);
+                if p.name == *name && pk == cand_key { Some(id.clone()) } else { None }
+            });
+        if let Some(exist_id) = exist_id {
+            if let Some(prov) = manager.providers.get_mut(&exist_id) {
+                log::info!("合并到已存在 Claude 供应商 '{}' (by name+key)", name);
+                prov.settings_config = value.clone();
+                live_claude_id = Some(exist_id);
+            }
         } else {
             let id = next_unique_id(&ids, name);
             ids.insert(id.clone());
@@ -182,20 +206,24 @@ pub fn migrate_copies_into_config(config: &mut MultiAppConfig) -> Result<bool, S
         }
     }
     for (name, path, value) in claude_items.iter() {
-        if let Some((id, prov)) = manager
+        let cand_key = extract_claude_api_key(value);
+        let exist_id = manager
             .providers
-            .iter_mut()
-            .find(|(_, p)| p.name == *name)
-        {
-            // 重名：覆盖为副本内容
-            log::info!("覆盖 Claude 供应商 '{}' 来自 {}", name, path.display());
-            prov.settings_config = value.clone();
+            .iter()
+            .find_map(|(id, p)| {
+                let pk = extract_claude_api_key(&p.settings_config);
+                if p.name == *name && pk == cand_key { Some(id.clone()) } else { None }
+            });
+        if let Some(exist_id) = exist_id {
+            if let Some(prov) = manager.providers.get_mut(&exist_id) {
+                log::info!("覆盖 Claude 供应商 '{}' 来自 {} (by name+key)", name, path.display());
+                prov.settings_config = value.clone();
+            }
         } else {
-            // 新增
             let id = next_unique_id(&ids, name);
             ids.insert(id.clone());
             let provider = crate::provider::Provider::with_id(
-                id,
+                id.clone(),
                 name.clone(),
                 value.clone(),
                 None,
@@ -241,21 +269,27 @@ pub fn migrate_copies_into_config(config: &mut MultiAppConfig) -> Result<bool, S
         }
     };
 
-    // 合并：Codex（优先 live，然后副本）
+    // 合并：Codex（优先 live，然后副本） - 去重键: name + OPENAI_API_KEY（直接比较）
     config.ensure_app(&AppType::Codex);
     let manager = config.get_manager_mut(&AppType::Codex).unwrap();
     let mut ids: HashSet<String> = manager.providers.keys().cloned().collect();
     let mut live_codex_id: Option<String> = None;
 
     if let Some((name, value)) = &live_codex {
-        if let Some((id, prov)) = manager
+        let cand_key = extract_codex_api_key(value);
+        let exist_id = manager
             .providers
-            .iter_mut()
-            .find(|(_, p)| p.name == *name)
-        {
-            log::info!("覆盖 Codex 供应商 '{}' 来自 live auth/config", name);
-            prov.settings_config = value.clone();
-            live_codex_id = Some(id.clone());
+            .iter()
+            .find_map(|(id, p)| {
+                let pk = extract_codex_api_key(&p.settings_config);
+                if p.name == *name && pk == cand_key { Some(id.clone()) } else { None }
+            });
+        if let Some(exist_id) = exist_id {
+            if let Some(prov) = manager.providers.get_mut(&exist_id) {
+                log::info!("合并到已存在 Codex 供应商 '{}' (by name+key)", name);
+                prov.settings_config = value.clone();
+                live_codex_id = Some(exist_id);
+            }
         } else {
             let id = next_unique_id(&ids, name);
             ids.insert(id.clone());
@@ -270,18 +304,24 @@ pub fn migrate_copies_into_config(config: &mut MultiAppConfig) -> Result<bool, S
         }
     }
     for (name, authp, cfgp, value) in codex_items.iter() {
-        if let Some((_id, prov)) = manager
+        let cand_key = extract_codex_api_key(value);
+        let exist_id = manager
             .providers
-            .iter_mut()
-            .find(|(_, p)| p.name == *name)
-        {
-            log::info!("覆盖 Codex 供应商 '{}' 来自 {:?} / {:?}", name, authp, cfgp);
-            prov.settings_config = value.clone();
+            .iter()
+            .find_map(|(id, p)| {
+                let pk = extract_codex_api_key(&p.settings_config);
+                if p.name == *name && pk == cand_key { Some(id.clone()) } else { None }
+            });
+        if let Some(exist_id) = exist_id {
+            if let Some(prov) = manager.providers.get_mut(&exist_id) {
+                log::info!("覆盖 Codex 供应商 '{}' 来自 {:?}/{:?} (by name+key)", name, authp, cfgp);
+                prov.settings_config = value.clone();
+            }
         } else {
             let id = next_unique_id(&ids, name);
             ids.insert(id.clone());
             let provider = crate::provider::Provider::with_id(
-                id,
+                id.clone(),
                 name.clone(),
                 value.clone(),
                 None,
