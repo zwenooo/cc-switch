@@ -14,7 +14,7 @@
 - 当前：
   - 全局配置：`~/.cc-switch/config.json`（v2：`MultiAppConfig`，含多个 `ProviderManager`）。
   - 切换：依赖“供应商副本文件”（Claude：`~/.claude/settings-<name>.json`；Codex：`~/.codex/auth-<name>.json`、`config-<name>.toml`）→ 恢复到主配置。
-  - 启动：若检测到现有主配置，自动导入为 `default` 供应商。
+  - 启动：若检测到现有主配置，自动导入为 `current` 供应商。
 - 问题：存在“副本 ↔ 总配置”双来源，可能不一致；明文落盘有泄露风险。
 
 ## 3. 总体方案
