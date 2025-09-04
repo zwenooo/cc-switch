@@ -258,6 +258,14 @@ pub async fn switch_provider(
                     .map_err(|e| format!("创建 Codex 目录失败: {}", e))?;
             }
 
+            // 备份当前 live 文件到归档（单一数据源：以 cc-switch 配置为主，但保护用户手改历史）
+            let ts = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            let _ = crate::config::archive_file(ts, "codex", &auth_path);
+            let _ = crate::config::archive_file(ts, "codex", &config_path);
+
             // 写 auth.json（必需）
             let auth = provider
                 .settings_config
@@ -303,6 +311,13 @@ pub async fn switch_provider(
             if let Some(parent) = settings_path.parent() {
                 std::fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {}", e))?;
             }
+
+            // 备份当前 live 文件到归档
+            let ts = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            let _ = crate::config::archive_file(ts, "claude", &settings_path);
             write_json_file(&settings_path, &provider.settings_config)?;
         }
     }
