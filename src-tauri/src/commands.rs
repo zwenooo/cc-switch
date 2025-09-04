@@ -386,7 +386,7 @@ pub async fn import_default_config(
         .or_else(|| appType.as_deref().map(|s| s.into()))
         .unwrap_or(AppType::Claude);
 
-    // 若已存在 default 供应商，则直接返回，避免重复导入
+    // 若已存在 current 供应商，则直接返回，避免重复导入
     {
         let config = state
             .config
@@ -394,7 +394,7 @@ pub async fn import_default_config(
             .map_err(|e| format!("获取锁失败: {}", e))?;
 
         if let Some(manager) = config.get_manager(&app_type) {
-            if manager.get_all_providers().contains_key("default") {
+            if manager.get_all_providers().contains_key("current") {
                 return Ok(true);
             }
         }
@@ -434,8 +434,8 @@ pub async fn import_default_config(
 
     // 创建默认供应商
     let provider = Provider::with_id(
-        "default".to_string(),
-        "default".to_string(),
+        "current".to_string(),
+        "current".to_string(),
         settings_config,
         None,
     );
@@ -454,9 +454,9 @@ pub async fn import_default_config(
 
     manager.providers.insert(provider.id.clone(), provider);
 
-    // 如果没有当前供应商，设置为 default
+    // 如果没有当前供应商，设置为 current
     if manager.current.is_empty() {
-        manager.current = "default".to_string();
+        manager.current = "current".to_string();
     }
 
     // 保存配置
