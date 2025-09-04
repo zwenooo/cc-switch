@@ -137,10 +137,50 @@ pub fn migrate_copies_into_config(config: &mut MultiAppConfig) -> Result<bool, S
         let _ = archive_file(ts, "cc-switch", &app_cfg_path);
     }
 
-    // 合并：Claude
+    // 读取 live：Claude（settings.json / claude.json）
+    let live_claude: Option<(String, Value)> = {
+        let settings_path = crate::config::get_claude_settings_path();
+        if settings_path.exists() {
+            match crate::config::read_json_file::<Value>(&settings_path) {
+                Ok(val) => Some(("default".to_string(), val)),
+                Err(e) => {
+                    log::warn!("读取 Claude live 配置失败: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        }
+    };
+
+    // 合并：Claude（优先 live，然后副本）
     config.ensure_app(&AppType::Claude);
     let manager = config.get_manager_mut(&AppType::Claude).unwrap();
     let mut ids: HashSet<String> = manager.providers.keys().cloned().collect();
+    let mut live_claude_id: Option<String> = None;
+
+    if let Some((name, value)) = &live_claude {
+        if let Some((id, prov)) = manager
+            .providers
+            .iter_mut()
+            .find(|(_, p)| p.name == *name)
+        {
+            log::info!("覆盖 Claude 供应商 '{}' 来自 live settings.json", name);
+            prov.settings_config = value.clone();
+            live_claude_id = Some(id.clone());
+        } else {
+            let id = next_unique_id(&ids, name);
+            ids.insert(id.clone());
+            let provider = crate::provider::Provider::with_id(
+                id.clone(),
+                name.clone(),
+                value.clone(),
+                None,
+            );
+            manager.providers.insert(provider.id.clone(), provider);
+            live_claude_id = Some(id);
+        }
+    }
     for (name, path, value) in claude_items.iter() {
         if let Some((id, prov)) = manager
             .providers
@@ -164,10 +204,71 @@ pub fn migrate_copies_into_config(config: &mut MultiAppConfig) -> Result<bool, S
         }
     }
 
-    // 合并：Codex
+    // 读取 live：Codex（auth.json 必需，config.toml 可空）
+    let live_codex: Option<(String, Value)> = {
+        let auth_path = crate::codex_config::get_codex_auth_path();
+        let config_path = crate::codex_config::get_codex_config_path();
+        if auth_path.exists() {
+            match crate::config::read_json_file::<Value>(&auth_path) {
+                Ok(auth) => {
+                    let cfg = if config_path.exists() {
+                        match std::fs::read_to_string(&config_path) {
+                            Ok(s) => {
+                                if !s.trim().is_empty() {
+                                    if let Err(e) = toml::from_str::<toml::Table>(&s) {
+                                        log::warn!("Codex live config.toml 语法错误: {}", e);
+                                    }
+                                }
+                                s
+                            }
+                            Err(e) => {
+                                log::warn!("读取 Codex live config.toml 失败: {}", e);
+                                String::new()
+                            }
+                        }
+                    } else {
+                        String::new()
+                    };
+                    Some(("default".to_string(), serde_json::json!({"auth": auth, "config": cfg})))
+                }
+                Err(e) => {
+                    log::warn!("读取 Codex live auth.json 失败: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        }
+    };
+
+    // 合并：Codex（优先 live，然后副本）
     config.ensure_app(&AppType::Codex);
     let manager = config.get_manager_mut(&AppType::Codex).unwrap();
     let mut ids: HashSet<String> = manager.providers.keys().cloned().collect();
+    let mut live_codex_id: Option<String> = None;
+
+    if let Some((name, value)) = &live_codex {
+        if let Some((id, prov)) = manager
+            .providers
+            .iter_mut()
+            .find(|(_, p)| p.name == *name)
+        {
+            log::info!("覆盖 Codex 供应商 '{}' 来自 live auth/config", name);
+            prov.settings_config = value.clone();
+            live_codex_id = Some(id.clone());
+        } else {
+            let id = next_unique_id(&ids, name);
+            ids.insert(id.clone());
+            let provider = crate::provider::Provider::with_id(
+                id.clone(),
+                name.clone(),
+                value.clone(),
+                None,
+            );
+            manager.providers.insert(provider.id.clone(), provider);
+            live_codex_id = Some(id);
+        }
+    }
     for (name, authp, cfgp, value) in codex_items.iter() {
         if let Some((_id, prov)) = manager
             .providers
@@ -189,6 +290,24 @@ pub fn migrate_copies_into_config(config: &mut MultiAppConfig) -> Result<bool, S
         }
     }
 
+    // 若 current 为空，将 live 导入项设为 current
+    {
+        let manager = config.get_manager_mut(&AppType::Claude).unwrap();
+        if manager.current.is_empty() {
+            if let Some(id) = live_claude_id {
+                manager.current = id;
+            }
+        }
+    }
+    {
+        let manager = config.get_manager_mut(&AppType::Codex).unwrap();
+        if manager.current.is_empty() {
+            if let Some(id) = live_codex_id {
+                manager.current = id;
+            }
+        }
+    }
+
     // 归档副本文件
     for (_, p, _) in claude_items.into_iter() {
         let _ = archive_file(ts, "claude", &p);
@@ -206,4 +325,3 @@ pub fn migrate_copies_into_config(config: &mut MultiAppConfig) -> Result<bool, S
     fs::write(&marker, b"done").map_err(|e| format!("写入迁移标记失败: {}", e))?;
     Ok(true)
 }
-
