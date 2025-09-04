@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
-use crate::config::{get_provider_config_path, write_json_file};
+// SSOT 模式：不再写供应商副本文件
 
 /// 供应商结构体
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,11 +52,7 @@ impl Default for ProviderManager {
 impl ProviderManager {
     /// 添加供应商
     pub fn add_provider(&mut self, provider: Provider) -> Result<(), String> {
-        // 保存供应商配置到独立文件
-        let config_path = get_provider_config_path(&provider.id, Some(&provider.name));
-        write_json_file(&config_path, &provider.settings_config)?;
-
-        // 添加到管理器
+        // 仅添加到管理器（SSOT：统一由 cc-switch/config.json 持久化）
         self.providers.insert(provider.id.clone(), provider);
         Ok(())
     }
