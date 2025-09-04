@@ -6,7 +6,7 @@ use tauri_plugin_opener::OpenerExt;
 
 use crate::app_config::AppType;
 use crate::codex_config;
-use crate::config::{ConfigStatus, get_claude_settings_path, import_current_config_as_default};
+use crate::config::{ConfigStatus, get_claude_settings_path};
 use crate::provider::Provider;
 use crate::store::AppState;
 
@@ -269,54 +269,89 @@ pub async fn switch_provider(
         .ok_or_else(|| format!("供应商不存在: {}", id))?
         .clone();
 
-    // 根据应用类型执行切换
+    // SSOT 切换：先回填 live 配置到当前供应商，然后从内存写入目标主配置
     match app_type {
         AppType::Codex => {
-            // 备份当前配置（如果存在）
+            use serde_json::Value;
+
+            // 回填：读取 live（auth.json + config.toml）写回当前供应商 settings_config
             if !manager.current.is_empty() {
-                if let Some(current_provider) = manager.providers.get(&manager.current) {
-                    codex_config::backup_codex_config(&manager.current, &current_provider.name)?;
-                    log::info!("已备份当前 Codex 供应商配置: {}", current_provider.name);
+                let auth_path = codex_config::get_codex_auth_path();
+                let config_path = codex_config::get_codex_config_path();
+                if auth_path.exists() {
+                    let auth: Value = crate::config::read_json_file(&auth_path)?;
+                    let config_str = if config_path.exists() {
+                        std::fs::read_to_string(&config_path)
+                            .map_err(|e| format!("读取 config.toml 失败: {}", e))?
+                    } else {
+                        String::new()
+                    };
+
+                    let live = serde_json::json!({
+                        "auth": auth,
+                        "config": config_str,
+                    });
+
+                    if let Some(cur) = manager.providers.get_mut(&manager.current) {
+                        cur.settings_config = live;
+                    }
                 }
             }
 
-            // 恢复目标供应商配置
-            codex_config::restore_codex_provider_config(&id, &provider.name)?;
+            // 切换：从目标供应商 settings_config 写入主配置
+            let auth_path = codex_config::get_codex_auth_path();
+            let config_path = codex_config::get_codex_config_path();
+            if let Some(parent) = auth_path.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("创建 Codex 目录失败: {}", e))?;
+            }
+
+            // 写 auth.json（必需）
+            let auth = provider
+                .settings_config
+                .get("auth")
+                .ok_or_else(|| "目标供应商缺少 auth 配置".to_string())?;
+            crate::config::write_json_file(&auth_path, auth)?;
+
+            // 写 config.toml（可选）
+            if let Some(cfg) = provider.settings_config.get("config") {
+                if let Some(cfg_str) = cfg.as_str() {
+                    if !cfg_str.trim().is_empty() {
+                        toml::from_str::<toml::Table>(cfg_str)
+                            .map_err(|e| format!("config.toml 格式错误: {}", e))?;
+                    }
+                    std::fs::write(&config_path, cfg_str)
+                        .map_err(|e| format!("写入 config.toml 失败: {}", e))?;
+                } else {
+                    // 非字符串时，写空
+                    std::fs::write(&config_path, "")
+                        .map_err(|e| format!("写入空的 config.toml 失败: {}", e))?;
+                }
+            } else {
+                // 缺失则写空
+                std::fs::write(&config_path, "")
+                    .map_err(|e| format!("写入空的 config.toml 失败: {}", e))?;
+            }
         }
         AppType::Claude => {
-            // 使用原有的 Claude 切换逻辑
-            use crate::config::{
-                backup_config, copy_file, get_claude_settings_path, get_provider_config_path,
-            };
+            use crate::config::{read_json_file, write_json_file};
 
             let settings_path = get_claude_settings_path();
-            let provider_config_path = get_provider_config_path(&id, Some(&provider.name));
 
-            // 检查供应商配置文件是否存在
-            if !provider_config_path.exists() {
-                return Err(format!(
-                    "供应商配置文件不存在: {}",
-                    provider_config_path.display()
-                ));
-            }
-
-            // 如果当前有配置，先备份到当前供应商
+            // 回填：读取 live settings.json 写回当前供应商 settings_config
             if settings_path.exists() && !manager.current.is_empty() {
-                if let Some(current_provider) = manager.providers.get(&manager.current) {
-                    let current_provider_path =
-                        get_provider_config_path(&manager.current, Some(&current_provider.name));
-                    backup_config(&settings_path, &current_provider_path)?;
-                    log::info!("已备份当前供应商配置: {}", current_provider.name);
+                if let Ok(live) = read_json_file::<serde_json::Value>(&settings_path) {
+                    if let Some(cur) = manager.providers.get_mut(&manager.current) {
+                        cur.settings_config = live;
+                    }
                 }
             }
 
-            // 确保主配置父目录存在
+            // 切换：从目标供应商 settings_config 写入主配置
             if let Some(parent) = settings_path.parent() {
                 std::fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {}", e))?;
             }
-
-            // 复制新供应商配置到主配置
-            copy_file(&provider_config_path, &settings_path)?;
+            write_json_file(&settings_path, &provider.settings_config)?;
         }
     }
 
@@ -360,9 +395,35 @@ pub async fn import_default_config(
     }
 
     // 根据应用类型导入配置
+    // 读取当前主配置为默认供应商（不再写入副本文件）
     let settings_config = match app_type {
-        AppType::Codex => codex_config::import_current_codex_config()?,
-        AppType::Claude => import_current_config_as_default()?,
+        AppType::Codex => {
+            let auth_path = codex_config::get_codex_auth_path();
+            let config_path = codex_config::get_codex_config_path();
+            if !auth_path.exists() {
+                return Err("Codex 配置文件不存在".to_string());
+            }
+            let auth: serde_json::Value = crate::config::read_json_file::<serde_json::Value>(&auth_path)?;
+            let config_str = if config_path.exists() {
+                let s = std::fs::read_to_string(&config_path)
+                    .map_err(|e| format!("读取 config.toml 失败: {}", e))?;
+                if !s.trim().is_empty() {
+                    toml::from_str::<toml::Table>(&s)
+                        .map_err(|e| format!("config.toml 语法错误: {}", e))?;
+                }
+                s
+            } else {
+                String::new()
+            };
+            serde_json::json!({ "auth": auth, "config": config_str })
+        }
+        AppType::Claude => {
+            let settings_path = get_claude_settings_path();
+            if !settings_path.exists() {
+                return Err("Claude Code 配置文件不存在".to_string());
+            }
+            crate::config::read_json_file::<serde_json::Value>(&settings_path)?
+        }
     };
 
     // 创建默认供应商
@@ -383,21 +444,7 @@ pub async fn import_default_config(
         .get_manager_mut(&app_type)
         .ok_or_else(|| format!("应用类型不存在: {:?}", app_type))?;
 
-    // 根据应用类型保存配置文件
-    match app_type {
-        AppType::Codex => {
-            codex_config::save_codex_provider_config(
-                &provider.id,
-                &provider.name,
-                &provider.settings_config,
-            )?;
-        }
-        AppType::Claude => {
-            use crate::config::{get_provider_config_path, write_json_file};
-            let config_path = get_provider_config_path(&provider.id, Some(&provider.name));
-            write_json_file(&config_path, &provider.settings_config)?;
-        }
-    }
+    // 不再写入副本文件，仅更新内存配置
 
     manager.providers.insert(provider.id.clone(), provider);
 
