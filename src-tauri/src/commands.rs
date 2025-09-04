@@ -320,16 +320,16 @@ pub async fn switch_provider(
                         toml::from_str::<toml::Table>(cfg_str)
                             .map_err(|e| format!("config.toml 格式错误: {}", e))?;
                     }
-                    std::fs::write(&config_path, cfg_str)
+                    crate::config::write_text_file(&config_path, cfg_str)
                         .map_err(|e| format!("写入 config.toml 失败: {}", e))?;
                 } else {
                     // 非字符串时，写空
-                    std::fs::write(&config_path, "")
+                    crate::config::write_text_file(&config_path, "")
                         .map_err(|e| format!("写入空的 config.toml 失败: {}", e))?;
                 }
             } else {
                 // 缺失则写空
-                std::fs::write(&config_path, "")
+                crate::config::write_text_file(&config_path, "")
                     .map_err(|e| format!("写入空的 config.toml 失败: {}", e))?;
             }
         }

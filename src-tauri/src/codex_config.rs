@@ -79,8 +79,7 @@ pub fn save_codex_provider_config(
                 toml::from_str::<toml::Table>(config_str)
                     .map_err(|e| format!("config.toml 格式错误: {}", e))?;
             }
-            fs::write(&config_path, config_str)
-                .map_err(|e| format!("写入供应商 config.toml 失败: {}", e))?;
+            crate::config::write_text_file(&config_path, config_str)?;
         }
     }
 
@@ -126,7 +125,8 @@ pub fn restore_codex_provider_config(provider_id: &str, provider_name: &str) -> 
         log::info!("已恢复 Codex config.toml");
     } else {
         // 写入空文件
-        fs::write(&config_path, "").map_err(|e| format!("创建空的 config.toml 失败: {}", e))?;
+        crate::config::write_text_file(&config_path, "")
+            .map_err(|e| format!("创建空的 config.toml 失败: {}", e))?;
         log::info!("供应商 config.toml 缺失，已创建空文件");
     }
 

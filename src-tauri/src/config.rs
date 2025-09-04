@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 /// 获取 Claude Code 配置目录路径
@@ -79,7 +80,54 @@ pub fn write_json_file<T: Serialize>(path: &Path, data: &T) -> Result<(), String
     let json =
         serde_json::to_string_pretty(data).map_err(|e| format!("序列化 JSON 失败: {}", e))?;
 
-    fs::write(path, json).map_err(|e| format!("写入文件失败: {}", e))
+    atomic_write(path, json.as_bytes())
+}
+
+/// 原子写入文本文件（用于 TOML/纯文本）
+pub fn write_text_file(path: &Path, data: &str) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {}", e))?;
+    }
+    atomic_write(path, data.as_bytes())
+}
+
+/// 原子写入：写入临时文件后 rename 替换，避免半写状态
+pub fn atomic_write(path: &Path, data: &[u8]) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {}", e))?;
+    }
+
+    let parent = path.parent().ok_or_else(|| "无效的路径".to_string())?;
+    let mut tmp = parent.to_path_buf();
+    let file_name = path
+        .file_name()
+        .ok_or_else(|| "无效的文件名".to_string())?
+        .to_string_lossy()
+        .to_string();
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    tmp.push(format!("{}.tmp.{}", file_name, ts));
+
+    {
+        let mut f = fs::File::create(&tmp).map_err(|e| format!("创建临时文件失败: {}", e))?;
+        f.write_all(data)
+            .map_err(|e| format!("写入临时文件失败: {}", e))?;
+        f.flush().map_err(|e| format!("刷新临时文件失败: {}", e))?;
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(meta) = fs::metadata(path) {
+            let perm = meta.permissions().mode();
+            let _ = fs::set_permissions(&tmp, fs::Permissions::from_mode(perm));
+        }
+    }
+
+    fs::rename(&tmp, path).map_err(|e| format!("原子替换失败: {}", e))?;
+    Ok(())
 }
 
 /// 复制文件
@@ -132,10 +180,7 @@ pub fn import_current_config_as_default() -> Result<Value, String> {
     // 读取当前配置
     let settings_config: Value = read_json_file(&settings_path)?;
 
-    // 保存为 default 供应商
-    let default_provider_path = get_provider_config_path("default", Some("default"));
-    write_json_file(&default_provider_path, &settings_config)?;
-
-    log::info!("已导入当前配置为默认供应商");
+    // 不再写入供应商副本文件，这里仅返回读取到的配置
+    log::info!("已读取当前配置用于默认供应商导入");
     Ok(settings_config)
 }
