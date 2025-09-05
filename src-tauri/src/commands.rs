@@ -496,7 +496,7 @@ pub async fn import_default_config(
         .or_else(|| appType.as_deref().map(|s| s.into()))
         .unwrap_or(AppType::Claude);
 
-    // 若已存在 current 供应商，则直接返回，避免重复导入
+    // 仅当 providers 为空时才从 live 导入一条默认项
     {
         let config = state
             .config
@@ -504,7 +504,7 @@ pub async fn import_default_config(
             .map_err(|e| format!("获取锁失败: {}", e))?;
 
         if let Some(manager) = config.get_manager(&app_type) {
-            if manager.get_all_providers().contains_key("current") {
+            if !manager.get_all_providers().is_empty() {
                 return Ok(true);
             }
         }
@@ -542,10 +542,10 @@ pub async fn import_default_config(
         }
     };
 
-    // 创建默认供应商
+    // 创建默认供应商（仅首次初始化）
     let provider = Provider::with_id(
-        "current".to_string(),
-        "current".to_string(),
+        "default".to_string(),
+        "default".to_string(),
         settings_config,
         None,
     );
@@ -560,14 +560,9 @@ pub async fn import_default_config(
         .get_manager_mut(&app_type)
         .ok_or_else(|| format!("应用类型不存在: {:?}", app_type))?;
 
-    // 不再写入副本文件，仅更新内存配置
-
     manager.providers.insert(provider.id.clone(), provider);
-
-    // 如果没有当前供应商，设置为 current
-    if manager.current.is_empty() {
-        manager.current = "current".to_string();
-    }
+    // 设置当前供应商为默认项
+    manager.current = "default".to_string();
 
     // 保存配置
     drop(config); // 释放锁
