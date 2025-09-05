@@ -395,6 +395,12 @@ pub fn migrate_copies_into_config(config: &mut MultiAppConfig) -> Result<bool, S
     }
 
     // 标记完成
+    // 仅在迁移阶段执行一次全量去重（忽略大小写的名称 + API Key）
+    let removed = dedupe_config(config);
+    if removed > 0 {
+        log::info!("迁移阶段已去重重复供应商 {} 个", removed);
+    }
+
     fs::write(&marker, b"done").map_err(|e| format!("写入迁移标记失败: {}", e))?;
     Ok(true)
 }

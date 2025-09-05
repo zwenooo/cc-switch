@@ -66,11 +66,6 @@ pub fn run() {
                 // 确保两个 App 条目存在
                 config_guard.ensure_app(&app_config::AppType::Claude);
                 config_guard.ensure_app(&app_config::AppType::Codex);
-                // 启动去重：名称(忽略大小写)+API Key
-                let removed = migration::dedupe_config(&mut *config_guard);
-                if removed > 0 {
-                    log::info!("已去重重复供应商 {} 个", removed);
-                }
             }
 
             // 保存配置
