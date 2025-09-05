@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+// unused import removed
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -44,7 +44,7 @@ pub fn get_archive_root() -> PathBuf {
     get_app_config_dir().join("archive")
 }
 
-fn ensure_unique_path(mut dest: PathBuf) -> PathBuf {
+fn ensure_unique_path(dest: PathBuf) -> PathBuf {
     if !dest.exists() {
         return dest;
     }
@@ -209,27 +209,4 @@ pub fn get_claude_config_status() -> ConfigStatus {
     }
 }
 
-/// 备份配置文件
-pub fn backup_config(from: &Path, to: &Path) -> Result<(), String> {
-    if from.exists() {
-        copy_file(from, to)?;
-        log::info!("已备份配置文件: {} -> {}", from.display(), to.display());
-    }
-    Ok(())
-}
-
-/// 导入当前 Claude Code 配置为默认供应商
-pub fn import_current_config_as_default() -> Result<Value, String> {
-    let settings_path = get_claude_settings_path();
-
-    if !settings_path.exists() {
-        return Err("Claude Code 配置文件不存在".to_string());
-    }
-
-    // 读取当前配置
-    let settings_config: Value = read_json_file(&settings_path)?;
-
-    // 不再写入供应商副本文件，这里仅返回读取到的配置
-    log::info!("已读取当前配置用于默认供应商导入");
-    Ok(settings_config)
-}
+//（移除未使用的备份/导入函数，避免 dead_code 告警）

@@ -50,13 +50,6 @@ impl Default for ProviderManager {
 }
 
 impl ProviderManager {
-    /// 添加供应商
-    pub fn add_provider(&mut self, provider: Provider) -> Result<(), String> {
-        // 仅添加到管理器（SSOT：统一由 cc-switch/config.json 持久化）
-        self.providers.insert(provider.id.clone(), provider);
-        Ok(())
-    }
-
     /// 获取所有供应商
     pub fn get_all_providers(&self) -> &HashMap<String, Provider> {
         &self.providers
