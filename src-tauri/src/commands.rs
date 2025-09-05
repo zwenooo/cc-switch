@@ -92,11 +92,17 @@ pub async fn add_provider(
     drop(config); // 释放锁
     state.save()?;
 
-    // 若更新的是当前供应商，则同步写入 live 主配置
+    // 若更新的是当前供应商，则同步写入 live 主配置（写入前进行归档）
     if is_current {
         match app_type {
             AppType::Claude => {
                 let settings_path = crate::config::get_claude_settings_path();
+                // 归档当前 live 文件
+                let ts = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
+                let _ = crate::config::archive_file(ts, "claude", &settings_path);
                 crate::config::write_json_file(&settings_path, &provider.settings_config)?;
             }
             AppType::Codex => {
@@ -106,6 +112,13 @@ pub async fn add_provider(
                     std::fs::create_dir_all(parent)
                         .map_err(|e| format!("创建 Codex 目录失败: {}", e))?;
                 }
+                // 归档当前 live 文件
+                let ts = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
+                let _ = crate::config::archive_file(ts, "codex", &auth_path);
+                let _ = crate::config::archive_file(ts, "codex", &config_path);
                 let auth = provider
                     .settings_config
                     .get("auth")
@@ -164,11 +177,66 @@ pub async fn update_provider(
 
     // 不再写入供应商副本文件，仅更新内存配置（SSOT）
 
-    manager.providers.insert(provider.id.clone(), provider);
+    let is_current = manager.current == provider.id;
+
+    manager.providers.insert(provider.id.clone(), provider.clone());
 
     // 保存配置
     drop(config); // 释放锁
     state.save()?;
+
+    // 若更新的是当前供应商，则同步写入 live 主配置（写入前进行归档）
+    if is_current {
+        match app_type {
+            AppType::Claude => {
+                let settings_path = crate::config::get_claude_settings_path();
+                // 归档当前 live 文件
+                let ts = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
+                let _ = crate::config::archive_file(ts, "claude", &settings_path);
+                crate::config::write_json_file(&settings_path, &provider.settings_config)?;
+            }
+            AppType::Codex => {
+                let auth_path = crate::codex_config::get_codex_auth_path();
+                let config_path = crate::codex_config::get_codex_config_path();
+                if let Some(parent) = auth_path.parent() {
+                    std::fs::create_dir_all(parent)
+                        .map_err(|e| format!("创建 Codex 目录失败: {}", e))?;
+                }
+                // 归档当前 live 文件
+                let ts = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
+                let _ = crate::config::archive_file(ts, "codex", &auth_path);
+                let _ = crate::config::archive_file(ts, "codex", &config_path);
+
+                let auth = provider
+                    .settings_config
+                    .get("auth")
+                    .ok_or_else(|| "目标供应商缺少 auth 配置".to_string())?;
+                crate::config::write_json_file(&auth_path, auth)?;
+                if let Some(cfg) = provider.settings_config.get("config") {
+                    if let Some(cfg_str) = cfg.as_str() {
+                        if !cfg_str.trim().is_empty() {
+                            toml::from_str::<toml::Table>(cfg_str)
+                                .map_err(|e| format!("config.toml 格式错误: {}", e))?;
+                        }
+                        crate::config::write_text_file(&config_path, cfg_str)
+                            .map_err(|e| format!("写入 config.toml 失败: {}", e))?;
+                    } else {
+                        crate::config::write_text_file(&config_path, "")
+                            .map_err(|e| format!("写入空的 config.toml 失败: {}", e))?;
+                    }
+                } else {
+                    crate::config::write_text_file(&config_path, "")
+                        .map_err(|e| format!("写入空的 config.toml 失败: {}", e))?;
+                }
+            }
+        }
+    }
 
     Ok(true)
 }
@@ -215,8 +283,11 @@ pub async fn delete_provider(
         }
         AppType::Claude => {
             use crate::config::{delete_file, get_provider_config_path};
-            let config_path = get_provider_config_path(&id, Some(&provider.name));
-            delete_file(&config_path)?;
+            // 兼容历史两种命名：settings-{name}.json 与 settings-{id}.json
+            let by_name = get_provider_config_path(&id, Some(&provider.name));
+            let by_id = get_provider_config_path(&id, None);
+            delete_file(&by_name)?;
+            delete_file(&by_id)?;
         }
     }
 
