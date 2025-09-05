@@ -80,7 +80,7 @@ function App() {
     setProviders(loadedProviders);
     setCurrentProviderId(currentId);
 
-    // 如果供应商列表为空，尝试自动导入现有配置为"default"供应商
+    // 如果供应商列表为空，尝试自动从 live 导入一条默认供应商
     if (Object.keys(loadedProviders).length === 0) {
       await handleAutoImportDefault();
     }
@@ -154,18 +154,14 @@ function App() {
     }
   };
 
-  // 自动导入现有配置为"default"供应商
+  // 自动从 live 导入一条默认供应商（仅首次初始化时）
   const handleAutoImportDefault = async () => {
     try {
       const result = await window.api.importCurrentConfigAsDefault(activeApp);
 
       if (result.success) {
         await loadProviders();
-        showNotification(
-          "已自动导入现有配置为 default 供应商",
-          "success",
-          3000,
-        );
+        showNotification("已从现有配置创建默认供应商", "success", 3000);
       }
       // 如果导入失败（比如没有现有配置），静默处理，不显示错误
     } catch (error) {
@@ -183,10 +179,7 @@ function App() {
       <header className="app-header">
         <h1>CC Switch</h1>
         <div className="app-tabs">
-          <AppSwitcher
-            activeApp={activeApp}
-            onSwitch={setActiveApp}
-          />
+          <AppSwitcher activeApp={activeApp} onSwitch={setActiveApp} />
         </div>
         <div className="header-actions">
           <button className="add-btn" onClick={() => setIsAddModalOpen(true)}>

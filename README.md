@@ -69,7 +69,7 @@
   - 供应商副本：`auth-<name>.json`、`config-<name>.toml`
 - API Key 字段：`auth.json` 中使用 `OPENAI_API_KEY`
 - 切换策略：将选中供应商的副本覆盖到主配置（`auth.json`、`config.toml`）。若供应商没有 `config-*.toml`，会创建空的 `config.toml`。
-- 导入默认：若 `~/.codex/auth.json` 存在，会将当前主配置导入为 `default` 供应商；`config.toml` 不存在时按空处理。
+- 导入默认：仅当该应用无任何供应商时，从现有主配置创建一条默认项并设为当前；`config.toml` 不存在时按空处理。
 - 官方登录：可切换到预设“Codex 官方登录”，重启终端后可选择使用 ChatGPT 账号完成登录。
 
 ### Claude Code 说明
@@ -79,7 +79,7 @@
   - 供应商副本：`settings-<name>.json`
 - API Key 字段：`env.ANTHROPIC_AUTH_TOKEN`
 - 切换策略：将选中供应商的副本覆盖到主配置（`settings.json`/`claude.json`）。如当前有配置且存在“当前供应商”，会先将主配置备份回该供应商的副本文件。
-- 导入默认：若 `~/.claude/settings.json` 或 `~/.claude/claude.json` 存在，会将当前主配置导入为 `default` 供应商副本。
+- 导入默认：仅当该应用无任何供应商时，从现有主配置创建一条默认项并设为当前。
 - 官方登录：可切换到预设“Claude 官方登录”，重启终端后可使用 `/login` 完成登录。
 
 ### 迁移与备份

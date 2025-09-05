@@ -1,10 +1,12 @@
-use serde_json::Value;
-use std::fs;
+// unused imports removed
 use std::path::PathBuf;
 
 use crate::config::{
-    copy_file, delete_file, read_json_file, sanitize_provider_name, write_json_file,
+    atomic_write, delete_file, sanitize_provider_name, write_json_file, write_text_file,
 };
+use std::fs;
+use std::path::Path;
+use serde_json::Value;
 
 /// 获取 Codex 配置目录路径
 pub fn get_codex_config_dir() -> PathBuf {
@@ -36,57 +38,6 @@ pub fn get_codex_provider_paths(
     (auth_path, config_path)
 }
 
-/// 备份 Codex 当前配置
-pub fn backup_codex_config(provider_id: &str, provider_name: &str) -> Result<(), String> {
-    let auth_path = get_codex_auth_path();
-    let config_path = get_codex_config_path();
-    let (backup_auth_path, backup_config_path) =
-        get_codex_provider_paths(provider_id, Some(provider_name));
-
-    // 备份 auth.json
-    if auth_path.exists() {
-        copy_file(&auth_path, &backup_auth_path)?;
-        log::info!("已备份 Codex auth.json: {}", backup_auth_path.display());
-    }
-
-    // 备份 config.toml
-    if config_path.exists() {
-        copy_file(&config_path, &backup_config_path)?;
-        log::info!("已备份 Codex config.toml: {}", backup_config_path.display());
-    }
-
-    Ok(())
-}
-
-/// 保存 Codex 供应商配置副本
-pub fn save_codex_provider_config(
-    provider_id: &str,
-    provider_name: &str,
-    settings_config: &Value,
-) -> Result<(), String> {
-    let (auth_path, config_path) = get_codex_provider_paths(provider_id, Some(provider_name));
-
-    // 保存 auth.json
-    if let Some(auth) = settings_config.get("auth") {
-        write_json_file(&auth_path, auth)?;
-    }
-
-    // 保存 config.toml
-    if let Some(config) = settings_config.get("config") {
-        if let Some(config_str) = config.as_str() {
-            // 若非空则进行 TOML 语法校验
-            if !config_str.trim().is_empty() {
-                toml::from_str::<toml::Table>(config_str)
-                    .map_err(|e| format!("config.toml 格式错误: {}", e))?;
-            }
-            fs::write(&config_path, config_str)
-                .map_err(|e| format!("写入供应商 config.toml 失败: {}", e))?;
-        }
-    }
-
-    Ok(())
-}
-
 /// 删除 Codex 供应商配置文件
 pub fn delete_codex_provider_config(provider_id: &str, provider_name: &str) -> Result<(), String> {
     let (auth_path, config_path) = get_codex_provider_paths(provider_id, Some(provider_name));
@@ -97,76 +48,92 @@ pub fn delete_codex_provider_config(provider_id: &str, provider_name: &str) -> R
     Ok(())
 }
 
-/// 从 Codex 供应商配置副本恢复到主配置
-pub fn restore_codex_provider_config(provider_id: &str, provider_name: &str) -> Result<(), String> {
-    let (provider_auth_path, provider_config_path) =
-        get_codex_provider_paths(provider_id, Some(provider_name));
+//（移除未使用的备份/保存/恢复/导入函数，避免 dead_code 告警）
+
+/// 原子写 Codex 的 `auth.json` 与 `config.toml`，在第二步失败时回滚第一步
+pub fn write_codex_live_atomic(auth: &Value, config_text_opt: Option<&str>) -> Result<(), String> {
     let auth_path = get_codex_auth_path();
     let config_path = get_codex_config_path();
 
-    // 确保目录存在
     if let Some(parent) = auth_path.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("创建 Codex 目录失败: {}", e))?;
+        std::fs::create_dir_all(parent).map_err(|e| format!("创建 Codex 目录失败: {}", e))?;
     }
 
-    // 复制 auth.json（必需）
-    if provider_auth_path.exists() {
-        copy_file(&provider_auth_path, &auth_path)?;
-        log::info!("已恢复 Codex auth.json");
+    // 读取旧内容用于回滚
+    let old_auth = if auth_path.exists() {
+        Some(fs::read(&auth_path).map_err(|e| format!("读取旧 auth.json 失败: {}", e))?)
     } else {
-        return Err(format!(
-            "供应商 auth.json 不存在: {}",
-            provider_auth_path.display()
-        ));
+        None
+    };
+    let _old_config = if config_path.exists() {
+        Some(fs::read(&config_path).map_err(|e| format!("读取旧 config.toml 失败: {}", e))?)
+    } else {
+        None
+    };
+
+    // 准备写入内容
+    let cfg_text = match config_text_opt {
+        Some(s) => s.to_string(),
+        None => String::new(),
+    };
+    if !cfg_text.trim().is_empty() {
+        toml::from_str::<toml::Table>(&cfg_text).map_err(|e| format!("config.toml 格式错误: {}", e))?;
     }
 
-    // 复制 config.toml（可选，允许为空；不存在则创建空文件以保持一致性）
-    if provider_config_path.exists() {
-        copy_file(&provider_config_path, &config_path)?;
-        log::info!("已恢复 Codex config.toml");
-    } else {
-        // 写入空文件
-        fs::write(&config_path, "").map_err(|e| format!("创建空的 config.toml 失败: {}", e))?;
-        log::info!("供应商 config.toml 缺失，已创建空文件");
+    // 第一步：写 auth.json
+    write_json_file(&auth_path, auth)?;
+
+    // 第二步：写 config.toml（失败则回滚 auth.json）
+    if let Err(e) = write_text_file(&config_path, &cfg_text) {
+        // 回滚 auth.json
+        if let Some(bytes) = old_auth {
+            let _ = atomic_write(&auth_path, &bytes);
+        } else {
+            let _ = delete_file(&auth_path);
+        }
+        return Err(e);
     }
 
     Ok(())
 }
 
-/// 导入当前 Codex 配置为默认供应商
-pub fn import_current_codex_config() -> Result<Value, String> {
-    let auth_path = get_codex_auth_path();
-    let config_path = get_codex_config_path();
-
-    // 行为放宽：仅要求 auth.json 存在；config.toml 可缺失
-    if !auth_path.exists() {
-        return Err("Codex 配置文件不存在".to_string());
-    }
-
-    // 读取 auth.json
-    let auth = read_json_file::<Value>(&auth_path)?;
-
-    // 读取 config.toml（允许不存在或读取失败时为空）
-    let config_str = if config_path.exists() {
-        let s = fs::read_to_string(&config_path)
-            .map_err(|e| format!("读取 config.toml 失败: {}", e))?;
-        if !s.trim().is_empty() {
-            toml::from_str::<toml::Table>(&s)
-                .map_err(|e| format!("config.toml 语法错误: {}", e))?;
-        }
-        s
+/// 读取 `~/.codex/config.toml`，若不存在返回空字符串
+pub fn read_codex_config_text() -> Result<String, String> {
+    let path = get_codex_config_path();
+    if path.exists() {
+        std::fs::read_to_string(&path).map_err(|e| format!("读取 config.toml 失败: {}", e))
     } else {
-        String::new()
-    };
+        Ok(String::new())
+    }
+}
 
-    // 组合成完整配置
-    let settings_config = serde_json::json!({
-        "auth": auth,
-        "config": config_str
-    });
+/// 从给定路径读取 config.toml 文本（路径存在时）；路径不存在则返回空字符串
+pub fn read_config_text_from_path(path: &Path) -> Result<String, String> {
+    if path.exists() {
+        std::fs::read_to_string(path).map_err(|e| format!("读取 {} 失败: {}", path.display(), e))
+    } else {
+        Ok(String::new())
+    }
+}
 
-    // 保存为默认供应商副本
-    save_codex_provider_config("default", "default", &settings_config)?;
+/// 对非空的 TOML 文本进行语法校验
+pub fn validate_config_toml(text: &str) -> Result<(), String> {
+    if text.trim().is_empty() {
+        return Ok(());
+    }
+    toml::from_str::<toml::Table>(text).map(|_| ()).map_err(|e| format!("config.toml 语法错误: {}", e))
+}
 
-    Ok(settings_config)
+/// 读取并校验 `~/.codex/config.toml`，返回文本（可能为空）
+pub fn read_and_validate_codex_config_text() -> Result<String, String> {
+    let s = read_codex_config_text()?;
+    validate_config_toml(&s)?;
+    Ok(s)
+}
+
+/// 从指定路径读取并校验 config.toml，返回文本（可能为空）
+pub fn read_and_validate_config_from_path(path: &Path) -> Result<String, String> {
+    let s = read_config_text_from_path(path)?;
+    validate_config_toml(&s)?;
+    Ok(s)
 }

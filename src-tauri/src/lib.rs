@@ -4,6 +4,7 @@ mod commands;
 mod config;
 mod provider;
 mod store;
+mod migration;
 
 use store::AppState;
 use tauri::Manager;
@@ -55,48 +56,16 @@ pub fn run() {
             // 初始化应用状态（仅创建一次，并在本函数末尾注入 manage）
             let app_state = AppState::new();
 
-            // 如果没有供应商且存在 Claude Code 配置，自动导入
+            // 首次启动迁移：扫描副本文件，合并到 config.json，并归档副本；旧 config.json 先归档
             {
-                let mut config = app_state.config.lock().unwrap();
-
-                // 检查 Claude 供应商
-                let need_import = if let Some(claude_manager) =
-                    config.get_manager(&app_config::AppType::Claude)
-                {
-                    claude_manager.providers.is_empty()
-                } else {
-                    // 确保 Claude 应用存在
-                    config.ensure_app(&app_config::AppType::Claude);
-                    true
-                };
-
-                if need_import {
-                    let settings_path = config::get_claude_settings_path();
-                    if settings_path.exists() {
-                        log::info!("检测到 Claude Code 配置，自动导入为默认供应商");
-
-                        if let Ok(settings_config) = config::import_current_config_as_default() {
-                            if let Some(manager) =
-                                config.get_manager_mut(&app_config::AppType::Claude)
-                            {
-                                let provider = provider::Provider::with_id(
-                                    "default".to_string(),
-                                    "default".to_string(),
-                                    settings_config,
-                                    None,
-                                );
-
-                                if manager.add_provider(provider).is_ok() {
-                                    manager.current = "default".to_string();
-                                    log::info!("成功导入默认供应商");
-                                }
-                            }
-                        }
-                    }
+                let mut config_guard = app_state.config.lock().unwrap();
+                let migrated = migration::migrate_copies_into_config(&mut *config_guard)?;
+                if migrated {
+                    log::info!("已将副本文件导入到 config.json，并完成归档");
                 }
-
-                // 确保 Codex 应用存在
-                config.ensure_app(&app_config::AppType::Codex);
+                // 确保两个 App 条目存在
+                config_guard.ensure_app(&app_config::AppType::Claude);
+                config_guard.ensure_app(&app_config::AppType::Codex);
             }
 
             // 保存配置

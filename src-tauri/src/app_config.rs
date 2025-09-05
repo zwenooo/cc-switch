@@ -107,7 +107,16 @@ impl MultiAppConfig {
     /// 保存配置到文件
     pub fn save(&self) -> Result<(), String> {
         let config_path = get_app_config_path();
-        write_json_file(&config_path, self)
+        // 先备份旧版（若存在）到 ~/.cc-switch/config.json.bak，再写入新内容
+        if config_path.exists() {
+            let backup_path = get_app_config_dir().join("config.json.bak");
+            if let Err(e) = copy_file(&config_path, &backup_path) {
+                log::warn!("备份 config.json 到 .bak 失败: {}", e);
+            }
+        }
+
+        write_json_file(&config_path, self)?;
+        Ok(())
     }
 
     /// 获取指定应用的管理器
