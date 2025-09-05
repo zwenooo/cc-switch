@@ -97,12 +97,7 @@ pub async fn add_provider(
         match app_type {
             AppType::Claude => {
                 let settings_path = crate::config::get_claude_settings_path();
-                // 归档当前 live 文件
-                let ts = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs();
-                let _ = crate::config::archive_file(ts, "claude", &settings_path);
+                // 直接写入（不做归档）
                 crate::config::write_json_file(&settings_path, &provider.settings_config)?;
             }
             AppType::Codex => {
@@ -112,13 +107,7 @@ pub async fn add_provider(
                     std::fs::create_dir_all(parent)
                         .map_err(|e| format!("创建 Codex 目录失败: {}", e))?;
                 }
-                // 归档当前 live 文件
-                let ts = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs();
-                let _ = crate::config::archive_file(ts, "codex", &auth_path);
-                let _ = crate::config::archive_file(ts, "codex", &config_path);
+                // 直接写入（不做归档）
                 let auth = provider
                     .settings_config
                     .get("auth")
@@ -190,12 +179,7 @@ pub async fn update_provider(
         match app_type {
             AppType::Claude => {
                 let settings_path = crate::config::get_claude_settings_path();
-                // 归档当前 live 文件
-                let ts = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs();
-                let _ = crate::config::archive_file(ts, "claude", &settings_path);
+                // 直接写入（不做归档）
                 crate::config::write_json_file(&settings_path, &provider.settings_config)?;
             }
             AppType::Codex => {
@@ -205,13 +189,7 @@ pub async fn update_provider(
                     std::fs::create_dir_all(parent)
                         .map_err(|e| format!("创建 Codex 目录失败: {}", e))?;
                 }
-                // 归档当前 live 文件
-                let ts = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs();
-                let _ = crate::config::archive_file(ts, "codex", &auth_path);
-                let _ = crate::config::archive_file(ts, "codex", &config_path);
+                // 直接写入（不做归档）
 
                 let auth = provider
                     .settings_config
@@ -368,13 +346,7 @@ pub async fn switch_provider(
                     .map_err(|e| format!("创建 Codex 目录失败: {}", e))?;
             }
 
-            // 备份当前 live 文件到归档（单一数据源：以 cc-switch 配置为主，但保护用户手改历史）
-            let ts = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs();
-            let _ = crate::config::archive_file(ts, "codex", &auth_path);
-            let _ = crate::config::archive_file(ts, "codex", &config_path);
+            // 不做归档，直接写入
 
             // 写 auth.json（必需）
             let auth = provider
@@ -422,12 +394,7 @@ pub async fn switch_provider(
                 std::fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {}", e))?;
             }
 
-            // 备份当前 live 文件到归档
-            let ts = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs();
-            let _ = crate::config::archive_file(ts, "claude", &settings_path);
+            // 不做归档，直接写入
             write_json_file(&settings_path, &provider.settings_config)?;
         }
     }
