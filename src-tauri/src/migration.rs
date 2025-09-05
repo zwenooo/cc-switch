@@ -52,6 +52,10 @@ fn extract_codex_api_key(value: &Value) -> Option<String> {
         .map(|s| s.to_string())
 }
 
+fn norm_name(s: &str) -> String {
+    s.trim().to_lowercase()
+}
+
 // 去重策略：name + 原始 key 直接比较（不做哈希）
 
 fn scan_claude_copies() -> Vec<(String, PathBuf, Value)> {
@@ -184,7 +188,11 @@ pub fn migrate_copies_into_config(config: &mut MultiAppConfig) -> Result<bool, S
             .iter()
             .find_map(|(id, p)| {
                 let pk = extract_claude_api_key(&p.settings_config);
-                if p.name == *name && pk == cand_key { Some(id.clone()) } else { None }
+                if norm_name(&p.name) == norm_name(name) && pk == cand_key {
+                    Some(id.clone())
+                } else {
+                    None
+                }
             });
         if let Some(exist_id) = exist_id {
             if let Some(prov) = manager.providers.get_mut(&exist_id) {
@@ -212,7 +220,11 @@ pub fn migrate_copies_into_config(config: &mut MultiAppConfig) -> Result<bool, S
             .iter()
             .find_map(|(id, p)| {
                 let pk = extract_claude_api_key(&p.settings_config);
-                if p.name == *name && pk == cand_key { Some(id.clone()) } else { None }
+                if norm_name(&p.name) == norm_name(name) && pk == cand_key {
+                    Some(id.clone())
+                } else {
+                    None
+                }
             });
         if let Some(exist_id) = exist_id {
             if let Some(prov) = manager.providers.get_mut(&exist_id) {
@@ -282,7 +294,11 @@ pub fn migrate_copies_into_config(config: &mut MultiAppConfig) -> Result<bool, S
             .iter()
             .find_map(|(id, p)| {
                 let pk = extract_codex_api_key(&p.settings_config);
-                if p.name == *name && pk == cand_key { Some(id.clone()) } else { None }
+                if norm_name(&p.name) == norm_name(name) && pk == cand_key {
+                    Some(id.clone())
+                } else {
+                    None
+                }
             });
         if let Some(exist_id) = exist_id {
             if let Some(prov) = manager.providers.get_mut(&exist_id) {
@@ -310,7 +326,11 @@ pub fn migrate_copies_into_config(config: &mut MultiAppConfig) -> Result<bool, S
             .iter()
             .find_map(|(id, p)| {
                 let pk = extract_codex_api_key(&p.settings_config);
-                if p.name == *name && pk == cand_key { Some(id.clone()) } else { None }
+                if norm_name(&p.name) == norm_name(name) && pk == cand_key {
+                    Some(id.clone())
+                } else {
+                    None
+                }
             });
         if let Some(exist_id) = exist_id {
             if let Some(prov) = manager.providers.get_mut(&exist_id) {
@@ -364,4 +384,45 @@ pub fn migrate_copies_into_config(config: &mut MultiAppConfig) -> Result<bool, S
     // 标记完成
     fs::write(&marker, b"done").map_err(|e| format!("写入迁移标记失败: {}", e))?;
     Ok(true)
+}
+
+/// 启动时对现有配置做一次去重：按名称(忽略大小写)+API Key
+pub fn dedupe_config(config: &mut MultiAppConfig) -> usize {
+    use std::collections::HashMap as Map;
+
+    fn dedupe_one(
+        mgr: &mut crate::provider::ProviderManager,
+        extract_key: &dyn Fn(&Value) -> Option<String>,
+    ) -> usize {
+        let mut keep: Map<String, String> = Map::new(); // key -> id 保留
+        let mut remove: Vec<String> = Vec::new();
+        for (id, p) in mgr.providers.iter() {
+            let k = format!("{}|{}", norm_name(&p.name), extract_key(&p.settings_config).unwrap_or_default());
+            if let Some(exist_id) = keep.get(&k) {
+                // 若当前是正在使用的，则用当前替换之前的，反之丢弃当前
+                if *id == mgr.current {
+                    // 替换：把原先的标记为删除，改保留为当前
+                    remove.push(exist_id.clone());
+                    keep.insert(k, id.clone());
+                } else {
+                    remove.push(id.clone());
+                }
+            } else {
+                keep.insert(k, id.clone());
+            }
+        }
+        for id in remove.iter() {
+            mgr.providers.remove(id);
+        }
+        remove.len()
+    }
+
+    let mut removed = 0;
+    if let Some(mgr) = config.get_manager_mut(&crate::app_config::AppType::Claude) {
+        removed += dedupe_one(mgr, &extract_claude_api_key);
+    }
+    if let Some(mgr) = config.get_manager_mut(&crate::app_config::AppType::Codex) {
+        removed += dedupe_one(mgr, &extract_codex_api_key);
+    }
+    removed
 }
