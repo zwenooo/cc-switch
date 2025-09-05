@@ -179,10 +179,7 @@ function App() {
       <header className="app-header">
         <h1>CC Switch</h1>
         <div className="app-tabs">
-          <AppSwitcher
-            activeApp={activeApp}
-            onSwitch={setActiveApp}
-          />
+          <AppSwitcher activeApp={activeApp} onSwitch={setActiveApp} />
         </div>
         <div className="header-actions">
           <button className="add-btn" onClick={() => setIsAddModalOpen(true)}>
