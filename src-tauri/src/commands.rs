@@ -74,64 +74,51 @@ pub async fn add_provider(
         .or_else(|| appType.as_deref().map(|s| s.into()))
         .unwrap_or(AppType::Claude);
 
-    let mut config = state
-        .config
-        .lock()
-        .map_err(|e| format!("获取锁失败: {}", e))?;
+    // 读取当前是否是激活供应商（短锁）
+    let is_current = {
+        let config = state
+            .config
+            .lock()
+            .map_err(|e| format!("获取锁失败: {}", e))?;
+        let manager = config
+            .get_manager(&app_type)
+            .ok_or_else(|| format!("应用类型不存在: {:?}", app_type))?;
+        manager.current == provider.id
+    };
 
-    let manager = config
-        .get_manager_mut(&app_type)
-        .ok_or_else(|| format!("应用类型不存在: {:?}", app_type))?;
-
-    // 根据应用类型保存配置文件
-    // 不再写入供应商副本文件，仅更新内存配置（SSOT）
-    let is_current = manager.current == provider.id;
-    manager.providers.insert(provider.id.clone(), provider.clone());
-
-    // 保存配置
-    drop(config); // 释放锁
-    state.save()?;
-
-    // 若更新的是当前供应商，则同步写入 live 主配置（写入前进行归档）
+    // 若目标为当前供应商，则先写 live，成功后再落盘配置
     if is_current {
         match app_type {
             AppType::Claude => {
                 let settings_path = crate::config::get_claude_settings_path();
-                // 直接写入（不做归档）
                 crate::config::write_json_file(&settings_path, &provider.settings_config)?;
             }
             AppType::Codex => {
-                let auth_path = crate::codex_config::get_codex_auth_path();
-                let config_path = crate::codex_config::get_codex_config_path();
-                if let Some(parent) = auth_path.parent() {
-                    std::fs::create_dir_all(parent)
-                        .map_err(|e| format!("创建 Codex 目录失败: {}", e))?;
-                }
-                // 直接写入（不做归档）
                 let auth = provider
                     .settings_config
                     .get("auth")
                     .ok_or_else(|| "目标供应商缺少 auth 配置".to_string())?;
-                crate::config::write_json_file(&auth_path, auth)?;
-                if let Some(cfg) = provider.settings_config.get("config") {
-                    if let Some(cfg_str) = cfg.as_str() {
-                        if !cfg_str.trim().is_empty() {
-                            toml::from_str::<toml::Table>(cfg_str)
-                                .map_err(|e| format!("config.toml 格式错误: {}", e))?;
-                        }
-                        crate::config::write_text_file(&config_path, cfg_str)
-                            .map_err(|e| format!("写入 config.toml 失败: {}", e))?;
-                    } else {
-                        crate::config::write_text_file(&config_path, "")
-                            .map_err(|e| format!("写入空的 config.toml 失败: {}", e))?;
-                    }
-                } else {
-                    crate::config::write_text_file(&config_path, "")
-                        .map_err(|e| format!("写入空的 config.toml 失败: {}", e))?;
-                }
+                let cfg_text = provider
+                    .settings_config
+                    .get("config")
+                    .and_then(|v| v.as_str());
+                crate::codex_config::write_codex_live_atomic(auth, cfg_text)?;
             }
         }
     }
+
+    // 更新内存并保存配置
+    {
+        let mut config = state
+            .config
+            .lock()
+            .map_err(|e| format!("获取锁失败: {}", e))?;
+        let manager = config
+            .get_manager_mut(&app_type)
+            .ok_or_else(|| format!("应用类型不存在: {:?}", app_type))?;
+        manager.providers.insert(provider.id.clone(), provider.clone());
+    }
+    state.save()?;
 
     Ok(true)
 }
@@ -150,71 +137,54 @@ pub async fn update_provider(
         .or_else(|| appType.as_deref().map(|s| s.into()))
         .unwrap_or(AppType::Claude);
 
-    let mut config = state
-        .config
-        .lock()
-        .map_err(|e| format!("获取锁失败: {}", e))?;
-
-    let manager = config
-        .get_manager_mut(&app_type)
-        .ok_or_else(|| format!("应用类型不存在: {:?}", app_type))?;
-
-    // 检查供应商是否存在
-    if !manager.providers.contains_key(&provider.id) {
+    // 读取校验 & 是否当前（短锁）
+    let (exists, is_current) = {
+        let config = state
+            .config
+            .lock()
+            .map_err(|e| format!("获取锁失败: {}", e))?;
+        let manager = config
+            .get_manager(&app_type)
+            .ok_or_else(|| format!("应用类型不存在: {:?}", app_type))?;
+        (manager.providers.contains_key(&provider.id), manager.current == provider.id)
+    };
+    if !exists {
         return Err(format!("供应商不存在: {}", provider.id));
     }
 
-    // 不再写入供应商副本文件，仅更新内存配置（SSOT）
-
-    let is_current = manager.current == provider.id;
-
-    manager.providers.insert(provider.id.clone(), provider.clone());
-
-    // 保存配置
-    drop(config); // 释放锁
-    state.save()?;
-
-    // 若更新的是当前供应商，则同步写入 live 主配置（写入前进行归档）
+    // 若更新的是当前供应商，先写 live 成功再保存
     if is_current {
         match app_type {
             AppType::Claude => {
                 let settings_path = crate::config::get_claude_settings_path();
-                // 直接写入（不做归档）
                 crate::config::write_json_file(&settings_path, &provider.settings_config)?;
             }
             AppType::Codex => {
-                let auth_path = crate::codex_config::get_codex_auth_path();
-                let config_path = crate::codex_config::get_codex_config_path();
-                if let Some(parent) = auth_path.parent() {
-                    std::fs::create_dir_all(parent)
-                        .map_err(|e| format!("创建 Codex 目录失败: {}", e))?;
-                }
-                // 直接写入（不做归档）
-
                 let auth = provider
                     .settings_config
                     .get("auth")
                     .ok_or_else(|| "目标供应商缺少 auth 配置".to_string())?;
-                crate::config::write_json_file(&auth_path, auth)?;
-                if let Some(cfg) = provider.settings_config.get("config") {
-                    if let Some(cfg_str) = cfg.as_str() {
-                        if !cfg_str.trim().is_empty() {
-                            toml::from_str::<toml::Table>(cfg_str)
-                                .map_err(|e| format!("config.toml 格式错误: {}", e))?;
-                        }
-                        crate::config::write_text_file(&config_path, cfg_str)
-                            .map_err(|e| format!("写入 config.toml 失败: {}", e))?;
-                    } else {
-                        crate::config::write_text_file(&config_path, "")
-                            .map_err(|e| format!("写入空的 config.toml 失败: {}", e))?;
-                    }
-                } else {
-                    crate::config::write_text_file(&config_path, "")
-                        .map_err(|e| format!("写入空的 config.toml 失败: {}", e))?;
-                }
+                let cfg_text = provider
+                    .settings_config
+                    .get("config")
+                    .and_then(|v| v.as_str());
+                crate::codex_config::write_codex_live_atomic(auth, cfg_text)?;
             }
         }
     }
+
+    // 更新内存并保存
+    {
+        let mut config = state
+            .config
+            .lock()
+            .map_err(|e| format!("获取锁失败: {}", e))?;
+        let manager = config
+            .get_manager_mut(&app_type)
+            .ok_or_else(|| format!("应用类型不存在: {:?}", app_type))?;
+        manager.providers.insert(provider.id.clone(), provider.clone());
+    }
+    state.save()?;
 
     Ok(true)
 }
@@ -338,42 +308,16 @@ pub async fn switch_provider(
                 }
             }
 
-            // 切换：从目标供应商 settings_config 写入主配置
-            let auth_path = codex_config::get_codex_auth_path();
-            let config_path = codex_config::get_codex_config_path();
-            if let Some(parent) = auth_path.parent() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| format!("创建 Codex 目录失败: {}", e))?;
-            }
-
-            // 不做归档，直接写入
-
-            // 写 auth.json（必需）
+            // 切换：从目标供应商 settings_config 写入主配置（Codex 双文件原子+回滚）
             let auth = provider
                 .settings_config
                 .get("auth")
                 .ok_or_else(|| "目标供应商缺少 auth 配置".to_string())?;
-            crate::config::write_json_file(&auth_path, auth)?;
-
-            // 写 config.toml（可选）
-            if let Some(cfg) = provider.settings_config.get("config") {
-                if let Some(cfg_str) = cfg.as_str() {
-                    if !cfg_str.trim().is_empty() {
-                        toml::from_str::<toml::Table>(cfg_str)
-                            .map_err(|e| format!("config.toml 格式错误: {}", e))?;
-                    }
-                    crate::config::write_text_file(&config_path, cfg_str)
-                        .map_err(|e| format!("写入 config.toml 失败: {}", e))?;
-                } else {
-                    // 非字符串时，写空
-                    crate::config::write_text_file(&config_path, "")
-                        .map_err(|e| format!("写入空的 config.toml 失败: {}", e))?;
-                }
-            } else {
-                // 缺失则写空
-                crate::config::write_text_file(&config_path, "")
-                    .map_err(|e| format!("写入空的 config.toml 失败: {}", e))?;
-            }
+            let cfg_text = provider
+                .settings_config
+                .get("config")
+                .and_then(|v| v.as_str());
+            crate::codex_config::write_codex_live_atomic(auth, cfg_text)?;
         }
         AppType::Claude => {
             use crate::config::{read_json_file, write_json_file};

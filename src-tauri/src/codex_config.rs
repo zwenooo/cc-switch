@@ -2,8 +2,10 @@
 use std::path::PathBuf;
 
 use crate::config::{
-    delete_file, sanitize_provider_name,
+    atomic_write, delete_file, sanitize_provider_name, write_json_file, write_text_file,
 };
+use std::fs;
+use serde_json::Value;
 
 /// 获取 Codex 配置目录路径
 pub fn get_codex_config_dir() -> PathBuf {
@@ -46,3 +48,50 @@ pub fn delete_codex_provider_config(provider_id: &str, provider_name: &str) -> R
 }
 
 //（移除未使用的备份/保存/恢复/导入函数，避免 dead_code 告警）
+
+/// 原子写 Codex 的 `auth.json` 与 `config.toml`，在第二步失败时回滚第一步
+pub fn write_codex_live_atomic(auth: &Value, config_text_opt: Option<&str>) -> Result<(), String> {
+    let auth_path = get_codex_auth_path();
+    let config_path = get_codex_config_path();
+
+    if let Some(parent) = auth_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("创建 Codex 目录失败: {}", e))?;
+    }
+
+    // 读取旧内容用于回滚
+    let old_auth = if auth_path.exists() {
+        Some(fs::read(&auth_path).map_err(|e| format!("读取旧 auth.json 失败: {}", e))?)
+    } else {
+        None
+    };
+    let _old_config = if config_path.exists() {
+        Some(fs::read(&config_path).map_err(|e| format!("读取旧 config.toml 失败: {}", e))?)
+    } else {
+        None
+    };
+
+    // 准备写入内容
+    let cfg_text = match config_text_opt {
+        Some(s) => s.to_string(),
+        None => String::new(),
+    };
+    if !cfg_text.trim().is_empty() {
+        toml::from_str::<toml::Table>(&cfg_text).map_err(|e| format!("config.toml 格式错误: {}", e))?;
+    }
+
+    // 第一步：写 auth.json
+    write_json_file(&auth_path, auth)?;
+
+    // 第二步：写 config.toml（失败则回滚 auth.json）
+    if let Err(e) = write_text_file(&config_path, &cfg_text) {
+        // 回滚 auth.json
+        if let Some(bytes) = old_auth {
+            let _ = atomic_write(&auth_path, &bytes);
+        } else {
+            let _ = delete_file(&auth_path);
+        }
+        return Err(e);
+    }
+
+    Ok(())
+}
