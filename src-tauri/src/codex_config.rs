@@ -5,6 +5,7 @@ use crate::config::{
     atomic_write, delete_file, sanitize_provider_name, write_json_file, write_text_file,
 };
 use std::fs;
+use std::path::Path;
 use serde_json::Value;
 
 /// 获取 Codex 配置目录路径
@@ -94,4 +95,45 @@ pub fn write_codex_live_atomic(auth: &Value, config_text_opt: Option<&str>) -> R
     }
 
     Ok(())
+}
+
+/// 读取 `~/.codex/config.toml`，若不存在返回空字符串
+pub fn read_codex_config_text() -> Result<String, String> {
+    let path = get_codex_config_path();
+    if path.exists() {
+        std::fs::read_to_string(&path).map_err(|e| format!("读取 config.toml 失败: {}", e))
+    } else {
+        Ok(String::new())
+    }
+}
+
+/// 从给定路径读取 config.toml 文本（路径存在时）；路径不存在则返回空字符串
+pub fn read_config_text_from_path(path: &Path) -> Result<String, String> {
+    if path.exists() {
+        std::fs::read_to_string(path).map_err(|e| format!("读取 {} 失败: {}", path.display(), e))
+    } else {
+        Ok(String::new())
+    }
+}
+
+/// 对非空的 TOML 文本进行语法校验
+pub fn validate_config_toml(text: &str) -> Result<(), String> {
+    if text.trim().is_empty() {
+        return Ok(());
+    }
+    toml::from_str::<toml::Table>(text).map(|_| ()).map_err(|e| format!("config.toml 语法错误: {}", e))
+}
+
+/// 读取并校验 `~/.codex/config.toml`，返回文本（可能为空）
+pub fn read_and_validate_codex_config_text() -> Result<String, String> {
+    let s = read_codex_config_text()?;
+    validate_config_toml(&s)?;
+    Ok(s)
+}
+
+/// 从指定路径读取并校验 config.toml，返回文本（可能为空）
+pub fn read_and_validate_config_from_path(path: &Path) -> Result<String, String> {
+    let s = read_config_text_from_path(path)?;
+    validate_config_toml(&s)?;
+    Ok(s)
 }

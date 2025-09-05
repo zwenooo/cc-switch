@@ -387,21 +387,13 @@ pub async fn import_default_config(
     let settings_config = match app_type {
         AppType::Codex => {
             let auth_path = codex_config::get_codex_auth_path();
-            let config_path = codex_config::get_codex_config_path();
             if !auth_path.exists() {
                 return Err("Codex 配置文件不存在".to_string());
             }
             let auth: serde_json::Value = crate::config::read_json_file::<serde_json::Value>(&auth_path)?;
-            let config_str = if config_path.exists() {
-                let s = std::fs::read_to_string(&config_path)
-                    .map_err(|e| format!("读取 config.toml 失败: {}", e))?;
-                if !s.trim().is_empty() {
-                    toml::from_str::<toml::Table>(&s)
-                        .map_err(|e| format!("config.toml 语法错误: {}", e))?;
-                }
-                s
-            } else {
-                String::new()
+            let config_str = match crate::codex_config::read_and_validate_codex_config_text() {
+                Ok(s) => s,
+                Err(e) => return Err(e),
             };
             serde_json::json!({ "auth": auth, "config": config_str })
         }

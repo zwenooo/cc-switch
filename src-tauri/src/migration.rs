@@ -116,16 +116,16 @@ fn scan_codex_copies() -> Vec<(String, Option<PathBuf>, Option<PathBuf>, Value)>
         if let Some(authp) = auth_path {
             if let Ok(auth) = crate::config::read_json_file::<Value>(&authp) {
                 let config_str = if let Some(cfgp) = &config_path {
-                    fs::read_to_string(cfgp).unwrap_or_default()
+                    match crate::codex_config::read_and_validate_config_from_path(cfgp) {
+                        Ok(s) => s,
+                        Err(e) => {
+                            log::warn!("跳过无效 Codex config-{}.toml: {}", name, e);
+                            String::new()
+                        }
+                    }
                 } else {
                     String::new()
                 };
-                // 校验 TOML（若非空）
-                if !config_str.trim().is_empty() {
-                    if let Err(e) = toml::from_str::<toml::Table>(&config_str) {
-                        log::warn!("跳过无效 Codex config-{}.toml: {}", name, e);
-                    }
-                }
                 let settings = serde_json::json!({
                     "auth": auth,
                     "config": config_str,
@@ -247,27 +247,15 @@ pub fn migrate_copies_into_config(config: &mut MultiAppConfig) -> Result<bool, S
     // 读取 live：Codex（auth.json 必需，config.toml 可空）
     let live_codex: Option<(String, Value)> = {
         let auth_path = crate::codex_config::get_codex_auth_path();
-        let config_path = crate::codex_config::get_codex_config_path();
         if auth_path.exists() {
             match crate::config::read_json_file::<Value>(&auth_path) {
                 Ok(auth) => {
-                    let cfg = if config_path.exists() {
-                        match std::fs::read_to_string(&config_path) {
-                            Ok(s) => {
-                                if !s.trim().is_empty() {
-                                    if let Err(e) = toml::from_str::<toml::Table>(&s) {
-                                        log::warn!("Codex live config.toml 语法错误: {}", e);
-                                    }
-                                }
-                                s
-                            }
-                            Err(e) => {
-                                log::warn!("读取 Codex live config.toml 失败: {}", e);
-                                String::new()
-                            }
+                    let cfg = match crate::codex_config::read_and_validate_codex_config_text() {
+                        Ok(s) => s,
+                        Err(e) => {
+                            log::warn!("读取/校验 Codex live config.toml 失败: {}", e);
+                            String::new()
                         }
-                    } else {
-                        String::new()
                     };
                     Some(("default".to_string(), serde_json::json!({"auth": auth, "config": cfg})))
                 }
