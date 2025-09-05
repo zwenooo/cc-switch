@@ -10,23 +10,6 @@ use crate::config::{ConfigStatus, get_claude_settings_path};
 use crate::provider::Provider;
 use crate::store::AppState;
 
-fn norm_name(s: &str) -> String { s.trim().to_lowercase() }
-
-fn extract_key_for(app_type: &crate::app_config::AppType, settings: &serde_json::Value) -> Option<String> {
-    match app_type {
-        crate::app_config::AppType::Claude => settings
-            .get("env")
-            .and_then(|env| env.get("ANTHROPIC_AUTH_TOKEN"))
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string()),
-        crate::app_config::AppType::Codex => settings
-            .get("auth")
-            .and_then(|auth| auth.get("OPENAI_API_KEY").or_else(|| auth.get("openai_api_key")))
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string()),
-    }
-}
-
 /// 获取所有供应商
 #[tauri::command]
 pub async fn get_providers(
@@ -99,17 +82,6 @@ pub async fn add_provider(
     let manager = config
         .get_manager_mut(&app_type)
         .ok_or_else(|| format!("应用类型不存在: {:?}", app_type))?;
-
-    // 名称(忽略大小写)+Key 唯一性校验
-    let new_key = extract_key_for(&app_type, &provider.settings_config).unwrap_or_default();
-    let new_name = norm_name(&provider.name);
-    if manager.providers.iter().any(|(id, p)| {
-        *id != provider.id
-            && norm_name(&p.name) == new_name
-            && extract_key_for(&app_type, &p.settings_config).unwrap_or_default() == new_key
-    }) {
-        return Err("已存在同名(不区分大小写)且相同密钥的供应商".to_string());
-    }
 
     // 根据应用类型保存配置文件
     // 不再写入供应商副本文件，仅更新内存配置（SSOT）
@@ -201,17 +173,6 @@ pub async fn update_provider(
     // 检查供应商是否存在
     if !manager.providers.contains_key(&provider.id) {
         return Err(format!("供应商不存在: {}", provider.id));
-    }
-
-    // 名称(忽略大小写)+Key 唯一性校验（允许覆盖自身）
-    let new_key = extract_key_for(&app_type, &provider.settings_config).unwrap_or_default();
-    let new_name = norm_name(&provider.name);
-    if manager.providers.iter().any(|(id, p)| {
-        *id != provider.id
-            && norm_name(&p.name) == new_name
-            && extract_key_for(&app_type, &p.settings_config).unwrap_or_default() == new_key
-    }) {
-        return Err("已存在同名(不区分大小写)且相同密钥的供应商".to_string());
     }
 
     // 不再写入供应商副本文件，仅更新内存配置（SSOT）
