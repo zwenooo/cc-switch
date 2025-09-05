@@ -1,6 +1,6 @@
 use crate::app_config::{AppType, MultiAppConfig};
 use crate::config::{
-    archive_file, get_app_config_dir, get_app_config_path, get_claude_config_dir,
+    archive_file, delete_file, get_app_config_dir, get_app_config_path, get_claude_config_dir,
 };
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
@@ -370,14 +370,27 @@ pub fn migrate_copies_into_config(config: &mut MultiAppConfig) -> Result<bool, S
 
     // 归档副本文件
     for (_, p, _) in claude_items.into_iter() {
-        let _ = archive_file(ts, "claude", &p);
+        match archive_file(ts, "claude", &p) {
+            Ok(Some(_)) => {
+                let _ = delete_file(&p);
+            }
+            _ => {
+                // 归档失败则不要删除原文件，保守处理
+            }
+        }
     }
     for (_, ap, cp, _) in codex_items.into_iter() {
         if let Some(ap) = ap {
-            let _ = archive_file(ts, "codex", &ap);
+            match archive_file(ts, "codex", &ap) {
+                Ok(Some(_)) => { let _ = delete_file(&ap); }
+                _ => {}
+            }
         }
         if let Some(cp) = cp {
-            let _ = archive_file(ts, "codex", &cp);
+            match archive_file(ts, "codex", &cp) {
+                Ok(Some(_)) => { let _ = delete_file(&cp); }
+                _ => {}
+            }
         }
     }
 
