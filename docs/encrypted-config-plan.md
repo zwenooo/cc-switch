@@ -14,13 +14,13 @@
 - 当前：
   - 全局配置：`~/.cc-switch/config.json`（v2：`MultiAppConfig`，含多个 `ProviderManager`）。
   - 切换：依赖“供应商副本文件”（Claude：`~/.claude/settings-<name>.json`；Codex：`~/.codex/auth-<name>.json`、`config-<name>.toml`）→ 恢复到主配置。
-  - 启动：若检测到现有主配置，自动导入为 `current` 供应商。
+  - 启动：若对应 App 的供应商列表为空，可从现有主配置自动创建一条“默认项”并设为当前。
 - 问题：存在“副本 ↔ 总配置”双来源，可能不一致；明文落盘有泄露风险。
 
 ## 3. 总体方案
 
 - 以加密文件 `~/.cc-switch/config.enc.json` 替代明文存储；进程启动时解密一次加载到内存，后续以内存为准；保存时加密写盘。
-- 切换时：直接从内存 `Provider.settings_config` 写入目标应用主配置；切换前回填当前 live 配置到 `current` 供应商，保留外部修改。
+- 切换时：直接从内存 `Provider.settings_config` 写入目标应用主配置；切换前回填当前 live 配置到当前选中供应商（由 `manager.current` 指向），保留外部修改。
 - 明文兼容：若无加密文件，读取旧 `config.json`（含 v1→v2 迁移），首次保存写加密文件，并备份旧明文。
 - 旧文件清理：提供“可回滚归档”而非删除。扫描 `~/.cc-switch/config.json`（v1/v2）与 Claude/Codex 的历史副本文件，用户确认后移动到 `~/.cc-switch/archive/<ts>/`，生成 `manifest.json` 以便恢复；默认不做静默清理。
 
@@ -66,10 +66,10 @@
   - `MultiAppConfig::save()`：统一调用 `write_encrypted_config()`；若检测到旧 `config.json`，首次保存时备份为 `config.v1.backup.<ts>.json`（或保留为只读，视实现选择）。
 - 调整 `src-tauri/src/commands.rs::switch_provider`：
   - Claude：
-    1. 回填：若 `~/.claude/settings.json` 存在且 `current` 非空 → 读取 JSON，写回 `manager.providers[current].settings_config`。
+    1. 回填：若 `~/.claude/settings.json` 存在且存在当前指针 → 读取 JSON，写回 `manager.providers[manager.current].settings_config`。
     2. 切换：从目标 `provider.settings_config` 直接写 `~/.claude/settings.json`（确保父目录存在）。
   - Codex：
-    1. 回填：读取 `~/.codex/auth.json`（JSON）与 `~/.codex/config.toml`（字符串；非空做 TOML 校验）→ 合成为 `{auth, config}` → 写回 `manager.providers[current].settings_config`。
+    1. 回填：读取 `~/.codex/auth.json`（JSON）与 `~/.codex/config.toml`（字符串；非空做 TOML 校验）→ 合成为 `{auth, config}` → 写回 `manager.providers[manager.current].settings_config`。
     2. 切换：从目标 `provider.settings_config` 中取 `auth`（必需）与 `config`（可空）写入对应主配置（非空 `config` 校验 TOML）。
   - 更新 `manager.current = id`，`state.save()` → 触发加密保存。
 - 保留/清理：
@@ -80,7 +80,7 @@
 
 - 启动：`AppState::new()` → `MultiAppConfig::load()`（优先加密）→ 进程内持有解密后的配置。
 - 添加/编辑/删除：更新内存中的 `ProviderManager` → `state.save()`（加密写盘）。
-- 切换：回填 live → 以目标供应商内存配置写入主配置 → 更新 `current` → `state.save()`。
+- 切换：回填 live → 以目标供应商内存配置写入主配置 → 更新当前指针（`manager.current`）→ `state.save()`。
 - 迁移后提醒：若首次从旧明文迁移成功，弹出“发现旧配置，可归档”提示；用户可进入“存储与清理”页面查看并执行归档。
 
 ## 8. 迁移策略
