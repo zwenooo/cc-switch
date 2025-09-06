@@ -1,5 +1,5 @@
 import { AppType } from "../lib/tauri-api";
-import "./AppSwitcher.css";
+import { Terminal, Code2 } from "lucide-react";
 
 interface AppSwitcherProps {
   activeApp: AppType;
@@ -13,22 +13,30 @@ export function AppSwitcher({ activeApp, onSwitch }: AppSwitcherProps) {
   };
 
   return (
-    <div className="switcher-pills">
+    <div className="inline-flex bg-[var(--color-bg-tertiary)] rounded-lg p-1 gap-1">
       <button
         type="button"
-        className={`switcher-pill ${activeApp === "claude" ? "active" : ""}`}
         onClick={() => handleSwitch("claude")}
+        className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+          activeApp === "claude"
+            ? "bg-white text-[var(--color-text-primary)] shadow-sm"
+            : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-white/50"
+        }`}
       >
-        <span className="pill-dot" />
+        <Code2 size={16} />
         <span>Claude Code</span>
       </button>
-      <div className="pills-divider" />
+
       <button
         type="button"
-        className={`switcher-pill ${activeApp === "codex" ? "active" : ""}`}
         onClick={() => handleSwitch("codex")}
+        className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+          activeApp === "codex"
+            ? "bg-white text-[var(--color-text-primary)] shadow-sm"
+            : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-white/50"
+        }`}
       >
-        <span className="pill-dot" />
+        <Terminal size={16} />
         <span>Codex</span>
       </button>
     </div>
