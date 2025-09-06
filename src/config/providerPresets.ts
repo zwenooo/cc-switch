@@ -63,6 +63,18 @@ export const providerPresets: ProviderPreset[] = [
     },
   },
   {
+    name: "魔搭",
+    websiteUrl: "https://modelscope.cn",
+    settingsConfig: {
+      "env": {
+        ANTHROPIC_AUTH_TOKEN: "ms-your-api-key-here",
+        ANTHROPIC_BASE_URL: "https://api-inference.modelscope.cn",
+        ANTHROPIC_MODEL: "ZhipuAI/GLM-4.5",
+        ANTHROPIC_SMALL_FAST_MODEL: "ZhipuAI/GLM-4.5"
+  },
+    },
+  },
+  {
     name: "PackyCode",
     websiteUrl: "https://www.packycode.com",
     settingsConfig: {
