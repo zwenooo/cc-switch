@@ -1,13 +1,6 @@
 import React from "react";
 import { Provider } from "../types";
-import {
-  Play,
-  Edit3,
-  Trash2,
-  ExternalLink,
-  CheckCircle2,
-  Users,
-} from "lucide-react";
+import { Play, Edit3, Trash2, CheckCircle2, Users } from "lucide-react";
 
 interface ProviderListProps {
   providers: Record<string, Provider>;
@@ -24,14 +17,20 @@ const ProviderList: React.FC<ProviderListProps> = ({
   onDelete,
   onEdit,
 }) => {
-  // 提取API地址
+  // 提取API地址（兼容不同供应商配置：Claude env / Codex TOML）
   const getApiUrl = (provider: Provider): string => {
     try {
-      const config = provider.settingsConfig;
-      if (config?.env?.ANTHROPIC_BASE_URL) {
-        return config.env.ANTHROPIC_BASE_URL;
+      const cfg = provider.settingsConfig;
+      // Claude/Anthropic: 从 env 中读取
+      if (cfg?.env?.ANTHROPIC_BASE_URL) {
+        return cfg.env.ANTHROPIC_BASE_URL;
       }
-      return "未设置";
+      // Codex: 从 TOML 配置中解析 base_url
+      if (typeof cfg?.config === "string" && cfg.config.includes("base_url")) {
+        const match = cfg.config.match(/base_url\s*=\s*"([^"]+)"/);
+        if (match && match[1]) return match[1];
+      }
+      return "未配置官网地址";
     } catch {
       return "配置错误";
     }
@@ -88,21 +87,20 @@ const ProviderList: React.FC<ProviderListProps> = ({
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2 text-sm text-[var(--color-text-secondary)]">
+                    <div className="flex items-center gap-2 text-sm">
                       {provider.websiteUrl ? (
                         <button
                           onClick={(e) => {
                             e.preventDefault();
                             handleUrlClick(provider.websiteUrl!);
                           }}
-                          className="inline-flex items-center gap-1 hover:text-[var(--color-primary)] transition-colors"
+                          className="inline-flex items-center gap-1 text-[var(--color-primary)] hover:opacity-90 transition-colors"
                           title={`访问 ${provider.websiteUrl}`}
                         >
-                          <ExternalLink size={14} />
                           {provider.websiteUrl}
                         </button>
                       ) : (
-                        <span className="font-mono" title={apiUrl}>
+                        <span className="text-[var(--color-text-secondary)]" title={apiUrl}>
                           {apiUrl}
                         </span>
                       )}

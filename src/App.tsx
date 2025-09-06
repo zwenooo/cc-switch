@@ -218,7 +218,7 @@ function App() {
       {/* Linear 风格的顶部导航 */}
       <header className="bg-white border-b border-[var(--color-border)] px-6 py-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">
+          <h1 className="text-xl font-semibold text-[var(--color-primary)]">
             CC Switch
           </h1>
 
