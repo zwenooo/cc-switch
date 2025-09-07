@@ -35,6 +35,9 @@ declare global {
       onProviderSwitched: (
         callback: (data: { appType: string; providerId: string }) => void,
       ) => Promise<UnlistenFn>;
+      getSettings: () => Promise<any>;
+      saveSettings: (settings: any) => Promise<boolean>;
+      checkForUpdates: () => Promise<void>;
     };
     platform: {
       isMac: boolean;

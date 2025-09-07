@@ -194,6 +194,35 @@ export const tauriAPI = {
     console.warn("selectConfigFile 在 Tauri 版本中暂不支持");
     return null;
   },
+
+  // 获取设置
+  getSettings: async (): Promise<any> => {
+    try {
+      return await invoke("get_settings");
+    } catch (error) {
+      console.error("获取设置失败:", error);
+      return { showInDock: true };
+    }
+  },
+
+  // 保存设置
+  saveSettings: async (settings: any): Promise<boolean> => {
+    try {
+      return await invoke("save_settings", { settings });
+    } catch (error) {
+      console.error("保存设置失败:", error);
+      return false;
+    }
+  },
+
+  // 检查更新
+  checkForUpdates: async (): Promise<void> => {
+    try {
+      await invoke("check_for_updates");
+    } catch (error) {
+      console.error("检查更新失败:", error);
+    }
+  },
 };
 
 // 创建全局 API 对象，兼容现有代码

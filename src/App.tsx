@@ -6,7 +6,8 @@ import AddProviderModal from "./components/AddProviderModal";
 import EditProviderModal from "./components/EditProviderModal";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { AppSwitcher } from "./components/AppSwitcher";
-import { Plus } from "lucide-react";
+import SettingsModal from "./components/SettingsModal";
+import { Plus, Settings } from "lucide-react";
 
 function App() {
   const [activeApp, setActiveApp] = useState<AppType>("claude");
@@ -31,6 +32,7 @@ function App() {
     message: string;
     onConfirm: () => void;
   } | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 设置通知的辅助函数
@@ -218,9 +220,18 @@ function App() {
       {/* Linear 风格的顶部导航 */}
       <header className="bg-white border-b border-[var(--color-border)] px-6 py-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-[var(--color-primary)]">
-            CC Switch
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-semibold text-[var(--color-primary)]">
+              CC Switch
+            </h1>
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className="p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] hover:bg-[var(--color-bg-tertiary)] rounded-md transition-all"
+              title="设置"
+            >
+              <Settings size={18} />
+            </button>
+          </div>
 
           <div className="flex items-center gap-4">
             <AppSwitcher activeApp={activeApp} onSwitch={setActiveApp} />
@@ -315,6 +326,12 @@ function App() {
           message={confirmDialog.message}
           onConfirm={confirmDialog.onConfirm}
           onCancel={() => setConfirmDialog(null)}
+        />
+      )}
+
+      {isSettingsOpen && (
+        <SettingsModal
+          onClose={() => setIsSettingsOpen(false)}
         />
       )}
     </div>
