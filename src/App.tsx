@@ -330,9 +330,7 @@ function App() {
       )}
 
       {isSettingsOpen && (
-        <SettingsModal
-          onClose={() => setIsSettingsOpen(false)}
-        />
+        <SettingsModal onClose={() => setIsSettingsOpen(false)} />
       )}
     </div>
   );

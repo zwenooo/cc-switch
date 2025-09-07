@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import { Provider } from "./types";
+import { Provider, Settings } from "./types";
 import { AppType } from "./lib/tauri-api";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 
@@ -35,9 +35,11 @@ declare global {
       onProviderSwitched: (
         callback: (data: { appType: string; providerId: string }) => void,
       ) => Promise<UnlistenFn>;
-      getSettings: () => Promise<any>;
-      saveSettings: (settings: any) => Promise<boolean>;
+      getSettings: () => Promise<Settings>;
+      saveSettings: (settings: Settings) => Promise<boolean>;
       checkForUpdates: () => Promise<void>;
+      getAppConfigPath: () => Promise<string>;
+      openAppConfigFolder: () => Promise<void>;
     };
     platform: {
       isMac: boolean;

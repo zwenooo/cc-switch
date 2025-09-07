@@ -47,7 +47,10 @@ fn extract_claude_api_key(value: &Value) -> Option<String> {
 fn extract_codex_api_key(value: &Value) -> Option<String> {
     value
         .get("auth")
-        .and_then(|auth| auth.get("OPENAI_API_KEY").or_else(|| auth.get("openai_api_key")))
+        .and_then(|auth| {
+            auth.get("OPENAI_API_KEY")
+                .or_else(|| auth.get("openai_api_key"))
+        })
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
 }
@@ -77,7 +80,9 @@ fn scan_claude_copies() -> Vec<(String, PathBuf, Value)> {
             if !fname.starts_with("settings-") || !fname.ends_with(".json") {
                 continue;
             }
-            let name = fname.trim_start_matches("settings-").trim_end_matches(".json");
+            let name = fname
+                .trim_start_matches("settings-")
+                .trim_end_matches(".json");
             if let Ok(val) = crate::config::read_json_file::<Value>(&p) {
                 items.push((name.to_string(), p, val));
             }
@@ -104,7 +109,9 @@ fn scan_codex_copies() -> Vec<(String, Option<PathBuf>, Option<PathBuf>, Value)>
                 let entry = by_name.entry(name.to_string()).or_default();
                 entry.0 = Some(p);
             } else if fname.starts_with("config-") && fname.ends_with(".toml") {
-                let name = fname.trim_start_matches("config-").trim_end_matches(".toml");
+                let name = fname
+                    .trim_start_matches("config-")
+                    .trim_end_matches(".toml");
                 let entry = by_name.entry(name.to_string()).or_default();
                 entry.1 = Some(p);
             }
@@ -183,17 +190,14 @@ pub fn migrate_copies_into_config(config: &mut MultiAppConfig) -> Result<bool, S
 
     if let Some((name, value)) = &live_claude {
         let cand_key = extract_claude_api_key(value);
-        let exist_id = manager
-            .providers
-            .iter()
-            .find_map(|(id, p)| {
-                let pk = extract_claude_api_key(&p.settings_config);
-                if norm_name(&p.name) == norm_name(name) && pk == cand_key {
-                    Some(id.clone())
-                } else {
-                    None
-                }
-            });
+        let exist_id = manager.providers.iter().find_map(|(id, p)| {
+            let pk = extract_claude_api_key(&p.settings_config);
+            if norm_name(&p.name) == norm_name(name) && pk == cand_key {
+                Some(id.clone())
+            } else {
+                None
+            }
+        });
         if let Some(exist_id) = exist_id {
             if let Some(prov) = manager.providers.get_mut(&exist_id) {
                 log::info!("合并到已存在 Claude 供应商 '{}' (by name+key)", name);
@@ -203,43 +207,36 @@ pub fn migrate_copies_into_config(config: &mut MultiAppConfig) -> Result<bool, S
         } else {
             let id = next_unique_id(&ids, name);
             ids.insert(id.clone());
-            let provider = crate::provider::Provider::with_id(
-                id.clone(),
-                name.clone(),
-                value.clone(),
-                None,
-            );
+            let provider =
+                crate::provider::Provider::with_id(id.clone(), name.clone(), value.clone(), None);
             manager.providers.insert(provider.id.clone(), provider);
             live_claude_id = Some(id);
         }
     }
     for (name, path, value) in claude_items.iter() {
         let cand_key = extract_claude_api_key(value);
-        let exist_id = manager
-            .providers
-            .iter()
-            .find_map(|(id, p)| {
-                let pk = extract_claude_api_key(&p.settings_config);
-                if norm_name(&p.name) == norm_name(name) && pk == cand_key {
-                    Some(id.clone())
-                } else {
-                    None
-                }
-            });
+        let exist_id = manager.providers.iter().find_map(|(id, p)| {
+            let pk = extract_claude_api_key(&p.settings_config);
+            if norm_name(&p.name) == norm_name(name) && pk == cand_key {
+                Some(id.clone())
+            } else {
+                None
+            }
+        });
         if let Some(exist_id) = exist_id {
             if let Some(prov) = manager.providers.get_mut(&exist_id) {
-                log::info!("覆盖 Claude 供应商 '{}' 来自 {} (by name+key)", name, path.display());
+                log::info!(
+                    "覆盖 Claude 供应商 '{}' 来自 {} (by name+key)",
+                    name,
+                    path.display()
+                );
                 prov.settings_config = value.clone();
             }
         } else {
             let id = next_unique_id(&ids, name);
             ids.insert(id.clone());
-            let provider = crate::provider::Provider::with_id(
-                id.clone(),
-                name.clone(),
-                value.clone(),
-                None,
-            );
+            let provider =
+                crate::provider::Provider::with_id(id.clone(), name.clone(), value.clone(), None);
             manager.providers.insert(provider.id.clone(), provider);
         }
     }
@@ -257,7 +254,10 @@ pub fn migrate_copies_into_config(config: &mut MultiAppConfig) -> Result<bool, S
                             String::new()
                         }
                     };
-                    Some(("default".to_string(), serde_json::json!({"auth": auth, "config": cfg})))
+                    Some((
+                        "default".to_string(),
+                        serde_json::json!({"auth": auth, "config": cfg}),
+                    ))
                 }
                 Err(e) => {
                     log::warn!("读取 Codex live auth.json 失败: {}", e);
@@ -277,17 +277,14 @@ pub fn migrate_copies_into_config(config: &mut MultiAppConfig) -> Result<bool, S
 
     if let Some((name, value)) = &live_codex {
         let cand_key = extract_codex_api_key(value);
-        let exist_id = manager
-            .providers
-            .iter()
-            .find_map(|(id, p)| {
-                let pk = extract_codex_api_key(&p.settings_config);
-                if norm_name(&p.name) == norm_name(name) && pk == cand_key {
-                    Some(id.clone())
-                } else {
-                    None
-                }
-            });
+        let exist_id = manager.providers.iter().find_map(|(id, p)| {
+            let pk = extract_codex_api_key(&p.settings_config);
+            if norm_name(&p.name) == norm_name(name) && pk == cand_key {
+                Some(id.clone())
+            } else {
+                None
+            }
+        });
         if let Some(exist_id) = exist_id {
             if let Some(prov) = manager.providers.get_mut(&exist_id) {
                 log::info!("合并到已存在 Codex 供应商 '{}' (by name+key)", name);
@@ -297,43 +294,37 @@ pub fn migrate_copies_into_config(config: &mut MultiAppConfig) -> Result<bool, S
         } else {
             let id = next_unique_id(&ids, name);
             ids.insert(id.clone());
-            let provider = crate::provider::Provider::with_id(
-                id.clone(),
-                name.clone(),
-                value.clone(),
-                None,
-            );
+            let provider =
+                crate::provider::Provider::with_id(id.clone(), name.clone(), value.clone(), None);
             manager.providers.insert(provider.id.clone(), provider);
             live_codex_id = Some(id);
         }
     }
     for (name, authp, cfgp, value) in codex_items.iter() {
         let cand_key = extract_codex_api_key(value);
-        let exist_id = manager
-            .providers
-            .iter()
-            .find_map(|(id, p)| {
-                let pk = extract_codex_api_key(&p.settings_config);
-                if norm_name(&p.name) == norm_name(name) && pk == cand_key {
-                    Some(id.clone())
-                } else {
-                    None
-                }
-            });
+        let exist_id = manager.providers.iter().find_map(|(id, p)| {
+            let pk = extract_codex_api_key(&p.settings_config);
+            if norm_name(&p.name) == norm_name(name) && pk == cand_key {
+                Some(id.clone())
+            } else {
+                None
+            }
+        });
         if let Some(exist_id) = exist_id {
             if let Some(prov) = manager.providers.get_mut(&exist_id) {
-                log::info!("覆盖 Codex 供应商 '{}' 来自 {:?}/{:?} (by name+key)", name, authp, cfgp);
+                log::info!(
+                    "覆盖 Codex 供应商 '{}' 来自 {:?}/{:?} (by name+key)",
+                    name,
+                    authp,
+                    cfgp
+                );
                 prov.settings_config = value.clone();
             }
         } else {
             let id = next_unique_id(&ids, name);
             ids.insert(id.clone());
-            let provider = crate::provider::Provider::with_id(
-                id.clone(),
-                name.clone(),
-                value.clone(),
-                None,
-            );
+            let provider =
+                crate::provider::Provider::with_id(id.clone(), name.clone(), value.clone(), None);
             manager.providers.insert(provider.id.clone(), provider);
         }
     }
@@ -370,13 +361,17 @@ pub fn migrate_copies_into_config(config: &mut MultiAppConfig) -> Result<bool, S
     for (_, ap, cp, _) in codex_items.into_iter() {
         if let Some(ap) = ap {
             match archive_file(ts, "codex", &ap) {
-                Ok(Some(_)) => { let _ = delete_file(&ap); }
+                Ok(Some(_)) => {
+                    let _ = delete_file(&ap);
+                }
                 _ => {}
             }
         }
         if let Some(cp) = cp {
             match archive_file(ts, "codex", &cp) {
-                Ok(Some(_)) => { let _ = delete_file(&cp); }
+                Ok(Some(_)) => {
+                    let _ = delete_file(&cp);
+                }
                 _ => {}
             }
         }
@@ -404,7 +399,11 @@ pub fn dedupe_config(config: &mut MultiAppConfig) -> usize {
         let mut keep: Map<String, String> = Map::new(); // key -> id 保留
         let mut remove: Vec<String> = Vec::new();
         for (id, p) in mgr.providers.iter() {
-            let k = format!("{}|{}", norm_name(&p.name), extract_key(&p.settings_config).unwrap_or_default());
+            let k = format!(
+                "{}|{}",
+                norm_name(&p.name),
+                extract_key(&p.settings_config).unwrap_or_default()
+            );
             if let Some(exist_id) = keep.get(&k) {
                 // 若当前是正在使用的，则用当前替换之前的，反之丢弃当前
                 if *id == mgr.current {

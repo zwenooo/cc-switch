@@ -88,7 +88,6 @@ pub fn archive_file(ts: u64, category: &str, src: &Path) -> Result<Option<PathBu
     Ok(Some(dest))
 }
 
-
 /// 清理供应商名称，确保文件名安全
 pub fn sanitize_provider_name(name: &str) -> String {
     name.chars()

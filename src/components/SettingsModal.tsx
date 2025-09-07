@@ -1,10 +1,7 @@
 import { useState, useEffect } from "react";
 import { X, Info, RefreshCw, FolderOpen } from "lucide-react";
 import "../lib/tauri-api";
-
-interface Settings {
-  showInDock: boolean;
-}
+import type { Settings } from "../types";
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -36,9 +33,9 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
 
   const loadConfigPath = async () => {
     try {
-      const status = await window.api.getConfigStatus("claude");
-      if (status?.path) {
-        setConfigPath(status.path.replace("/claude_code_config.json", ""));
+      const path = await window.api.getAppConfigPath();
+      if (path) {
+        setConfigPath(path);
       }
     } catch (error) {
       console.error("获取配置路径失败:", error);
@@ -67,7 +64,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
 
   const handleOpenConfigFolder = async () => {
     try {
-      await window.api.openConfigFolder("claude");
+      await window.api.openAppConfigFolder();
     } catch (error) {
       console.error("打开配置文件夹失败:", error);
     }

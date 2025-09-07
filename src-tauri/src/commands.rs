@@ -6,7 +6,7 @@ use tauri_plugin_opener::OpenerExt;
 
 use crate::app_config::AppType;
 use crate::codex_config;
-use crate::config::{ConfigStatus, get_claude_settings_path};
+use crate::config::{get_claude_settings_path, ConfigStatus};
 use crate::provider::Provider;
 use crate::store::AppState;
 
@@ -116,7 +116,9 @@ pub async fn add_provider(
         let manager = config
             .get_manager_mut(&app_type)
             .ok_or_else(|| format!("应用类型不存在: {:?}", app_type))?;
-        manager.providers.insert(provider.id.clone(), provider.clone());
+        manager
+            .providers
+            .insert(provider.id.clone(), provider.clone());
     }
     state.save()?;
 
@@ -146,7 +148,10 @@ pub async fn update_provider(
         let manager = config
             .get_manager(&app_type)
             .ok_or_else(|| format!("应用类型不存在: {:?}", app_type))?;
-        (manager.providers.contains_key(&provider.id), manager.current == provider.id)
+        (
+            manager.providers.contains_key(&provider.id),
+            manager.current == provider.id,
+        )
     };
     if !exists {
         return Err(format!("供应商不存在: {}", provider.id));
@@ -182,7 +187,9 @@ pub async fn update_provider(
         let manager = config
             .get_manager_mut(&app_type)
             .ok_or_else(|| format!("应用类型不存在: {:?}", app_type))?;
-        manager.providers.insert(provider.id.clone(), provider.clone());
+        manager
+            .providers
+            .insert(provider.id.clone(), provider.clone());
     }
     state.save()?;
 
@@ -390,7 +397,8 @@ pub async fn import_default_config(
             if !auth_path.exists() {
                 return Err("Codex 配置文件不存在".to_string());
             }
-            let auth: serde_json::Value = crate::config::read_json_file::<serde_json::Value>(&auth_path)?;
+            let auth: serde_json::Value =
+                crate::config::read_json_file::<serde_json::Value>(&auth_path)?;
             let config_str = match crate::codex_config::read_and_validate_codex_config_text() {
                 Ok(s) => s,
                 Err(e) => return Err(e),
@@ -488,7 +496,7 @@ pub async fn open_config_folder(
         .or_else(|| app.as_deref().map(|s| s.into()))
         .or_else(|| appType.as_deref().map(|s| s.into()))
         .unwrap_or(AppType::Claude);
-    
+
     let config_dir = match app_type {
         AppType::Claude => crate::config::get_claude_config_dir(),
         AppType::Codex => crate::codex_config::get_codex_config_dir(),
@@ -500,7 +508,8 @@ pub async fn open_config_folder(
     }
 
     // 使用 opener 插件打开文件夹
-    handle.opener()
+    handle
+        .opener()
         .open_path(config_dir.to_string_lossy().to_string(), None::<String>)
         .map_err(|e| format!("打开文件夹失败: {}", e))?;
 
@@ -521,6 +530,71 @@ pub async fn open_external(app: tauri::AppHandle, url: String) -> Result<bool, S
     app.opener()
         .open_url(&url, None::<String>)
         .map_err(|e| format!("打开链接失败: {}", e))?;
+
+    Ok(true)
+}
+
+/// 获取应用配置文件路径
+#[tauri::command]
+pub async fn get_app_config_path() -> Result<String, String> {
+    use crate::config::get_app_config_path;
+
+    let config_path = get_app_config_path();
+    Ok(config_path.to_string_lossy().to_string())
+}
+
+/// 打开应用配置文件夹
+#[tauri::command]
+pub async fn open_app_config_folder(handle: tauri::AppHandle) -> Result<bool, String> {
+    use crate::config::get_app_config_dir;
+
+    let config_dir = get_app_config_dir();
+
+    // 确保目录存在
+    if !config_dir.exists() {
+        std::fs::create_dir_all(&config_dir).map_err(|e| format!("创建目录失败: {}", e))?;
+    }
+
+    // 使用 opener 插件打开文件夹
+    handle
+        .opener()
+        .open_path(config_dir.to_string_lossy().to_string(), None::<String>)
+        .map_err(|e| format!("打开文件夹失败: {}", e))?;
+
+    Ok(true)
+}
+
+/// 获取设置
+#[tauri::command]
+pub async fn get_settings(_state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    // 暂时返回默认设置
+    Ok(serde_json::json!({
+        "showInDock": true
+    }))
+}
+
+/// 保存设置
+#[tauri::command]
+pub async fn save_settings(
+    _state: State<'_, AppState>,
+    settings: serde_json::Value,
+) -> Result<bool, String> {
+    // TODO: 实现设置保存逻辑
+    log::info!("保存设置: {:?}", settings);
+    Ok(true)
+}
+
+/// 检查更新
+#[tauri::command]
+pub async fn check_for_updates(handle: tauri::AppHandle) -> Result<bool, String> {
+    // 打开 GitHub releases 页面
+    handle
+        .opener()
+        .open_url(
+            "https://github.com/yungookim/cc-switch/releases",
+            None::<String>,
+        )
+        .map_err(|e| format!("打开更新页面失败: {}", e))?;
 
     Ok(true)
 }

@@ -326,6 +326,11 @@ pub fn run() {
             commands::get_claude_code_config_path,
             commands::open_config_folder,
             commands::open_external,
+            commands::get_app_config_path,
+            commands::open_app_config_folder,
+            commands::get_settings,
+            commands::save_settings,
+            commands::check_for_updates,
             update_tray_menu,
         ])
         .run(tauri::generate_context!())

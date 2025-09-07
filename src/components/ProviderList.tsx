@@ -100,7 +100,10 @@ const ProviderList: React.FC<ProviderListProps> = ({
                           {provider.websiteUrl}
                         </button>
                       ) : (
-                        <span className="text-[var(--color-text-secondary)]" title={apiUrl}>
+                        <span
+                          className="text-[var(--color-text-secondary)]"
+                          title={apiUrl}
+                        >
                           {apiUrl}
                         </span>
                       )}

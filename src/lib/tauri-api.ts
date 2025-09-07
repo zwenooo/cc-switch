@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
-import { Provider } from "../types";
+import { Provider, Settings } from "../types";
 
 // 应用类型
 export type AppType = "claude" | "codex";
@@ -196,7 +196,7 @@ export const tauriAPI = {
   },
 
   // 获取设置
-  getSettings: async (): Promise<any> => {
+  getSettings: async (): Promise<Settings> => {
     try {
       return await invoke("get_settings");
     } catch (error) {
@@ -206,7 +206,7 @@ export const tauriAPI = {
   },
 
   // 保存设置
-  saveSettings: async (settings: any): Promise<boolean> => {
+  saveSettings: async (settings: Settings): Promise<boolean> => {
     try {
       return await invoke("save_settings", { settings });
     } catch (error) {
@@ -221,6 +221,25 @@ export const tauriAPI = {
       await invoke("check_for_updates");
     } catch (error) {
       console.error("检查更新失败:", error);
+    }
+  },
+
+  // 获取应用配置文件路径
+  getAppConfigPath: async (): Promise<string> => {
+    try {
+      return await invoke("get_app_config_path");
+    } catch (error) {
+      console.error("获取应用配置路径失败:", error);
+      return "";
+    }
+  },
+
+  // 打开应用配置文件夹
+  openAppConfigFolder: async (): Promise<void> => {
+    try {
+      await invoke("open_app_config_folder");
+    } catch (error) {
+      console.error("打开应用配置文件夹失败:", error);
     }
   },
 };

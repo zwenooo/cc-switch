@@ -4,9 +4,9 @@ use std::path::PathBuf;
 use crate::config::{
     atomic_write, delete_file, sanitize_provider_name, write_json_file, write_text_file,
 };
+use serde_json::Value;
 use std::fs;
 use std::path::Path;
-use serde_json::Value;
 
 /// 获取 Codex 配置目录路径
 pub fn get_codex_config_dir() -> PathBuf {
@@ -77,7 +77,8 @@ pub fn write_codex_live_atomic(auth: &Value, config_text_opt: Option<&str>) -> R
         None => String::new(),
     };
     if !cfg_text.trim().is_empty() {
-        toml::from_str::<toml::Table>(&cfg_text).map_err(|e| format!("config.toml 格式错误: {}", e))?;
+        toml::from_str::<toml::Table>(&cfg_text)
+            .map_err(|e| format!("config.toml 格式错误: {}", e))?;
     }
 
     // 第一步：写 auth.json
@@ -121,7 +122,9 @@ pub fn validate_config_toml(text: &str) -> Result<(), String> {
     if text.trim().is_empty() {
         return Ok(());
     }
-    toml::from_str::<toml::Table>(text).map(|_| ()).map_err(|e| format!("config.toml 语法错误: {}", e))
+    toml::from_str::<toml::Table>(text)
+        .map(|_| ())
+        .map_err(|e| format!("config.toml 语法错误: {}", e))
 }
 
 /// 读取并校验 `~/.codex/config.toml`，返回文本（可能为空）

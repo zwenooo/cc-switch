@@ -9,3 +9,8 @@ export interface AppConfig {
   providers: Record<string, Provider>;
   current: string;
 }
+
+// 应用设置类型（用于 SettingsModal 与 Tauri API）
+export interface Settings {
+  showInDock: boolean;
+}
