@@ -44,9 +44,30 @@ const ProviderList: React.FC<ProviderListProps> = ({
     }
   };
 
+  // 对供应商列表进行排序
+  const sortedProviders = Object.values(providers).sort((a, b) => {
+    // 按添加时间排序
+    // 没有时间戳的视为最早添加的（排在最前面）
+    // 有时间戳的按时间升序排列
+    const timeA = a.createdAt || 0;
+    const timeB = b.createdAt || 0;
+    
+    // 如果都没有时间戳，按名称排序
+    if (timeA === 0 && timeB === 0) {
+      return a.name.localeCompare(b.name, 'zh-CN');
+    }
+    
+    // 如果只有一个没有时间戳，没有时间戳的排在前面
+    if (timeA === 0) return -1;
+    if (timeB === 0) return 1;
+    
+    // 都有时间戳，按时间升序
+    return timeA - timeB;
+  });
+
   return (
     <div className="space-y-4">
-      {Object.values(providers).length === 0 ? (
+      {sortedProviders.length === 0 ? (
         <div className="text-center py-12">
           <div className="w-16 h-16 mx-auto mb-4 bg-[var(--color-bg-tertiary)] rounded-full flex items-center justify-center">
             <Users size={24} className="text-[var(--color-text-tertiary)]" />
@@ -60,7 +81,7 @@ const ProviderList: React.FC<ProviderListProps> = ({
         </div>
       ) : (
         <div className="space-y-3">
-          {Object.values(providers).map((provider) => {
+          {sortedProviders.map((provider) => {
             const isCurrent = provider.id === currentProviderId;
             const apiUrl = getApiUrl(provider);
 

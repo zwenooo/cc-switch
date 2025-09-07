@@ -134,6 +134,7 @@ function App() {
     const newProvider: Provider = {
       ...provider,
       id: generateId(),
+      createdAt: Date.now(), // 添加创建时间戳
     };
     await window.api.addProvider(newProvider, activeApp);
     await loadProviders();

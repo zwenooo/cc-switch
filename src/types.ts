@@ -3,6 +3,7 @@ export interface Provider {
   name: string;
   settingsConfig: Record<string, any>; // 应用配置对象：Claude 为 settings.json；Codex 为 { auth, config }
   websiteUrl?: string;
+  createdAt?: number; // 添加时间戳（毫秒）
 }
 
 export interface AppConfig {
