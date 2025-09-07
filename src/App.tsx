@@ -14,10 +14,6 @@ function App() {
   const [providers, setProviders] = useState<Record<string, Provider>>({});
   const [currentProviderId, setCurrentProviderId] = useState<string>("");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [configStatus, setConfigStatus] = useState<{
-    exists: boolean;
-    path: string;
-  } | null>(null);
   const [editingProviderId, setEditingProviderId] = useState<string | null>(
     null,
   );
@@ -64,7 +60,6 @@ function App() {
   // 加载供应商列表
   useEffect(() => {
     loadProviders();
-    loadConfigStatus();
   }, [activeApp]); // 当切换应用时重新加载
 
   // 清理定时器
@@ -117,13 +112,6 @@ function App() {
     }
   };
 
-  const loadConfigStatus = async () => {
-    const status = await window.api.getConfigStatus(activeApp);
-    setConfigStatus({
-      exists: Boolean(status?.exists),
-      path: String(status?.path || ""),
-    });
-  };
 
   // 生成唯一ID
   const generateId = () => {
@@ -212,9 +200,6 @@ function App() {
     }
   };
 
-  const handleOpenConfigFolder = async () => {
-    await window.api.openConfigFolder(activeApp);
-  };
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--color-bg-primary)]">
@@ -272,34 +257,6 @@ function App() {
             onEdit={setEditingProviderId}
           />
 
-          {/* 配置文件路径信息 */}
-          {configStatus && (
-            <div className="mt-8 p-4 bg-white rounded-lg border border-[var(--color-border)]">
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-[var(--color-text-secondary)]">
-                  <span className="font-medium">
-                    {activeApp === "claude" ? "Claude Code" : "Codex"}{" "}
-                    配置文件位置:
-                  </span>
-                  <span className="ml-2 font-mono text-xs">
-                    {configStatus.path}
-                  </span>
-                  {!configStatus.exists && (
-                    <span className="ml-2 text-[var(--color-warning)]">
-                      （未创建，切换或保存时会自动创建）
-                    </span>
-                  )}
-                </div>
-                <button
-                  onClick={handleOpenConfigFolder}
-                  className="px-3 py-1.5 text-sm font-medium text-[var(--color-primary)] hover:bg-[var(--color-bg-tertiary)] rounded-md transition-colors"
-                  title="打开配置文件夹"
-                >
-                  打开文件夹
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       </main>
 
