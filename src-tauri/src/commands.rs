@@ -591,7 +591,7 @@ pub async fn check_for_updates(handle: tauri::AppHandle) -> Result<bool, String>
     handle
         .opener()
         .open_url(
-            "https://github.com/yungookim/cc-switch/releases",
+            "https://github.com/farion1231/cc-switch/releases",
             None::<String>,
         )
         .map_err(|e| format!("打开更新页面失败: {}", e))?;

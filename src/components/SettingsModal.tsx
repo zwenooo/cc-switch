@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { X, Info, RefreshCw, FolderOpen } from "lucide-react";
+import { getVersion } from "@tauri-apps/api/app";
 import "../lib/tauri-api";
 import type { Settings } from "../types";
 
@@ -12,13 +13,24 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     showInDock: true,
   });
   const [configPath, setConfigPath] = useState<string>("");
-  const [version] = useState("1.0.0");
+  const [version, setVersion] = useState<string>("");
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
 
   useEffect(() => {
     loadSettings();
     loadConfigPath();
+    loadVersion();
   }, []);
+
+  const loadVersion = async () => {
+    try {
+      const appVersion = await getVersion();
+      setVersion(appVersion);
+    } catch (error) {
+      console.error("获取版本信息失败:", error);
+      setVersion("3.1.1"); // 降级使用默认版本
+    }
+  };
 
   const loadSettings = async () => {
     try {
@@ -88,8 +100,8 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
 
         {/* 设置内容 */}
         <div className="px-6 py-4 space-y-6">
-          {/* 显示设置 */}
-          <div>
+          {/* 显示设置 - 功能还未实现 */}
+          {/* <div>
             <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-3">
               显示设置
             </h3>
@@ -106,7 +118,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                 className="w-4 h-4 text-[var(--color-primary)] rounded focus:ring-[var(--color-primary)]/20"
               />
             </label>
-          </div>
+          </div> */}
 
           {/* 配置文件位置 */}
           <div>
@@ -150,9 +162,6 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                     </p>
                     <p className="mt-1 text-[var(--color-text-secondary)]">
                       版本 {version}
-                    </p>
-                    <p className="mt-2 text-xs text-[var(--color-text-tertiary)]">
-                      管理 Claude Code 和 Codex 的 MCP 服务器配置
                     </p>
                   </div>
                 </div>
