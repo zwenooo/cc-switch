@@ -86,15 +86,15 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-white rounded-xl shadow-2xl w-[500px] overflow-hidden">
         {/* 标题栏 */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border)]">
-          <h2 className="text-lg font-semibold text-[var(--color-primary)]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+          <h2 className="text-lg font-semibold text-blue-500">
             设置
           </h2>
           <button
             onClick={onClose}
-            className="p-1.5 hover:bg-[var(--color-bg-tertiary)] rounded-md transition-colors"
+            className="p-1.5 hover:bg-gray-100 rounded-md transition-colors"
           >
-            <X size={20} className="text-[var(--color-text-secondary)]" />
+            <X size={20} className="text-gray-500" />
           </button>
         </div>
 
@@ -102,11 +102,11 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         <div className="px-6 py-4 space-y-6">
           {/* 显示设置 - 功能还未实现 */}
           {/* <div>
-            <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-3">
+            <h3 className="text-sm font-medium text-gray-900 mb-3">
               显示设置
             </h3>
             <label className="flex items-center justify-between">
-              <span className="text-sm text-[var(--color-text-secondary)]">
+              <span className="text-sm text-gray-500">
                 在 Dock 中显示（macOS）
               </span>
               <input
@@ -115,30 +115,30 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                 onChange={(e) =>
                   setSettings({ ...settings, showInDock: e.target.checked })
                 }
-                className="w-4 h-4 text-[var(--color-primary)] rounded focus:ring-[var(--color-primary)]/20"
+                className="w-4 h-4 text-blue-500 rounded focus:ring-blue-500/20"
               />
             </label>
           </div> */}
 
           {/* 配置文件位置 */}
           <div>
-            <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-3">
+            <h3 className="text-sm font-medium text-gray-900 mb-3">
               配置文件位置
             </h3>
             <div className="flex items-center gap-2">
-              <div className="flex-1 px-3 py-2 bg-[var(--color-bg-tertiary)] rounded-lg">
-                <span className="text-xs font-mono text-[var(--color-text-secondary)]">
+              <div className="flex-1 px-3 py-2 bg-gray-100 rounded-lg">
+                <span className="text-xs font-mono text-gray-500">
                   {configPath || "加载中..."}
                 </span>
               </div>
               <button
                 onClick={handleOpenConfigFolder}
-                className="p-2 hover:bg-[var(--color-bg-tertiary)] rounded-lg transition-colors"
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                 title="打开文件夹"
               >
                 <FolderOpen
                   size={18}
-                  className="text-[var(--color-text-secondary)]"
+                  className="text-gray-500"
                 />
               </button>
             </div>
@@ -146,21 +146,21 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
 
           {/* 关于 */}
           <div>
-            <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-3">
+            <h3 className="text-sm font-medium text-gray-900 mb-3">
               关于
             </h3>
-            <div className="p-4 bg-[var(--color-bg-tertiary)] rounded-lg">
+            <div className="p-4 bg-gray-100 rounded-lg">
               <div className="flex items-start justify-between">
                 <div className="flex items-start gap-3">
                   <Info
                     size={18}
-                    className="text-[var(--color-text-secondary)] mt-0.5"
+                    className="text-gray-500 mt-0.5"
                   />
                   <div className="text-sm">
-                    <p className="font-medium text-[var(--color-text-primary)]">
+                    <p className="font-medium text-gray-900">
                       CC Switch
                     </p>
-                    <p className="mt-1 text-[var(--color-text-secondary)]">
+                    <p className="mt-1 text-gray-500">
                       版本 {version}
                     </p>
                   </div>
@@ -170,8 +170,8 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                   disabled={isCheckingUpdate}
                   className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
                     isCheckingUpdate
-                      ? "bg-[var(--color-bg-secondary)] text-[var(--color-text-tertiary)]"
-                      : "bg-white hover:bg-[var(--color-bg-primary)] text-[var(--color-primary)]"
+                      ? "bg-white text-gray-400"
+                      : "bg-white hover:bg-gray-50 text-blue-500"
                   }`}
                 >
                   {isCheckingUpdate ? (
@@ -189,16 +189,16 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         </div>
 
         {/* 底部按钮 */}
-        <div className="flex justify-end gap-3 px-6 py-4 border-t border-[var(--color-border)]">
+        <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)] rounded-lg transition-colors"
+            className="px-4 py-2 text-sm font-medium text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
           >
             取消
           </button>
           <button
             onClick={saveSettings}
-            className="px-4 py-2 text-sm font-medium text-white bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] rounded-lg transition-colors"
+            className="px-4 py-2 text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors"
           >
             保存
           </button>

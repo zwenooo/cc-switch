@@ -19,16 +19,16 @@ const ClaudeConfigEditor: React.FC<ClaudeConfigEditorProps> = ({
       <div className="flex items-center justify-between">
         <label
           htmlFor="settingsConfig"
-          className="block text-sm font-medium text-[var(--color-text-primary)]"
+          className="block text-sm font-medium text-gray-900"
         >
           Claude Code 配置 (JSON) *
         </label>
-        <label className="inline-flex items-center gap-2 text-sm text-[var(--color-text-secondary)] cursor-pointer">
+        <label className="inline-flex items-center gap-2 text-sm text-gray-500 cursor-pointer">
           <input
             type="checkbox"
             checked={disableCoAuthored}
             onChange={(e) => onCoAuthoredToggle(e.target.checked)}
-            className="w-4 h-4 text-[var(--color-primary)] bg-white border-[var(--color-border)] rounded focus:ring-[var(--color-primary)] focus:ring-2"
+            className="w-4 h-4 text-blue-500 bg-white border-gray-200 rounded focus:ring-blue-500 focus:ring-2"
           />
           禁止 Claude Code 签名
         </label>
@@ -44,7 +44,7 @@ const ClaudeConfigEditor: React.FC<ClaudeConfigEditorProps> = ({
 }`}
         rows={12}
       />
-      <p className="text-xs text-[var(--color-text-secondary)]">
+      <p className="text-xs text-gray-500">
         完整的 Claude Code settings.json 配置内容
       </p>
     </div>

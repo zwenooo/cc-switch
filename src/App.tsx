@@ -202,17 +202,17 @@ function App() {
 
 
   return (
-    <div className="min-h-screen flex flex-col bg-[var(--color-bg-primary)]">
+    <div className="min-h-screen flex flex-col bg-gray-50">
       {/* Linear 风格的顶部导航 */}
-      <header className="bg-white border-b border-[var(--color-border)] px-6 py-4">
+      <header className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-semibold text-[var(--color-primary)]">
+            <h1 className="text-xl font-semibold text-blue-500">
               CC Switch
             </h1>
             <button
               onClick={() => setIsSettingsOpen(true)}
-              className="p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] hover:bg-[var(--color-bg-tertiary)] rounded-md transition-all"
+              className="p-1.5 text-gray-500 hover:text-blue-500 hover:bg-gray-100 rounded-md transition-all"
               title="设置"
             >
               <Settings size={18} />
@@ -224,7 +224,7 @@ function App() {
 
             <button
               onClick={() => setIsAddModalOpen(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary-hover)] transition-colors text-sm font-medium"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium"
             >
               <Plus size={16} />
               添加供应商
@@ -241,8 +241,8 @@ function App() {
             <div
               className={`fixed top-6 left-1/2 transform -translate-x-1/2 z-50 px-4 py-3 rounded-lg shadow-lg transition-all duration-300 ${
                 notification.type === "error"
-                  ? "bg-[var(--color-error)] text-white"
-                  : "bg-[var(--color-success)] text-white"
+                  ? "bg-red-500 text-white"
+                  : "bg-green-500 text-white"
               } ${isNotificationVisible ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2"}`}
             >
               {notification.message}

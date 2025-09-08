@@ -30,11 +30,11 @@ const PresetSelector: React.FC<PresetSelectorProps> = ({
 
     if (isSelected) {
       return isOfficial
-        ? `${baseClass} bg-[var(--color-warning)] text-white`
-        : `${baseClass} bg-[var(--color-primary)] text-white`;
+        ? `${baseClass} bg-amber-500 text-white`
+        : `${baseClass} bg-blue-500 text-white`;
     }
 
-    return `${baseClass} bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-border)]`;
+    return `${baseClass} bg-gray-100 text-gray-500 hover:bg-gray-200`;
   };
 
   const getDescription = () => {
@@ -55,13 +55,13 @@ const PresetSelector: React.FC<PresetSelectorProps> = ({
   return (
     <div className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-3">
+        <label className="block text-sm font-medium text-gray-900 mb-3">
           {title}
         </label>
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            className={getButtonClass(-1)}
+            className={`${getButtonClass(-1)} ${selectedIndex === -1 ? '' : ''}`}
             onClick={onCustomClick}
           >
             {customLabel}
@@ -80,7 +80,7 @@ const PresetSelector: React.FC<PresetSelectorProps> = ({
         </div>
       </div>
       {getDescription() && (
-        <p className="text-sm text-[var(--color-text-secondary)]">
+        <p className="text-sm text-gray-500">
           {getDescription()}
         </p>
       )}

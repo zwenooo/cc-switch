@@ -69,13 +69,13 @@ const ProviderList: React.FC<ProviderListProps> = ({
     <div className="space-y-4">
       {sortedProviders.length === 0 ? (
         <div className="text-center py-12">
-          <div className="w-16 h-16 mx-auto mb-4 bg-[var(--color-bg-tertiary)] rounded-full flex items-center justify-center">
-            <Users size={24} className="text-[var(--color-text-tertiary)]" />
+          <div className="w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
+            <Users size={24} className="text-gray-400" />
           </div>
-          <h3 className="text-lg font-medium text-[var(--color-text-primary)] mb-2">
+          <h3 className="text-lg font-medium text-gray-900 mb-2">
             还没有添加任何供应商
           </h3>
-          <p className="text-[var(--color-text-secondary)] text-sm">
+          <p className="text-gray-500 text-sm">
             点击右上角的"添加供应商"按钮开始配置您的第一个API供应商
           </p>
         </div>
@@ -90,18 +90,18 @@ const ProviderList: React.FC<ProviderListProps> = ({
                 key={provider.id}
                 className={`bg-white rounded-lg border p-4 transition-all duration-200 ${
                   isCurrent
-                    ? "border-[var(--color-primary)] ring-1 ring-[var(--color-primary)]/20 bg-[var(--color-primary)]/5"
-                    : "border-[var(--color-border)] hover:border-[var(--color-border-hover)] hover:shadow-sm"
+                    ? "border-blue-500 ring-1 ring-blue-500/20 bg-blue-500/5"
+                    : "border-gray-200 hover:border-gray-300 hover:shadow-sm"
                 }`}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
-                      <h3 className="font-medium text-[var(--color-text-primary)]">
+                      <h3 className="font-medium text-gray-900">
                         {provider.name}
                       </h3>
                       {isCurrent && (
-                        <div className="inline-flex items-center gap-1 px-2 py-1 bg-[var(--color-success)]/10 text-[var(--color-success)] rounded-md text-xs font-medium">
+                        <div className="inline-flex items-center gap-1 px-2 py-1 bg-green-500/10 text-green-500 rounded-md text-xs font-medium">
                           <CheckCircle2 size={12} />
                           当前使用
                         </div>
@@ -115,14 +115,14 @@ const ProviderList: React.FC<ProviderListProps> = ({
                             e.preventDefault();
                             handleUrlClick(provider.websiteUrl!);
                           }}
-                          className="inline-flex items-center gap-1 text-[var(--color-primary)] hover:opacity-90 transition-colors"
+                          className="inline-flex items-center gap-1 text-blue-500 hover:opacity-90 transition-colors"
                           title={`访问 ${provider.websiteUrl}`}
                         >
                           {provider.websiteUrl}
                         </button>
                       ) : (
                         <span
-                          className="text-[var(--color-text-secondary)]"
+                          className="text-gray-500"
                           title={apiUrl}
                         >
                           {apiUrl}
@@ -137,8 +137,8 @@ const ProviderList: React.FC<ProviderListProps> = ({
                       disabled={isCurrent}
                       className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                         isCurrent
-                          ? "bg-[var(--color-bg-tertiary)] text-[var(--color-text-tertiary)] cursor-not-allowed"
-                          : "bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)]"
+                          ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                          : "bg-blue-500 text-white hover:bg-blue-600"
                       }`}
                     >
                       <Play size={14} />
@@ -147,7 +147,7 @@ const ProviderList: React.FC<ProviderListProps> = ({
 
                     <button
                       onClick={() => onEdit(provider.id)}
-                      className="p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] rounded-md transition-colors"
+                      className="p-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
                       title="编辑供应商"
                     >
                       <Edit3 size={16} />
@@ -158,8 +158,8 @@ const ProviderList: React.FC<ProviderListProps> = ({
                       disabled={isCurrent}
                       className={`p-1.5 rounded-md transition-colors ${
                         isCurrent
-                          ? "text-[var(--color-text-tertiary)] cursor-not-allowed"
-                          : "text-[var(--color-text-secondary)] hover:text-[var(--color-error)] hover:bg-[var(--color-error-light)]"
+                          ? "text-gray-400 cursor-not-allowed"
+                          : "text-gray-500 hover:text-red-500 hover:bg-red-100"
                       }`}
                       title="删除供应商"
                     >

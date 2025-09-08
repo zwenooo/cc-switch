@@ -453,14 +453,14 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       {/* Modal */}
       <div className="relative bg-white rounded-xl shadow-lg max-w-3xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-[var(--color-border)]">
-          <h2 className="text-xl font-semibold text-[var(--color-text-primary)]">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+          <h2 className="text-xl font-semibold text-gray-900">
             {title}
           </h2>
           <button
             type="button"
             onClick={onClose}
-            className="p-1 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] rounded-md transition-colors"
+            className="p-1 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
             aria-label="关闭"
           >
             <X size={18} />
@@ -470,12 +470,12 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
           <div className="flex-1 overflow-auto p-6 space-y-6">
             {error && (
-              <div className="flex items-center gap-3 p-4 bg-[var(--color-error-light)] border border-[var(--color-error)]/20 rounded-lg">
+              <div className="flex items-center gap-3 p-4 bg-red-100 border border-red-500/20 rounded-lg">
                 <AlertCircle
                   size={20}
-                  className="text-[var(--color-error)] flex-shrink-0"
+                  className="text-red-500 flex-shrink-0"
                 />
-                <p className="text-[var(--color-error)] text-sm font-medium">
+                <p className="text-red-500 text-sm font-medium">
                   {error}
                 </p>
               </div>
@@ -506,7 +506,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
             <div className="space-y-2">
               <label
                 htmlFor="name"
-                className="block text-sm font-medium text-[var(--color-text-primary)]"
+                className="block text-sm font-medium text-gray-900"
               >
                 供应商名称 *
               </label>
@@ -519,7 +519,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                 placeholder="例如：Anthropic 官方"
                 required
                 autoComplete="off"
-                className="w-full px-3 py-2 border border-[var(--color-border)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] transition-colors"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
               />
             </div>
 
@@ -571,7 +571,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
             <div className="space-y-2">
               <label
                 htmlFor="websiteUrl"
-                className="block text-sm font-medium text-[var(--color-text-primary)]"
+                className="block text-sm font-medium text-gray-900"
               >
                 官网地址
               </label>
@@ -583,7 +583,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                 onChange={handleChange}
                 placeholder="https://example.com（可选）"
                 autoComplete="off"
-                className="w-full px-3 py-2 border border-[var(--color-border)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] transition-colors"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
               />
             </div>
 
@@ -622,17 +622,17 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-end gap-3 p-6 border-t border-[var(--color-border)] bg-[var(--color-bg-tertiary)]">
+          <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 bg-gray-100">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-white rounded-lg transition-colors"
+              className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-900 hover:bg-white rounded-lg transition-colors"
             >
               取消
             </button>
             <button
               type="submit"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary-hover)] transition-colors text-sm font-medium"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium"
             >
               <Save size={16} />
               {submitText}

@@ -13,14 +13,14 @@ export function AppSwitcher({ activeApp, onSwitch }: AppSwitcherProps) {
   };
 
   return (
-    <div className="inline-flex bg-[var(--color-bg-tertiary)] rounded-lg p-1 gap-1">
+    <div className="inline-flex bg-gray-100 rounded-lg p-1 gap-1">
       <button
         type="button"
         onClick={() => handleSwitch("claude")}
         className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
           activeApp === "claude"
-            ? "bg-white text-[var(--color-text-primary)] shadow-sm"
-            : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-white/50"
+            ? "bg-white text-gray-900 shadow-sm"
+            : "text-gray-500 hover:text-gray-900 hover:bg-white/50"
         }`}
       >
         <Code2 size={16} />
@@ -32,8 +32,8 @@ export function AppSwitcher({ activeApp, onSwitch }: AppSwitcherProps) {
         onClick={() => handleSwitch("codex")}
         className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
           activeApp === "codex"
-            ? "bg-white text-[var(--color-text-primary)] shadow-sm"
-            : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-white/50"
+            ? "bg-white text-gray-900 shadow-sm"
+            : "text-gray-500 hover:text-gray-900 hover:bg-white/50"
         }`}
       >
         <Terminal size={16} />

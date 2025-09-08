@@ -88,8 +88,8 @@ const KimiModelSelector: React.FC<KimiModelSelectorProps> = ({
 
   const selectClass = `w-full px-3 py-2 border rounded-lg text-sm transition-colors appearance-none bg-white ${
     disabled
-      ? "bg-[var(--color-bg-tertiary)] border-[var(--color-border)] text-[var(--color-text-tertiary)] cursor-not-allowed"
-      : "border-[var(--color-border)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)]"
+      ? "bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed"
+      : "border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
   }`;
 
   const ModelSelect: React.FC<{
@@ -98,7 +98,7 @@ const KimiModelSelector: React.FC<KimiModelSelectorProps> = ({
     onChange: (value: string) => void;
   }> = ({ label, value, onChange }) => (
     <div className="space-y-2">
-      <label className="block text-sm font-medium text-[var(--color-text-primary)]">
+      <label className="block text-sm font-medium text-gray-900">
         {label}
       </label>
       <div className="relative">
@@ -123,7 +123,7 @@ const KimiModelSelector: React.FC<KimiModelSelectorProps> = ({
         </select>
         <ChevronDown
           size={16}
-          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-[var(--color-text-secondary)] pointer-events-none"
+          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 pointer-events-none"
         />
       </div>
     </div>
@@ -132,14 +132,14 @@ const KimiModelSelector: React.FC<KimiModelSelectorProps> = ({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-[var(--color-text-primary)]">
+        <h3 className="text-sm font-medium text-gray-900">
           模型配置
         </h3>
         <button
           type="button"
           onClick={() => debouncedKey && fetchModelsWithKey(debouncedKey)}
           disabled={disabled || loading || !debouncedKey}
-          className="inline-flex items-center gap-1 px-2 py-1 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="inline-flex items-center gap-1 px-2 py-1 text-xs text-gray-500 hover:text-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
           刷新模型列表
@@ -147,12 +147,12 @@ const KimiModelSelector: React.FC<KimiModelSelectorProps> = ({
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 p-3 bg-[var(--color-error-light)] border border-[var(--color-error)]/20 rounded-lg">
+        <div className="flex items-center gap-2 p-3 bg-red-100 border border-red-500/20 rounded-lg">
           <AlertCircle
             size={16}
-            className="text-[var(--color-error)] flex-shrink-0"
+            className="text-red-500 flex-shrink-0"
           />
-          <p className="text-[var(--color-error)] text-xs">{error}</p>
+          <p className="text-red-500 text-xs">{error}</p>
         </div>
       )}
 
@@ -172,8 +172,8 @@ const KimiModelSelector: React.FC<KimiModelSelectorProps> = ({
       </div>
 
       {!apiKey.trim() && (
-        <div className="p-3 bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded-lg">
-          <p className="text-xs text-[var(--color-text-secondary)]">
+        <div className="p-3 bg-gray-100 border border-gray-200 rounded-lg">
+          <p className="text-xs text-gray-500">
             📝 请先填写 API Key（格式：sk-xxx-api-key-here）以获取可用模型列表
           </p>
         </div>
