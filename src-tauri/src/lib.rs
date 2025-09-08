@@ -220,8 +220,13 @@ async fn update_tray_menu(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            // 注册 Updater 插件（桌面端）
+            #[cfg(desktop)]
+            app.handle()
+                .plugin(tauri_plugin_updater::Builder::new().build())?;
             #[cfg(target_os = "macos")]
             {
                 // 设置 macOS 标题栏背景色为主界面蓝色
