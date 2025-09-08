@@ -73,10 +73,10 @@ const ProviderList: React.FC<ProviderListProps> = ({
           <div className="w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
             <Users size={24} className="text-gray-400" />
           </div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
             还没有添加任何供应商
           </h3>
-          <p className="text-gray-500 text-sm">
+          <p className="text-gray-500 dark:text-gray-400 text-sm">
             点击右上角的"添加供应商"按钮开始配置您的第一个API供应商
           </p>
         </div>
@@ -96,7 +96,7 @@ const ProviderList: React.FC<ProviderListProps> = ({
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
-                      <h3 className="font-medium text-gray-900">
+                      <h3 className="font-medium text-gray-900 dark:text-gray-100">
                         {provider.name}
                       </h3>
                       {isCurrent && (
@@ -114,14 +114,14 @@ const ProviderList: React.FC<ProviderListProps> = ({
                             e.preventDefault();
                             handleUrlClick(provider.websiteUrl!);
                           }}
-                          className="inline-flex items-center gap-1 text-blue-500 hover:opacity-90 transition-colors"
+                          className="inline-flex items-center gap-1 text-blue-500 dark:text-blue-400 hover:opacity-90 transition-colors"
                           title={`访问 ${provider.websiteUrl}`}
                         >
                           {provider.websiteUrl}
                         </button>
                       ) : (
                         <span
-                          className="text-gray-500"
+                          className="text-gray-500 dark:text-gray-400"
                           title={apiUrl}
                         >
                           {apiUrl}
@@ -137,8 +137,8 @@ const ProviderList: React.FC<ProviderListProps> = ({
                       className={cn(
                         "inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
                         isCurrent
-                          ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                          : "bg-blue-500 text-white hover:bg-blue-600"
+                          ? "bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500 cursor-not-allowed"
+                          : "bg-blue-500 text-white hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700"
                       )}
                     >
                       <Play size={14} />
@@ -160,7 +160,7 @@ const ProviderList: React.FC<ProviderListProps> = ({
                         buttonStyles.icon,
                         isCurrent
                           ? "text-gray-400 cursor-not-allowed"
-                          : "text-gray-500 hover:text-red-500 hover:bg-red-100"
+                          : "text-gray-500 hover:text-red-500 hover:bg-red-100 dark:text-gray-400 dark:hover:text-red-400 dark:hover:bg-red-500/10"
                       )}
                       title="删除供应商"
                     >

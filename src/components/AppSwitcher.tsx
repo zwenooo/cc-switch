@@ -13,14 +13,14 @@ export function AppSwitcher({ activeApp, onSwitch }: AppSwitcherProps) {
   };
 
   return (
-    <div className="inline-flex bg-gray-100 rounded-lg p-1 gap-1">
+    <div className="inline-flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1 gap-1 border border-transparent dark:border-gray-700">
       <button
         type="button"
         onClick={() => handleSwitch("claude")}
         className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
           activeApp === "claude"
-            ? "bg-white text-gray-900 shadow-sm"
-            : "text-gray-500 hover:text-gray-900 hover:bg-white/50"
+            ? "bg-white text-gray-900 shadow-sm dark:bg-gray-900 dark:text-gray-100 dark:shadow-none"
+            : "text-gray-500 hover:text-gray-900 hover:bg-white/50 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-gray-800/60"
         }`}
       >
         <Code2 size={16} />
@@ -32,8 +32,8 @@ export function AppSwitcher({ activeApp, onSwitch }: AppSwitcherProps) {
         onClick={() => handleSwitch("codex")}
         className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
           activeApp === "codex"
-            ? "bg-white text-gray-900 shadow-sm"
-            : "text-gray-500 hover:text-gray-900 hover:bg-white/50"
+            ? "bg-white text-gray-900 shadow-sm dark:bg-gray-900 dark:text-gray-100 dark:shadow-none"
+            : "text-gray-500 hover:text-gray-900 hover:bg-white/50 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-gray-800/60"
         }`}
       >
         <Terminal size={16} />

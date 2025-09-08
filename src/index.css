@@ -12,11 +12,16 @@
 html {
   @apply font-sans antialiased;
   line-height: 1.5;
+  /* 让原生控件与滚动条随主题切换配色 */
+  color-scheme: light;
 }
 
 body {
   @apply m-0 p-0 bg-gray-50 text-gray-900 text-sm dark:bg-gray-950 dark:text-gray-100;
 }
+
+/* 暗色模式下启用暗色原生控件/滚动条配色 */
+html.dark { color-scheme: dark; }
 
 /* 滚动条样式 */
 ::-webkit-scrollbar {
