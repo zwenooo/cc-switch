@@ -1,7 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
-    "./index.html",
+    "./src/index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
@@ -21,7 +21,11 @@ export default {
           300: '#d4d4d8',  // border-hover
           400: '#a1a1aa',  // text-tertiary
           500: '#71717a',  // text-secondary
+          600: '#52525b',  // text-secondary-dark
+          700: '#3f3f46',  // bg-tertiary-dark
+          800: '#27272a',  // bg-secondary-dark
           900: '#18181b',  // text-primary
+          950: '#0a0a0b',  // bg-primary-dark
         },
         // 状态颜色
         green: {

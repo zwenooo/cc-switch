@@ -83,18 +83,18 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-2xl w-[500px] overflow-hidden">
+    <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-50">
+      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-[500px] overflow-hidden">
         {/* 标题栏 */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-blue-500">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-800">
+          <h2 className="text-lg font-semibold text-blue-500 dark:text-blue-400">
             设置
           </h2>
           <button
             onClick={onClose}
-            className="p-1.5 hover:bg-gray-100 rounded-md transition-colors"
+            className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors"
           >
-            <X size={20} className="text-gray-500" />
+            <X size={20} className="text-gray-500 dark:text-gray-400" />
           </button>
         </div>
 
@@ -102,7 +102,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         <div className="px-6 py-4 space-y-6">
           {/* 显示设置 - 功能还未实现 */}
           {/* <div>
-            <h3 className="text-sm font-medium text-gray-900 mb-3">
+            <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
               显示设置
             </h3>
             <label className="flex items-center justify-between">
@@ -122,23 +122,23 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
 
           {/* 配置文件位置 */}
           <div>
-            <h3 className="text-sm font-medium text-gray-900 mb-3">
+            <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
               配置文件位置
             </h3>
             <div className="flex items-center gap-2">
-              <div className="flex-1 px-3 py-2 bg-gray-100 rounded-lg">
-                <span className="text-xs font-mono text-gray-500">
+              <div className="flex-1 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg">
+                <span className="text-xs font-mono text-gray-500 dark:text-gray-400">
                   {configPath || "加载中..."}
                 </span>
               </div>
               <button
                 onClick={handleOpenConfigFolder}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
                 title="打开文件夹"
               >
                 <FolderOpen
                   size={18}
-                  className="text-gray-500"
+                  className="text-gray-500 dark:text-gray-400"
                 />
               </button>
             </div>
@@ -146,10 +146,10 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
 
           {/* 关于 */}
           <div>
-            <h3 className="text-sm font-medium text-gray-900 mb-3">
+            <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
               关于
             </h3>
-            <div className="p-4 bg-gray-100 rounded-lg">
+            <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
               <div className="flex items-start justify-between">
                 <div className="flex items-start gap-3">
                   <Info
@@ -157,10 +157,10 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                     className="text-gray-500 mt-0.5"
                   />
                   <div className="text-sm">
-                    <p className="font-medium text-gray-900">
+                    <p className="font-medium text-gray-900 dark:text-gray-100">
                       CC Switch
                     </p>
-                    <p className="mt-1 text-gray-500">
+                    <p className="mt-1 text-gray-500 dark:text-gray-400">
                       版本 {version}
                     </p>
                   </div>
@@ -170,8 +170,8 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                   disabled={isCheckingUpdate}
                   className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
                     isCheckingUpdate
-                      ? "bg-white text-gray-400"
-                      : "bg-white hover:bg-gray-50 text-blue-500"
+                      ? "bg-white dark:bg-gray-700 text-gray-400 dark:text-gray-500"
+                      : "bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 text-blue-500 dark:text-blue-400"
                   }`}
                 >
                   {isCheckingUpdate ? (
@@ -189,16 +189,16 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         </div>
 
         {/* 底部按钮 */}
-        <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200">
+        <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-800">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+            className="px-4 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
           >
             取消
           </button>
           <button
             onClick={saveSettings}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 rounded-lg transition-colors"
+            className="px-4 py-2 text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700 rounded-lg transition-colors"
           >
             保存
           </button>

@@ -1,4 +1,8 @@
+/* 引入 Tailwind v4 内建样式与工具 */
 @import "tailwindcss";
+
+/* 覆盖 Tailwind v4 默认的 dark 变体为“类选择器”模式 */
+@custom-variant dark (&:where(.dark, .dark *));
 
 /* 全局基础样式 */
 * {
@@ -11,7 +15,7 @@ html {
 }
 
 body {
-  @apply m-0 p-0 bg-gray-50 text-gray-900 text-sm;
+  @apply m-0 p-0 bg-gray-50 text-gray-900 text-sm dark:bg-gray-950 dark:text-gray-100;
 }
 
 /* 滚动条样式 */
@@ -20,15 +24,15 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-gray-100;
+  @apply bg-gray-100 dark:bg-gray-800;
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-gray-300 rounded;
+  @apply bg-gray-300 rounded dark:bg-gray-600;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-gray-400;
+  @apply bg-gray-400 dark:bg-gray-500;
 }
 
 /* 焦点样式 */

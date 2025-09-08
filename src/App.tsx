@@ -7,9 +7,12 @@ import EditProviderModal from "./components/EditProviderModal";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { AppSwitcher } from "./components/AppSwitcher";
 import SettingsModal from "./components/SettingsModal";
-import { Plus, Settings } from "lucide-react";
+import { Plus, Settings, Moon, Sun } from "lucide-react";
+import { buttonStyles } from "./lib/styles";
+import { useDarkMode } from "./hooks/useDarkMode";
 
 function App() {
+  const { isDarkMode, toggleDarkMode } = useDarkMode();
   const [activeApp, setActiveApp] = useState<AppType>("claude");
   const [providers, setProviders] = useState<Record<string, Provider>>({});
   const [currentProviderId, setCurrentProviderId] = useState<string>("");
@@ -202,17 +205,24 @@ function App() {
 
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
+    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-950">
       {/* Linear 风格的顶部导航 */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4">
+      <header className="bg-white border-b border-gray-200 dark:bg-gray-900 dark:border-gray-800 px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-semibold text-blue-500">
+            <h1 className="text-xl font-semibold text-blue-500 dark:text-blue-400">
               CC Switch
             </h1>
             <button
+              onClick={toggleDarkMode}
+              className={buttonStyles.icon}
+              title={isDarkMode ? "切换到亮色模式" : "切换到暗色模式"}
+            >
+              {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+            <button
               onClick={() => setIsSettingsOpen(true)}
-              className="p-1.5 text-gray-500 hover:text-blue-500 hover:bg-gray-100 rounded-md transition-all"
+              className={buttonStyles.icon}
               title="设置"
             >
               <Settings size={18} />
@@ -224,7 +234,7 @@ function App() {
 
             <button
               onClick={() => setIsAddModalOpen(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium"
+              className={`inline-flex items-center gap-2 ${buttonStyles.primary}`}
             >
               <Plus size={16} />
               添加供应商

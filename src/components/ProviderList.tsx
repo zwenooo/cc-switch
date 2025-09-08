@@ -1,6 +1,7 @@
 import React from "react";
 import { Provider } from "../types";
 import { Play, Edit3, Trash2, CheckCircle2, Users } from "lucide-react";
+import { buttonStyles, cardStyles, badgeStyles, cn } from "../lib/styles";
 
 interface ProviderListProps {
   providers: Record<string, Provider>;
@@ -88,11 +89,9 @@ const ProviderList: React.FC<ProviderListProps> = ({
             return (
               <div
                 key={provider.id}
-                className={`bg-white rounded-lg border p-4 transition-all duration-200 ${
-                  isCurrent
-                    ? "border-blue-500 ring-1 ring-blue-500/20 bg-blue-500/5"
-                    : "border-gray-200 hover:border-gray-300 hover:shadow-sm"
-                }`}
+                className={cn(
+                  isCurrent ? cardStyles.selected : cardStyles.interactive
+                )}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
@@ -101,7 +100,7 @@ const ProviderList: React.FC<ProviderListProps> = ({
                         {provider.name}
                       </h3>
                       {isCurrent && (
-                        <div className="inline-flex items-center gap-1 px-2 py-1 bg-green-500/10 text-green-500 rounded-md text-xs font-medium">
+                        <div className={badgeStyles.success}>
                           <CheckCircle2 size={12} />
                           当前使用
                         </div>
@@ -135,11 +134,12 @@ const ProviderList: React.FC<ProviderListProps> = ({
                     <button
                       onClick={() => onSwitch(provider.id)}
                       disabled={isCurrent}
-                      className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                      className={cn(
+                        "inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
                         isCurrent
                           ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                           : "bg-blue-500 text-white hover:bg-blue-600"
-                      }`}
+                      )}
                     >
                       <Play size={14} />
                       {isCurrent ? "使用中" : "启用"}
@@ -147,7 +147,7 @@ const ProviderList: React.FC<ProviderListProps> = ({
 
                     <button
                       onClick={() => onEdit(provider.id)}
-                      className="p-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
+                      className={buttonStyles.icon}
                       title="编辑供应商"
                     >
                       <Edit3 size={16} />
@@ -156,11 +156,12 @@ const ProviderList: React.FC<ProviderListProps> = ({
                     <button
                       onClick={() => onDelete(provider.id)}
                       disabled={isCurrent}
-                      className={`p-1.5 rounded-md transition-colors ${
+                      className={cn(
+                        buttonStyles.icon,
                         isCurrent
                           ? "text-gray-400 cursor-not-allowed"
                           : "text-gray-500 hover:text-red-500 hover:bg-red-100"
-                      }`}
+                      )}
                       title="删除供应商"
                     >
                       <Trash2 size={16} />
