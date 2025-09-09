@@ -94,25 +94,34 @@ jobs:
           fi
           
           RAW="${{ secrets.TAURI_PRIVATE_KEY }}"
-          # 如果是原始两行（以 untrusted comment: 开头）
+          # 1) 原始两行（以 untrusted comment: 开头）
           if echo "$RAW" | head -n1 | grep -q '^untrusted comment:'; then
-            # 直接导出原始密钥到环境变量
             echo "TAURI_SIGNING_PRIVATE_KEY<<EOF" >> $GITHUB_ENV
             echo "$RAW" >> $GITHUB_ENV
             echo "EOF" >> $GITHUB_ENV
-            echo "✅ 使用原始格式密钥"
-          # 否则尝试当作 Base64 解码恢复两行
-          elif DECODED=$(printf '%s' "$RAW" | base64 -d 2>/dev/null) \
-               && echo "$DECODED" | head -n1 | grep -q '^untrusted comment:'; then
-            # 导出解码后的密钥到环境变量
-            echo "TAURI_SIGNING_PRIVATE_KEY<<EOF" >> $GITHUB_ENV
-            echo "$DECODED" >> $GITHUB_ENV
-            echo "EOF" >> $GITHUB_ENV
-            echo "✅ 成功解码 Base64 格式密钥"
+            echo "✅ 使用原始两行格式密钥"
           else
-            echo "❌ TAURI_PRIVATE_KEY 格式不对：需要两行文本且首行是 'untrusted comment:'" >&2
-            echo "密钥前10个字符: $(echo "$RAW" | head -c 10)..." >&2
-            exit 1
+            # 2) 尝试将整段作为 Base64 解码（macOS 与 GNU 兼容）并检测是否得到两行原文
+            if DECODED=$(printf '%s' "$RAW" | (base64 --decode 2>/dev/null || base64 -D 2>/dev/null)) \
+               && echo "$DECODED" | head -n1 | grep -q '^untrusted comment:'; then
+              echo "TAURI_SIGNING_PRIVATE_KEY<<EOF" >> $GITHUB_ENV
+              echo "$DECODED" >> $GITHUB_ENV
+              echo "EOF" >> $GITHUB_ENV
+              echo "✅ 成功解码 Base64 包裹的两行密钥"
+            else
+              # 3) 兼容仅提供第二行（纯 Base64 私钥一行）的场景：构造两行格式
+              if echo "$RAW" | grep -Eq '^[A-Za-z0-9+/=]+$'; then
+                echo "TAURI_SIGNING_PRIVATE_KEY<<EOF" >> $GITHUB_ENV
+                echo "untrusted comment: tauri signing key" >> $GITHUB_ENV
+                echo "$RAW" >> $GITHUB_ENV
+                echo "EOF" >> $GITHUB_ENV
+                echo "✅ 兼容一行 Base64 私钥，已构造两行格式"
+              else
+                echo "❌ TAURI_PRIVATE_KEY 格式无法识别：既不是两行原文，也不是其 Base64，亦非一行 Base64 私钥" >&2
+                echo "密钥前10个字符: $(echo "$RAW" | head -c 10)..." >&2
+                exit 1
+              fi
+            fi
           fi
           echo "✅ Tauri signing key prepared"
 
