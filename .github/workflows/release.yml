@@ -119,8 +119,14 @@ jobs:
               fi
             fi
           fi
-          # 仅导出“路径”供 CLI 使用（Tauri 支持“内容或路径”）
-          echo "TAURI_SIGNING_PRIVATE_KEY=$KEY_PATH" >> $GITHUB_ENV
+          # 导出“内容（第二行 base64）”供 CLI 使用，兼容不同 Tauri 版本的解析方式
+          # 一些版本对路径支持存在差异，但对 base64 内容解析稳定
+          KEY_BASE64=$(sed -n '2p' "$KEY_PATH" | tr -d '\r\n ')
+          if [ -z "$KEY_BASE64" ]; then
+            echo "❌ 无法提取私钥第二行（base64）" >&2
+            exit 1
+          fi
+          echo "TAURI_SIGNING_PRIVATE_KEY=$KEY_BASE64" >> $GITHUB_ENV
           if [ -n "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" ]; then
             echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" >> $GITHUB_ENV
           fi
