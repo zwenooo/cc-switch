@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { X, Info, RefreshCw, FolderOpen } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import "../lib/tauri-api";
+import { runUpdateFlow } from "../lib/updater";
 import type { Settings } from "../types";
 
 interface SettingsModalProps {
@@ -66,11 +67,13 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const handleCheckUpdate = async () => {
     setIsCheckingUpdate(true);
     try {
-      await window.api.checkForUpdates();
+      // 优先使用 Tauri Updater 流程；失败时回退到打开 Releases 页面
+      await runUpdateFlow({ timeout: 30000 });
     } catch (error) {
-      console.error("检查更新失败:", error);
+      console.error("检查更新失败，回退到 Releases 页面:", error);
+      await window.api.checkForUpdates();
     } finally {
-      setTimeout(() => setIsCheckingUpdate(false), 2000);
+      setIsCheckingUpdate(false);
     }
   };
 
