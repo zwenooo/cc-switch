@@ -85,14 +85,20 @@ jobs:
 
       - name: Build Tauri App (macOS)
         if: runner.os == 'macOS'
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: pnpm tauri build --target universal-apple-darwin
 
       - name: Build Tauri App (Windows)
         if: runner.os == 'Windows'
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: pnpm tauri build
 
       - name: Build Tauri App (Linux)
         if: runner.os == 'Linux'
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: pnpm tauri build
 
       - name: Prepare macOS Assets
@@ -179,6 +185,16 @@ jobs:
         shell: bash
         run: |
           ls -la release-assets || true
+
+      - name: Collect Signatures
+        shell: bash
+        run: |
+          # 查找并复制签名文件到 release-assets
+          find src-tauri/target -name "*.sig" -type f 2>/dev/null | while read sig; do
+            cp "$sig" release-assets/ || true
+          done
+          echo "Collected signatures:"
+          ls -la release-assets/*.sig || echo "No signatures found"
 
       - name: Upload Release Assets
         uses: softprops/action-gh-release@v1
