@@ -42,7 +42,7 @@
   ,
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNCQjQwQ0ZBMzA0MUQ3MTYKUldRVzEwRXcrZ3kwTzlGNHBhdnFhTDRDWUxUNU9mTkk1b1VQRFlRdWV6T2ptSk9MdG9ENlQwRXcK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg4NEM4NUExRUVDMDdFMkIKUldRcmZzRHVvWVZNaUFaVElYbXh5c0QxT1RNaFZ6ZWlydlEyeFU3OG1odm9iTXRoc1FhUXlyM20K",
       "endpoints": [
         "https://github.com/jasonyoung/cc-switch/releases/latest/download/latest.json"
       ]
