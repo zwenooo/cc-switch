@@ -222,12 +222,23 @@ jobs:
           done
           echo "Collected signatures:"
           ls -la release-assets/*.sig || echo "No signatures found"
+          # 查找并复制 latest.json（updater manifest）到 release-assets
+          FOUND_JSON=false
+          while IFS= read -r json; do
+            cp "$json" release-assets/ || true
+            echo "Copied updater manifest: $json"
+            FOUND_JSON=true
+          done < <(find src-tauri/target -name "latest.json" -type f 2>/dev/null)
+          if [ "$FOUND_JSON" = false ]; then
+            echo "Warning: latest.json not found under src-tauri/target" >&2
+          fi
 
       - name: Upload Release Assets
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ github.ref_name }}
           name: CC Switch ${{ github.ref_name }}
+          prerelease: true
           body: |
             ## CC Switch ${{ github.ref_name }}
 
