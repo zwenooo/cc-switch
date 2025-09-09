@@ -96,14 +96,21 @@ jobs:
           RAW="${{ secrets.TAURI_PRIVATE_KEY }}"
           # 如果是原始两行（以 untrusted comment: 开头）
           if echo "$RAW" | head -n1 | grep -q '^untrusted comment:'; then
-            printf '%s' "$RAW" > "$RUNNER_TEMP/tauri.key"
+            # 直接导出原始密钥到环境变量
+            echo "TAURI_SIGNING_PRIVATE_KEY<<EOF" >> $GITHUB_ENV
+            echo "$RAW" >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
             echo "✅ 使用原始格式密钥"
           # 否则尝试当作 Base64 解码恢复两行
-          elif printf '%s' "$RAW" | base64 -d > "$RUNNER_TEMP/tauri.key" 2>/dev/null \
-               && head -n1 "$RUNNER_TEMP/tauri.key" | grep -q '^untrusted comment:'; then
+          elif DECODED=$(printf '%s' "$RAW" | base64 -d 2>/dev/null) \
+               && echo "$DECODED" | head -n1 | grep -q '^untrusted comment:'; then
+            # 导出解码后的密钥到环境变量
+            echo "TAURI_SIGNING_PRIVATE_KEY<<EOF" >> $GITHUB_ENV
+            echo "$DECODED" >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
             echo "✅ 成功解码 Base64 格式密钥"
           else
-            echo "❌ TAURI_SIGNING_PRIVATE_KEY 格式不对：需要两行文本且首行是 'untrusted comment:'" >&2
+            echo "❌ TAURI_PRIVATE_KEY 格式不对：需要两行文本且首行是 'untrusted comment:'" >&2
             echo "密钥前10个字符: $(echo "$RAW" | head -c 10)..." >&2
             exit 1
           fi
@@ -111,23 +118,14 @@ jobs:
 
       - name: Build Tauri App (macOS)
         if: runner.os == 'macOS'
-        env:
-          TAURI_SIGNING_PRIVATE_KEY_PATH: ${{ runner.temp }}/tauri.key
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: pnpm tauri build --target universal-apple-darwin
 
       - name: Build Tauri App (Windows)
         if: runner.os == 'Windows'
-        env:
-          TAURI_SIGNING_PRIVATE_KEY_PATH: ${{ runner.temp }}/tauri.key
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: pnpm tauri build
 
       - name: Build Tauri App (Linux)
         if: runner.os == 'Linux'
-        env:
-          TAURI_SIGNING_PRIVATE_KEY_PATH: ${{ runner.temp }}/tauri.key
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: pnpm tauri build
 
       - name: Prepare macOS Assets
