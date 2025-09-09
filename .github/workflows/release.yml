@@ -121,11 +121,19 @@ jobs:
           fi
           # 将“完整两行内容”作为环境变量注入（Tauri 支持传入完整私钥文本或文件路径）
           # 使用多行写入语法，保持换行以便解析
-          {
-            echo "TAURI_SIGNING_PRIVATE_KEY<<'EOF'"
-            cat "$KEY_PATH"
-            echo "EOF"
-          } >> "$GITHUB_ENV"
+          # 将完整两行私钥内容进行 base64 编码，作为单行内容注入环境变量
+          if command -v base64 >/dev/null 2>&1; then
+            KEY_B64=$(base64 < "$KEY_PATH" | tr -d '\r\n')
+          elif command -v openssl >/dev/null 2>&1; then
+            KEY_B64=$(openssl base64 -A -in "$KEY_PATH")
+          else
+            KEY_B64=$(KEY_PATH="$KEY_PATH" node -e "process.stdout.write(require('fs').readFileSync(process.env.KEY_PATH).toString('base64'))")
+          fi
+          if [ -z "$KEY_B64" ]; then
+            echo "❌ 无法生成私钥 base64 内容" >&2
+            exit 1
+          fi
+          echo "TAURI_SIGNING_PRIVATE_KEY=$KEY_B64" >> "$GITHUB_ENV"
           if [ -n "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" ]; then
             echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" >> $GITHUB_ENV
           fi
