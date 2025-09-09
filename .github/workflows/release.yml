@@ -94,30 +94,42 @@ jobs:
           fi
           
           RAW="${{ secrets.TAURI_PRIVATE_KEY }}"
-          # 1) 原始两行（以 untrusted comment: 开头）
+          # 目标：向构建环境导出一行的 Base64 秘钥（即 minisign 私钥文件的第二行）
+          # 情况 1：原始两行文本（第一行以 "untrusted comment:" 开头）
           if echo "$RAW" | head -n1 | grep -q '^untrusted comment:'; then
-            echo "TAURI_SIGNING_PRIVATE_KEY<<EOF" >> $GITHUB_ENV
-            echo "$RAW" >> $GITHUB_ENV
-            echo "EOF" >> $GITHUB_ENV
-            echo "✅ 使用原始两行格式密钥"
+            SECOND=$(printf '%s' "$RAW" | tail -n +2 | head -n 1 | tr -d '\r\n')
+            echo "TAURI_SIGNING_PRIVATE_KEY=$SECOND" >> $GITHUB_ENV
+            echo "TAURI_PRIVATE_KEY=$SECOND" >> $GITHUB_ENV
+            KEY_PATH="$RUNNER_TEMP/tauri_signing.key"
+            printf '%s\n%s\n' "untrusted comment: tauri signing key" "$SECOND" > "$KEY_PATH"
+            echo "TAURI_SIGNING_PRIVATE_KEY_PATH=$KEY_PATH" >> $GITHUB_ENV
+            echo "TAURI_PRIVATE_KEY_PATH=$KEY_PATH" >> $GITHUB_ENV
+            echo "✅ 使用原始两行密钥，已提取第二行"
           else
-            # 2) 尝试将整段作为 Base64 解码（macOS 与 GNU 兼容）并检测是否得到两行原文
+            # 情况 2：整体被 base64 包裹（解包后应当是两行）
             if DECODED=$(printf '%s' "$RAW" | (base64 --decode 2>/dev/null || base64 -D 2>/dev/null)) \
                && echo "$DECODED" | head -n1 | grep -q '^untrusted comment:'; then
-              echo "TAURI_SIGNING_PRIVATE_KEY<<EOF" >> $GITHUB_ENV
-              echo "$DECODED" >> $GITHUB_ENV
-              echo "EOF" >> $GITHUB_ENV
-              echo "✅ 成功解码 Base64 包裹的两行密钥"
+              SECOND=$(printf '%s' "$DECODED" | tail -n +2 | head -n 1 | tr -d '\r\n')
+              echo "TAURI_SIGNING_PRIVATE_KEY=$SECOND" >> $GITHUB_ENV
+              echo "TAURI_PRIVATE_KEY=$SECOND" >> $GITHUB_ENV
+              KEY_PATH="$RUNNER_TEMP/tauri_signing.key"
+              printf '%s\n%s\n' "untrusted comment: tauri signing key" "$SECOND" > "$KEY_PATH"
+              echo "TAURI_SIGNING_PRIVATE_KEY_PATH=$KEY_PATH" >> $GITHUB_ENV
+              echo "TAURI_PRIVATE_KEY_PATH=$KEY_PATH" >> $GITHUB_ENV
+              echo "✅ 成功解码 base64 包裹密钥，已提取第二行"
             else
-              # 3) 兼容仅提供第二行（纯 Base64 私钥一行）的场景：构造两行格式
+              # 情况 3：已是第二行（纯 Base64 一行）
               if echo "$RAW" | grep -Eq '^[A-Za-z0-9+/=]+$'; then
-                echo "TAURI_SIGNING_PRIVATE_KEY<<EOF" >> $GITHUB_ENV
-                echo "untrusted comment: tauri signing key" >> $GITHUB_ENV
-                echo "$RAW" >> $GITHUB_ENV
-                echo "EOF" >> $GITHUB_ENV
-                echo "✅ 兼容一行 Base64 私钥，已构造两行格式"
+                ONE=$(printf '%s' "$RAW" | tr -d '\r\n')
+                echo "TAURI_SIGNING_PRIVATE_KEY=$ONE" >> $GITHUB_ENV
+                echo "TAURI_PRIVATE_KEY=$ONE" >> $GITHUB_ENV
+                KEY_PATH="$RUNNER_TEMP/tauri_signing.key"
+                printf '%s\n%s\n' "untrusted comment: tauri signing key" "$ONE" > "$KEY_PATH"
+                echo "TAURI_SIGNING_PRIVATE_KEY_PATH=$KEY_PATH" >> $GITHUB_ENV
+                echo "TAURI_PRIVATE_KEY_PATH=$KEY_PATH" >> $GITHUB_ENV
+                echo "✅ 使用一行 Base64 私钥"
               else
-                echo "❌ TAURI_PRIVATE_KEY 格式无法识别：既不是两行原文，也不是其 Base64，亦非一行 Base64 私钥" >&2
+                echo "❌ TAURI_PRIVATE_KEY 格式无法识别：既不是两行原文，也不是其 base64，亦非一行 base64" >&2
                 echo "密钥前10个字符: $(echo "$RAW" | head -c 10)..." >&2
                 exit 1
               fi
