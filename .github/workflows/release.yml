@@ -86,16 +86,25 @@ jobs:
       - name: Prepare Tauri signing key
         shell: bash
         run: |
+          # 调试：检查 Secret 是否存在
+          if [ -z "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" ]; then
+            echo "❌ TAURI_SIGNING_PRIVATE_KEY Secret 为空或不存在" >&2
+            echo "请检查 GitHub 仓库 Settings > Secrets and variables > Actions" >&2
+            exit 1
+          fi
+          
           RAW="${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}"
           # 如果是原始两行（以 untrusted comment: 开头）
           if echo "$RAW" | head -n1 | grep -q '^untrusted comment:'; then
             printf '%s' "$RAW" > "$RUNNER_TEMP/tauri.key"
+            echo "✅ 使用原始格式密钥"
           # 否则尝试当作 Base64 解码恢复两行
           elif printf '%s' "$RAW" | base64 -d > "$RUNNER_TEMP/tauri.key" 2>/dev/null \
                && head -n1 "$RUNNER_TEMP/tauri.key" | grep -q '^untrusted comment:'; then
-            :
+            echo "✅ 成功解码 Base64 格式密钥"
           else
             echo "❌ TAURI_SIGNING_PRIVATE_KEY 格式不对：需要两行文本且首行是 'untrusted comment:'" >&2
+            echo "密钥前10个字符: $(echo "$RAW" | head -c 10)..." >&2
             exit 1
           fi
           echo "✅ Tauri signing key prepared"
