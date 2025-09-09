@@ -87,13 +87,13 @@ jobs:
         shell: bash
         run: |
           # 调试：检查 Secret 是否存在
-          if [ -z "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" ]; then
-            echo "❌ TAURI_SIGNING_PRIVATE_KEY Secret 为空或不存在" >&2
+          if [ -z "${{ secrets.TAURI_PRIVATE_KEY }}" ]; then
+            echo "❌ TAURI_PRIVATE_KEY Secret 为空或不存在" >&2
             echo "请检查 GitHub 仓库 Settings > Secrets and variables > Actions" >&2
             exit 1
           fi
           
-          RAW="${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}"
+          RAW="${{ secrets.TAURI_PRIVATE_KEY }}"
           # 如果是原始两行（以 untrusted comment: 开头）
           if echo "$RAW" | head -n1 | grep -q '^untrusted comment:'; then
             printf '%s' "$RAW" > "$RUNNER_TEMP/tauri.key"
