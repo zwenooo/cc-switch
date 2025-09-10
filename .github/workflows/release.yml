@@ -161,29 +161,25 @@ jobs:
         run: |
           set -euxo pipefail
           mkdir -p release-assets
-          echo "Looking for .app bundle..."
-          APP_PATH=""
+          echo "Looking for updater artifact (.tar.gz)..."
+          TAR_GZ=""
           for path in \
-            "src-tauri/target/release/bundle/macos" \
             "src-tauri/target/universal-apple-darwin/release/bundle/macos" \
             "src-tauri/target/aarch64-apple-darwin/release/bundle/macos" \
-            "src-tauri/target/x86_64-apple-darwin/release/bundle/macos"; do
+            "src-tauri/target/x86_64-apple-darwin/release/bundle/macos" \
+            "src-tauri/target/release/bundle/macos"; do
             if [ -d "$path" ]; then
-              APP_PATH=$(find "$path" -name "*.app" -type d | head -1)
-              [ -n "$APP_PATH" ] && break
+              TAR_GZ=$(find "$path" -maxdepth 1 -name "*.tar.gz" -type f | head -1 || true)
+              [ -n "$TAR_GZ" ] && break
             fi
           done
-          if [ -z "$APP_PATH" ]; then
-            echo "No .app found" >&2
+          if [ -z "$TAR_GZ" ]; then
+            echo "No macOS .tar.gz updater artifact found" >&2
             exit 1
           fi
-          APP_DIR=$(dirname "$APP_PATH")
-          APP_NAME=$(basename "$APP_PATH")
-          cd "$APP_DIR"
-          # 使用 ditto 打包更兼容资源分叉
-          ditto -c -k --sequesterRsrc --keepParent "$APP_NAME" "CC-Switch-macOS.zip"
-          mv "CC-Switch-macOS.zip" "$GITHUB_WORKSPACE/release-assets/"
-          echo "macOS zip ready"
+          cp "$TAR_GZ" release-assets/
+          [ -f "$TAR_GZ.sig" ] && cp "$TAR_GZ.sig" release-assets/ || echo ".sig for macOS not found yet"
+          echo "macOS updater artifact copied: $(basename "$TAR_GZ")"
 
       - name: Prepare Windows Assets
         if: runner.os == 'Windows'
@@ -191,7 +187,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Force -Path release-assets | Out-Null
-          # 安装器（优先 NSIS，其次 MSI）
+          # 安装器（优先 NSIS，其次 MSI）— 同时配合 .sig
           $installer = Get-ChildItem -Path 'src-tauri/target/release/bundle' -Recurse -Include *.exe,*.msi -ErrorAction SilentlyContinue |
             Where-Object { $_.FullName -match '\\bundle\\(nsis|msi)\\' } |
             Select-Object -First 1
@@ -199,25 +195,17 @@ jobs:
             $dest = if ($installer.Extension -ieq '.msi') { 'CC-Switch-Setup.msi' } else { 'CC-Switch-Setup.exe' }
             Copy-Item $installer.FullName (Join-Path release-assets $dest)
             Write-Host "Installer copied: $dest"
+            $sigPath = "$($installer.FullName).sig"
+            if (Test-Path $sigPath) {
+              Copy-Item $sigPath (Join-Path release-assets ("$dest.sig"))
+              Write-Host "Signature copied: $dest.sig"
+            } else {
+              Write-Warning "Signature not found for $($installer.Name)"
+            }
           } else {
             Write-Warning 'No Windows installer found'
           }
-          # 绿色版（portable）：仅可执行文件
-          $exeCandidates = @(
-            'src-tauri/target/release/cc-switch.exe',
-            'src-tauri/target/x86_64-pc-windows-msvc/release/cc-switch.exe'
-          )
-          $exePath = $exeCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-          if ($null -ne $exePath) {
-            $portableDir = 'release-assets/CC-Switch-Portable'
-            New-Item -ItemType Directory -Force -Path $portableDir | Out-Null
-            Copy-Item $exePath $portableDir
-            Compress-Archive -Path "$portableDir/*" -DestinationPath 'release-assets/CC-Switch-Windows-Portable.zip' -Force
-            Remove-Item -Recurse -Force $portableDir
-            Write-Host 'Windows portable zip created'
-          } else {
-            Write-Warning 'Portable exe not found'
-          }
+          # 可选：保留绿色版逻辑（不用于 Updater）
 
       - name: Prepare Linux Assets
         if: runner.os == 'Linux'
@@ -225,14 +213,20 @@ jobs:
         run: |
           set -euxo pipefail
           mkdir -p release-assets
-          # 仅上传安装包（deb）
-          DEB=$(find src-tauri/target/release/bundle -name "*.deb" | head -1 || true)
-          if [ -n "$DEB" ]; then
-            cp "$DEB" release-assets/
-            echo "Deb package copied"
+          # Updater artifact: AppImage（含对应 .sig）
+          APPIMAGE=$(find src-tauri/target/release/bundle -name "*.AppImage" | head -1 || true)
+          if [ -n "$APPIMAGE" ]; then
+            cp "$APPIMAGE" release-assets/
+            [ -f "$APPIMAGE.sig" ] && cp "$APPIMAGE.sig" release-assets/ || echo ".sig for AppImage not found"
+            echo "AppImage copied"
           else
-            echo "No .deb found" >&2
-            exit 1
+            echo "No AppImage found under target/release/bundle" >&2
+            # 可选：仍然尝试 .deb（不用于 Updater）
+            DEB=$(find src-tauri/target/release/bundle -name "*.deb" | head -1 || true)
+            if [ -n "$DEB" ]; then
+              cp "$DEB" release-assets/
+              echo "Deb package copied"
+            fi
           fi
 
       - name: List prepared assets
@@ -243,22 +237,9 @@ jobs:
       - name: Collect Signatures
         shell: bash
         run: |
-          # 查找并复制签名文件到 release-assets
-          find src-tauri/target -name "*.sig" -type f 2>/dev/null | while read sig; do
-            cp "$sig" release-assets/ || true
-          done
-          echo "Collected signatures:"
+          set -euo pipefail
+          echo "Collected signatures (if any alongside artifacts):"
           ls -la release-assets/*.sig || echo "No signatures found"
-          # 查找并复制 latest.json（updater manifest）到 release-assets
-          FOUND_JSON=false
-          while IFS= read -r json; do
-            cp "$json" release-assets/ || true
-            echo "Copied updater manifest: $json"
-            FOUND_JSON=true
-          done < <(find src-tauri/target -name "latest.json" -type f 2>/dev/null)
-          if [ "$FOUND_JSON" = false ]; then
-            echo "Warning: latest.json not found under src-tauri/target" >&2
-          fi
 
       - name: Upload Release Assets
         uses: softprops/action-gh-release@v2
@@ -289,3 +270,92 @@ jobs:
         run: |
           echo "Listing bundles in src-tauri/target..."
           find src-tauri/target -maxdepth 4 -type f -name "*.*" 2>/dev/null || true
+
+  assemble-latest-json:
+    name: Assemble latest.json
+    runs-on: ubuntu-latest
+    needs: release
+    permissions:
+      contents: write
+    steps:
+      - name: Prepare GH
+        run: |
+          gh --version || (type -p curl >/dev/null && sudo apt-get update && sudo apt-get install -y gh || true)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Download all release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euxo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          mkdir -p dl
+          gh release download "$TAG" --dir dl --repo "$GITHUB_REPOSITORY"
+          ls -la dl || true
+      - name: Generate latest.json
+        env:
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          VERSION="${TAG#v}"
+          PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          base_url="https://github.com/$REPO/releases/download/$TAG"
+          # 初始化空平台映射
+          mac_url=""; mac_sig=""
+          win_url=""; win_sig=""
+          linux_url=""; linux_sig=""
+          shopt -s nullglob
+          for sig in dl/*.sig; do
+            base=${sig%.sig}
+            fname=$(basename "$base")
+            url="$base_url/$fname"
+            sig_content=$(cat "$sig")
+            case "$fname" in
+              *.tar.gz)
+                # 视为 macOS updater artifact
+                mac_url="$url"; mac_sig="$sig_content";;
+              *.AppImage|*.appimage)
+                linux_url="$url"; linux_sig="$sig_content";;
+              *.msi|*.exe)
+                win_url="$url"; win_sig="$sig_content";;
+            esac
+          done
+          # 构造 JSON（仅包含存在的目标）
+          tmp_json=$(mktemp)
+          {
+            echo '{'
+            echo "  \"version\": \"$VERSION\",";
+            echo "  \"notes\": \"Release $TAG\",";
+            echo "  \"pub_date\": \"$PUB_DATE\",";
+            echo '  "platforms": {'
+            first=1
+            if [ -n "$mac_url" ] && [ -n "$mac_sig" ]; then
+              # 为兼容 arm64 / x64，重复写入两个键，指向同一 universal 包
+              for key in darwin-aarch64 darwin-x86_64; do
+                [ $first -eq 0 ] && echo ','
+                echo "    \"$key\": {\"signature\": \"$mac_sig\", \"url\": \"$mac_url\"}"
+                first=0
+              done
+            fi
+            if [ -n "$win_url" ] && [ -n "$win_sig" ]; then
+              [ $first -eq 0 ] && echo ','
+              echo "    \"windows-x86_64\": {\"signature\": \"$win_sig\", \"url\": \"$win_url\"}"
+              first=0
+            fi
+            if [ -n "$linux_url" ] && [ -n "$linux_sig" ]; then
+              [ $first -eq 0 ] && echo ','
+              echo "    \"linux-x86_64\": {\"signature\": \"$linux_sig\", \"url\": \"$linux_url\"}"
+              first=0
+            fi
+            echo '  }'
+            echo '}'
+          } > "$tmp_json"
+          echo "Generated latest.json:" && cat "$tmp_json"
+          mv "$tmp_json" latest.json
+      - name: Upload latest.json to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euxo pipefail
+          gh release upload "$GITHUB_REF_NAME" latest.json --clobber --repo "$GITHUB_REPOSITORY"
