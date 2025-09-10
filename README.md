@@ -1,7 +1,7 @@
 # Claude Code & Codex 供应商切换器
 
-[![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)](https://github.com/jasonyoung/cc-switch/releases)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/jasonyoung/cc-switch/releases)
+[![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)](https://github.com/farion1231/cc-switch/releases)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/farion1231/cc-switch/releases)
 [![Built with Tauri](https://img.shields.io/badge/built%20with-Tauri%202.0-orange.svg)](https://tauri.app/)
 
 一个用于管理和切换 Claude Code 与 Codex 不同供应商配置的桌面应用。
