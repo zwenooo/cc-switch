@@ -419,14 +419,12 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
 
   // 初始时从配置中同步 API Key（编辑模式）
   useEffect(() => {
-    if (initialData) {
-      const parsedKey = getApiKeyFromConfig(
-        JSON.stringify(initialData.settingsConfig),
-      );
-      if (parsedKey) setApiKey(parsedKey);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!initialData) return;
+    const parsedKey = getApiKeyFromConfig(
+      JSON.stringify(initialData.settingsConfig),
+    );
+    if (parsedKey) setApiKey(parsedKey);
+  }, [initialData]);
 
   // 支持按下 ESC 关闭弹窗
   useEffect(() => {

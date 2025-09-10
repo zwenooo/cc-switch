@@ -7,6 +7,7 @@ import EditProviderModal from "./components/EditProviderModal";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { AppSwitcher } from "./components/AppSwitcher";
 import SettingsModal from "./components/SettingsModal";
+import { UpdateBadge } from "./components/UpdateBadge";
 import { Plus, Settings, Moon, Sun } from "lucide-react";
 import { buttonStyles } from "./lib/styles";
 import { useDarkMode } from "./hooks/useDarkMode";
@@ -220,13 +221,16 @@ function App() {
             >
               {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
             </button>
-            <button
-              onClick={() => setIsSettingsOpen(true)}
-              className={buttonStyles.icon}
-              title="设置"
-            >
-              <Settings size={18} />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsSettingsOpen(true)}
+                className={buttonStyles.icon}
+                title="设置"
+              >
+                <Settings size={18} />
+              </button>
+              <UpdateBadge onClick={() => setIsSettingsOpen(true)} />
+            </div>
           </div>
 
           <div className="flex items-center gap-4">

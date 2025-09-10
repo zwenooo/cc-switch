@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import { UpdateProvider } from "./contexts/UpdateContext";
 import "./index.css";
 // 导入 Tauri API（自动绑定到 window.api）
 import "./lib/tauri-api";
@@ -19,6 +20,8 @@ try {
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App />
+    <UpdateProvider>
+      <App />
+    </UpdateProvider>
   </React.StrictMode>,
 );

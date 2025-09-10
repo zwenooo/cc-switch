@@ -122,25 +122,5 @@ export async function relaunchApp(): Promise<void> {
   await relaunch();
 }
 
-export async function runUpdateFlow(
-  opts: CheckOptions = {},
-): Promise<{ status: "up-to-date" | "done" }> {
-  const result = await checkForUpdate(opts);
-  if (result.status === "up-to-date") return result;
-
-  let downloaded = 0;
-  let total = 0;
-  await result.update.downloadAndInstall((e) => {
-    if (e.event === "Started") {
-      total = e.total ?? 0;
-      downloaded = 0;
-    } else if (e.event === "Progress") {
-      downloaded += e.downloaded ?? 0;
-      // 调用方可监听此处并更新 UI（目前设置页仅显示加载态）
-      console.debug("update progress", { downloaded, total });
-    }
-  });
-
-  await relaunchApp();
-  return { status: "done" };
-}
+// 旧的聚合更新流程已由调用方直接使用 updateHandle 取代
+// 如需单函数封装，可在需要时基于 checkForUpdate + updateHandle 复合调用

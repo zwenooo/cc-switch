@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { X, Info, RefreshCw, FolderOpen } from "lucide-react";
+import { X, Info, RefreshCw, FolderOpen, Download, ExternalLink } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import "../lib/tauri-api";
-import { runUpdateFlow } from "../lib/updater";
+import { relaunchApp } from "../lib/updater";
+import { useUpdate } from "../contexts/UpdateContext";
 import type { Settings } from "../types";
 
 interface SettingsModalProps {
@@ -16,6 +17,8 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const [configPath, setConfigPath] = useState<string>("");
   const [version, setVersion] = useState<string>("");
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const { hasUpdate, updateInfo, updateHandle, checkUpdate, resetDismiss } = useUpdate();
 
   useEffect(() => {
     loadSettings();
@@ -29,7 +32,8 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
       setVersion(appVersion);
     } catch (error) {
       console.error("获取版本信息失败:", error);
-      setVersion("3.1.1"); // 降级使用默认版本
+      // 失败时不硬编码版本号，显示为未知
+      setVersion("未知");
     }
   };
 
@@ -65,15 +69,32 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   };
 
   const handleCheckUpdate = async () => {
-    setIsCheckingUpdate(true);
-    try {
-      // 优先使用 Tauri Updater 流程；失败时回退到打开 Releases 页面
-      await runUpdateFlow({ timeout: 30000 });
-    } catch (error) {
-      console.error("检查更新失败，回退到 Releases 页面:", error);
-      await window.api.checkForUpdates();
-    } finally {
-      setIsCheckingUpdate(false);
+    if (hasUpdate && updateHandle) {
+      // 已检测到更新：直接复用 updateHandle 下载并安装，避免重复检查
+      setIsDownloading(true);
+      try {
+        resetDismiss();
+        await updateHandle.downloadAndInstall();
+        await relaunchApp();
+      } catch (error) {
+        console.error("更新失败:", error);
+        // 更新失败时回退到打开 Releases 页面
+        await window.api.checkForUpdates();
+      } finally {
+        setIsDownloading(false);
+      }
+    } else {
+      // 尚未检测到更新：先检查
+      setIsCheckingUpdate(true);
+      try {
+        await checkUpdate();
+        // 检查后若有更新，让用户再次点击执行
+      } catch (error) {
+        console.error("检查更新失败，回退到 Releases 页面:", error);
+        await window.api.checkForUpdates();
+      } finally {
+        setIsCheckingUpdate(false);
+      }
     }
   };
 
@@ -82,6 +103,23 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
       await window.api.openAppConfigFolder();
     } catch (error) {
       console.error("打开配置文件夹失败:", error);
+    }
+  };
+
+  const handleOpenReleaseNotes = async () => {
+    try {
+      const targetVersion = updateInfo?.availableVersion || version;
+      // 如果未知或为空，回退到 releases 首页
+      if (!targetVersion || targetVersion === "未知") {
+        await window.api.openExternal("https://github.com/farion1231/cc-switch/releases");
+        return;
+      }
+      const tag = targetVersion.startsWith("v") ? targetVersion : `v${targetVersion}`;
+      await window.api.openExternal(
+        `https://github.com/farion1231/cc-switch/releases/tag/${tag}`,
+      );
+    } catch (error) {
+      console.error("打开更新日志失败:", error);
     }
   };
 
@@ -168,24 +206,48 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                     </p>
                   </div>
                 </div>
-                <button
-                  onClick={handleCheckUpdate}
-                  disabled={isCheckingUpdate}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
-                    isCheckingUpdate
-                      ? "bg-white dark:bg-gray-700 text-gray-400 dark:text-gray-500"
-                      : "bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 text-blue-500 dark:text-blue-400"
-                  }`}
-                >
-                  {isCheckingUpdate ? (
-                    <span className="flex items-center gap-1">
-                      <RefreshCw size={12} className="animate-spin" />
-                      检查中...
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleOpenReleaseNotes}
+                    className="px-2 py-1 text-xs font-medium text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 rounded-lg hover:bg-blue-500/10 transition-colors"
+                    title={hasUpdate ? "查看该版本更新日志" : "查看当前版本更新日志"}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      <ExternalLink size={12} />
+                      更新日志
                     </span>
-                  ) : (
-                    "检查更新"
-                  )}
-                </button>
+                  </button>
+                  <button
+                    onClick={handleCheckUpdate}
+                    disabled={isCheckingUpdate || isDownloading}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+                      isCheckingUpdate || isDownloading
+                        ? "bg-white dark:bg-gray-700 text-gray-400 dark:text-gray-500"
+                        : hasUpdate
+                        ? "bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white"
+                        : "bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 text-blue-500 dark:text-blue-400"
+                    }`}
+                  >
+                    {isDownloading ? (
+                      <span className="flex items-center gap-1">
+                        <Download size={12} className="animate-pulse" />
+                        更新中...
+                      </span>
+                    ) : isCheckingUpdate ? (
+                      <span className="flex items-center gap-1">
+                        <RefreshCw size={12} className="animate-spin" />
+                        检查中...
+                      </span>
+                    ) : hasUpdate ? (
+                      <span className="flex items-center gap-1">
+                        <Download size={12} />
+                        点击更新 {updateInfo?.availableVersion}
+                      </span>
+                    ) : (
+                      "检查更新"
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
