@@ -1,5 +1,12 @@
 import { useState, useEffect } from "react";
-import { X, RefreshCw, FolderOpen, Download, ExternalLink } from "lucide-react";
+import {
+  X,
+  RefreshCw,
+  FolderOpen,
+  Download,
+  ExternalLink,
+  Check,
+} from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import "../lib/tauri-api";
 import { relaunchApp } from "../lib/updater";
@@ -18,7 +25,9 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const [version, setVersion] = useState<string>("");
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
-  const { hasUpdate, updateInfo, updateHandle, checkUpdate, resetDismiss } = useUpdate();
+  const [showUpToDate, setShowUpToDate] = useState(false);
+  const { hasUpdate, updateInfo, updateHandle, checkUpdate, resetDismiss } =
+    useUpdate();
 
   useEffect(() => {
     loadSettings();
@@ -86,12 +95,29 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     } else {
       // 尚未检测到更新：先检查
       setIsCheckingUpdate(true);
+      setShowUpToDate(false);
       try {
-        await checkUpdate();
-        // 检查后若有更新，让用户再次点击执行
+        const hasNewUpdate = await checkUpdate();
+        // 检查完成后，如果没有更新，显示"已是最新"
+        if (!hasNewUpdate) {
+          setShowUpToDate(true);
+          // 3秒后恢复按钮文字
+          setTimeout(() => {
+            setShowUpToDate(false);
+          }, 3000);
+        }
       } catch (error) {
-        console.error("检查更新失败，回退到 Releases 页面:", error);
-        await window.api.checkForUpdates();
+        console.error("检查更新失败:", error);
+        // 在开发模式下，模拟已是最新版本的响应
+        if (import.meta.env.DEV) {
+          setShowUpToDate(true);
+          setTimeout(() => {
+            setShowUpToDate(false);
+          }, 3000);
+        } else {
+          // 生产环境下如果更新插件不可用，回退到打开 Releases 页面
+          await window.api.checkForUpdates();
+        }
       } finally {
         setIsCheckingUpdate(false);
       }
@@ -111,12 +137,16 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
       const targetVersion = updateInfo?.availableVersion || version;
       // 如果未知或为空，回退到 releases 首页
       if (!targetVersion || targetVersion === "未知") {
-        await window.api.openExternal("https://github.com/farion1231/cc-switch/releases");
+        await window.api.openExternal(
+          "https://github.com/farion1231/cc-switch/releases"
+        );
         return;
       }
-      const tag = targetVersion.startsWith("v") ? targetVersion : `v${targetVersion}`;
+      const tag = targetVersion.startsWith("v")
+        ? targetVersion
+        : `v${targetVersion}`;
       await window.api.openExternal(
-        `https://github.com/farion1231/cc-switch/releases/tag/${tag}`,
+        `https://github.com/farion1231/cc-switch/releases/tag/${tag}`
       );
     } catch (error) {
       console.error("打开更新日志失败:", error);
@@ -206,7 +236,9 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                   <button
                     onClick={handleOpenReleaseNotes}
                     className="px-2 py-1 text-xs font-medium text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 rounded-lg hover:bg-blue-500/10 transition-colors"
-                    title={hasUpdate ? "查看该版本更新日志" : "查看当前版本更新日志"}
+                    title={
+                      hasUpdate ? "查看该版本更新日志" : "查看当前版本更新日志"
+                    }
                   >
                     <span className="inline-flex items-center gap-1">
                       <ExternalLink size={12} />
@@ -220,8 +252,10 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                       isCheckingUpdate || isDownloading
                         ? "bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed"
                         : hasUpdate
-                        ? "bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700 text-white"
-                        : "bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 text-blue-500 dark:text-blue-400 border border-gray-200 dark:border-gray-600"
+                          ? "bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700 text-white"
+                          : showUpToDate
+                            ? "bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 border border-green-200 dark:border-green-800"
+                            : "bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 text-blue-500 dark:text-blue-400 border border-gray-200 dark:border-gray-600"
                     }`}
                   >
                     {isDownloading ? (
@@ -238,6 +272,11 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                       <span className="flex items-center gap-1">
                         <Download size={12} />
                         更新到 v{updateInfo?.availableVersion}
+                      </span>
+                    ) : showUpToDate ? (
+                      <span className="flex items-center gap-1">
+                        <Check size={12} />
+                        已是最新
                       </span>
                     ) : (
                       "检查更新"

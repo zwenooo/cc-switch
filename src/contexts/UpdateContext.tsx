@@ -15,7 +15,7 @@ interface UpdateContextValue {
   dismissUpdate: () => void;
   
   // 操作方法
-  checkUpdate: () => Promise<void>;
+  checkUpdate: () => Promise<boolean>;
   resetDismiss: () => void;
 }
 
@@ -54,7 +54,7 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
   const isCheckingRef = useRef(false);
 
   const checkUpdate = useCallback(async () => {
-    if (isCheckingRef.current) return;
+    if (isCheckingRef.current) return false;
     isCheckingRef.current = true;
     setIsChecking(true);
     setError(null);
@@ -78,16 +78,19 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
           }
         }
         setIsDismissed(dismissedVersion === result.info.availableVersion);
+        return true; // 有更新
       } else {
         setHasUpdate(false);
         setUpdateInfo(null);
         setUpdateHandle(null);
         setIsDismissed(false);
+        return false; // 已是最新
       }
     } catch (err) {
       console.error("检查更新失败:", err);
       setError(err instanceof Error ? err.message : "检查更新失败");
       setHasUpdate(false);
+      throw err; // 抛出错误让调用方处理
     } finally {
       setIsChecking(false);
       isCheckingRef.current = false;
