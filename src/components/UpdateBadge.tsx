@@ -1,9 +1,9 @@
-import { X, Sparkles } from "lucide-react";
+import { X, Download } from "lucide-react";
 import { useUpdate } from "../contexts/UpdateContext";
 
 interface UpdateBadgeProps {
   className?: string;
-  onClick?: () => void; // 点击徽标的回调（例如打开设置）
+  onClick?: () => void;
 }
 
 export function UpdateBadge({ className = "", onClick }: UpdateBadgeProps) {
@@ -17,12 +17,13 @@ export function UpdateBadge({ className = "", onClick }: UpdateBadgeProps) {
   return (
     <div
       className={`
-        flex items-center gap-2 px-3 py-1.5 
-        bg-gradient-to-r from-blue-500/20 to-purple-500/20
-        border border-blue-500/30
-        rounded-full text-xs
+        flex items-center gap-1.5 px-2.5 py-1
+        bg-white dark:bg-gray-800
+        border border-gray-200 dark:border-gray-700
+        rounded-lg text-xs
+        shadow-sm
         transition-all duration-200
-        ${onClick ? "cursor-pointer hover:border-blue-400/50" : ""}
+        ${onClick ? "cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-750" : ""}
         ${className}
       `}
       role={onClick ? "button" : undefined}
@@ -35,10 +36,10 @@ export function UpdateBadge({ className = "", onClick }: UpdateBadgeProps) {
           onClick();
         }
       }}
-      >
-      <Sparkles className="w-3 h-3 text-blue-400 animate-pulse" />
-      <span className="text-gray-200 font-medium">
-        新版本 {updateInfo.availableVersion}
+    >
+      <Download className="w-3 h-3 text-blue-500 dark:text-blue-400" />
+      <span className="text-gray-700 dark:text-gray-300 font-medium">
+        v{updateInfo.availableVersion}
       </span>
       <button
         onClick={(e) => {
@@ -46,13 +47,14 @@ export function UpdateBadge({ className = "", onClick }: UpdateBadgeProps) {
           dismissUpdate();
         }}
         className="
-          -mr-1 p-0.5 rounded-full
-          hover:bg-white/10 transition-colors
-          focus:outline-none focus:ring-2 focus:ring-blue-500/50
+          ml-1 -mr-0.5 p-0.5 rounded
+          hover:bg-gray-100 dark:hover:bg-gray-700
+          transition-colors
+          focus:outline-none focus:ring-2 focus:ring-blue-500/20
         "
         aria-label="关闭更新提醒"
       >
-        <X className="w-3 h-3 text-gray-400 hover:text-gray-200" />
+        <X className="w-3 h-3 text-gray-400 dark:text-gray-500" />
       </button>
     </div>
   );

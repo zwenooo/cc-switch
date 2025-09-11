@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X, Info, RefreshCw, FolderOpen, Download, ExternalLink } from "lucide-react";
+import { X, RefreshCw, FolderOpen, Download, ExternalLink } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import "../lib/tauri-api";
 import { relaunchApp } from "../lib/updater";
@@ -192,11 +192,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
             </h3>
             <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
               <div className="flex items-start justify-between">
-                <div className="flex items-start gap-3">
-                  <Info
-                    size={18}
-                    className="text-gray-500 mt-0.5"
-                  />
+                <div>
                   <div className="text-sm">
                     <p className="font-medium text-gray-900 dark:text-gray-100">
                       CC Switch
@@ -222,10 +218,10 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                     disabled={isCheckingUpdate || isDownloading}
                     className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
                       isCheckingUpdate || isDownloading
-                        ? "bg-white dark:bg-gray-700 text-gray-400 dark:text-gray-500"
+                        ? "bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed"
                         : hasUpdate
-                        ? "bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white"
-                        : "bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 text-blue-500 dark:text-blue-400"
+                        ? "bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700 text-white"
+                        : "bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 text-blue-500 dark:text-blue-400 border border-gray-200 dark:border-gray-600"
                     }`}
                   >
                     {isDownloading ? (
@@ -241,7 +237,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                     ) : hasUpdate ? (
                       <span className="flex items-center gap-1">
                         <Download size={12} />
-                        点击更新 {updateInfo?.availableVersion}
+                        更新到 v{updateInfo?.availableVersion}
                       </span>
                     ) : (
                       "检查更新"
