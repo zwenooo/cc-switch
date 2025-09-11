@@ -18,9 +18,9 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: windows-latest
-          - os: ubuntu-latest
-          - os: macos-latest
+          - os: windows-2022
+          - os: ubuntu-22.04
+          - os: macos-14
 
     steps:
       - name: Checkout
@@ -78,7 +78,7 @@ jobs:
         run: echo "path=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
 
       - name: Setup pnpm cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ${{ steps.pnpm-store.outputs.path }}
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
@@ -273,7 +273,7 @@ jobs:
 
   assemble-latest-json:
     name: Assemble latest.json
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: release
     permissions:
       contents: write
