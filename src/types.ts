@@ -13,5 +13,6 @@ export interface AppConfig {
 
 // 应用设置类型（用于 SettingsModal 与 Tauri API）
 export interface Settings {
-  showInDock: boolean;
+  // 是否在系统托盘（macOS 菜单栏）显示图标
+  showInTray: boolean;
 }
