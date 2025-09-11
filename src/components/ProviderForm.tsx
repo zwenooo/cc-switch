@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Provider } from "../types";
+import { Provider, ProviderCategory } from "../types";
 import { AppType } from "../lib/tauri-api";
 import {
   updateCoAuthoredSetting,
@@ -16,6 +16,7 @@ import ClaudeConfigEditor from "./ProviderForm/ClaudeConfigEditor";
 import CodexConfigEditor from "./ProviderForm/CodexConfigEditor";
 import KimiModelSelector from "./ProviderForm/KimiModelSelector";
 import { X, AlertCircle, Save } from "lucide-react";
+// 分类仅用于控制少量交互（如官方禁用 API Key），不显示介绍组件
 
 interface ProviderFormProps {
   appType?: AppType;
@@ -46,6 +47,9 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       ? JSON.stringify(initialData.settingsConfig, null, 2)
       : "",
   });
+  const [category, setCategory] = useState<ProviderCategory | undefined>(
+    initialData?.category,
+  );
 
   // Codex 特有的状态
   const [codexAuth, setCodexAuth] = useState("");
@@ -113,6 +117,26 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     }
   }, [initialData]);
 
+  // 当选择预设变化时，同步类别
+  useEffect(() => {
+    if (!showPresets) return;
+    if (!isCodex) {
+      if (selectedPreset !== null && selectedPreset >= 0) {
+        const preset = providerPresets[selectedPreset];
+        setCategory(preset?.category || (preset?.isOfficial ? "official" : undefined));
+      } else if (selectedPreset === -1) {
+        setCategory("custom");
+      }
+    } else {
+      if (selectedCodexPreset !== null && selectedCodexPreset >= 0) {
+        const preset = codexProviderPresets[selectedCodexPreset];
+        setCategory(preset?.category || (preset?.isOfficial ? "official" : undefined));
+      } else if (selectedCodexPreset === -1) {
+        setCategory("custom");
+      }
+    }
+  }, [showPresets, isCodex, selectedPreset, selectedCodexPreset]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -177,6 +201,8 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       name: formData.name,
       websiteUrl: formData.websiteUrl,
       settingsConfig,
+      // 仅在用户选择了预设或手动选择“自定义”时持久化分类
+      ...(category ? { category } : {}),
     });
   };
 
@@ -230,6 +256,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       websiteUrl: preset.websiteUrl,
       settingsConfig: configString,
     });
+    setCategory(preset.category || (preset.isOfficial ? "official" : undefined));
 
     // 设置选中的预设
     setSelectedPreset(index);
@@ -272,6 +299,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     setDisableCoAuthored(false);
     setKimiAnthropicModel("");
     setKimiAnthropicSmallFastModel("");
+    setCategory("custom");
   };
 
   // Codex: 应用预设
@@ -290,6 +318,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     }));
 
     setSelectedCodexPreset(index);
+    setCategory(preset.category || (preset.isOfficial ? "official" : undefined));
 
     // 清空 API Key，让用户重新输入
     setCodexApiKey("");
@@ -306,6 +335,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     setCodexAuth("");
     setCodexConfig("");
     setCodexApiKey("");
+    setCategory("custom");
   };
 
   // 处理 API Key 输入并自动更新配置
@@ -349,9 +379,11 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
 
   // 判断当前选中的预设是否是官方
   const isOfficialPreset =
-    selectedPreset !== null &&
-    selectedPreset >= 0 &&
-    providerPresets[selectedPreset]?.isOfficial === true;
+    (selectedPreset !== null &&
+      selectedPreset >= 0 &&
+      (providerPresets[selectedPreset]?.isOfficial === true ||
+        providerPresets[selectedPreset]?.category === "official")) ||
+    category === "official";
 
   // 判断当前选中的预设是否是 Kimi
   const isKimiPreset =
@@ -385,10 +417,14 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     (selectedCodexPreset !== null && selectedCodexPreset !== -1) ||
     (!showPresets && getCodexAuthApiKey(codexAuth) !== "");
 
+  // 不再渲染分类介绍组件，避免造成干扰
+
   const isCodexOfficialPreset =
-    selectedCodexPreset !== null &&
-    selectedCodexPreset >= 0 &&
-    codexProviderPresets[selectedCodexPreset]?.isOfficial === true;
+    (selectedCodexPreset !== null &&
+      selectedCodexPreset >= 0 &&
+      (codexProviderPresets[selectedCodexPreset]?.isOfficial === true ||
+        codexProviderPresets[selectedCodexPreset]?.category === "official")) ||
+    category === "official";
 
   // Kimi 模型选择处理函数
   const handleKimiModelChange = (

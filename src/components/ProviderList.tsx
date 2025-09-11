@@ -2,6 +2,7 @@ import React from "react";
 import { Provider } from "../types";
 import { Play, Edit3, Trash2, CheckCircle2, Users } from "lucide-react";
 import { buttonStyles, cardStyles, badgeStyles, cn } from "../lib/styles";
+// 不再在列表中显示分类徽章，避免造成困惑
 
 interface ProviderListProps {
   providers: Record<string, Provider>;
@@ -99,6 +100,7 @@ const ProviderList: React.FC<ProviderListProps> = ({
                       <h3 className="font-medium text-gray-900 dark:text-gray-100">
                         {provider.name}
                       </h3>
+                      {/* 分类徽章已移除 */}
                       {isCurrent && (
                         <div className={badgeStyles.success}>
                           <CheckCircle2 size={12} />

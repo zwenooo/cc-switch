@@ -1,11 +1,14 @@
 /**
  * 预设供应商配置模板
  */
+import { ProviderCategory } from "../types";
+
 export interface ProviderPreset {
   name: string;
   websiteUrl: string;
   settingsConfig: object;
   isOfficial?: boolean; // 标识是否为官方预设
+  category?: ProviderCategory; // 新增：分类
 }
 
 export const providerPresets: ProviderPreset[] = [
@@ -16,6 +19,7 @@ export const providerPresets: ProviderPreset[] = [
       env: {},
     },
     isOfficial: true, // 明确标识为官方预设
+    category: "official",
   },
   {
     name: "DeepSeek v3.1",
@@ -28,6 +32,7 @@ export const providerPresets: ProviderPreset[] = [
         ANTHROPIC_SMALL_FAST_MODEL: "deepseek-chat",
       },
     },
+    category: "cn_official",
   },
   {
     name: "智谱GLM",
@@ -38,6 +43,7 @@ export const providerPresets: ProviderPreset[] = [
         ANTHROPIC_AUTH_TOKEN: "",
       },
     },
+    category: "cn_official",
   },
   {
     name: "千问Qwen-Coder",
@@ -49,6 +55,7 @@ export const providerPresets: ProviderPreset[] = [
         ANTHROPIC_AUTH_TOKEN: "",
       },
     },
+    category: "cn_official",
   },
   {
     name: "Kimi k2",
@@ -61,6 +68,7 @@ export const providerPresets: ProviderPreset[] = [
         ANTHROPIC_SMALL_FAST_MODEL: "kimi-k2-turbo-preview",
       },
     },
+    category: "cn_official",
   },
   {
     name: "魔搭",
@@ -73,6 +81,7 @@ export const providerPresets: ProviderPreset[] = [
         ANTHROPIC_SMALL_FAST_MODEL: "ZhipuAI/GLM-4.5",
       },
     },
+    category: "aggregator",
   },
   {
     name: "PackyCode",
@@ -83,5 +92,6 @@ export const providerPresets: ProviderPreset[] = [
         ANTHROPIC_AUTH_TOKEN: "",
       },
     },
+    category: "third_party",
   },
 ];
