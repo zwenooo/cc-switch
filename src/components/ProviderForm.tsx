@@ -15,7 +15,7 @@ import ApiKeyInput from "./ProviderForm/ApiKeyInput";
 import ClaudeConfigEditor from "./ProviderForm/ClaudeConfigEditor";
 import CodexConfigEditor from "./ProviderForm/CodexConfigEditor";
 import KimiModelSelector from "./ProviderForm/KimiModelSelector";
-import { X, AlertCircle, Save } from "lucide-react";
+import { X, AlertCircle } from "lucide-react";
 // 分类仅用于控制少量交互（如官方禁用 API Key），不显示介绍组件
 
 interface ProviderFormProps {
@@ -95,6 +95,28 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   const [kimiAnthropicModel, setKimiAnthropicModel] = useState("");
   const [kimiAnthropicSmallFastModel, setKimiAnthropicSmallFastModel] =
     useState("");
+    
+  // 初始化自定义模式的默认配置
+  useEffect(() => {
+    if (showPresets && selectedPreset === -1 && !initialData && formData.settingsConfig === "") {
+      // 设置自定义模板
+      const customTemplate = {
+        env: {
+          ANTHROPIC_BASE_URL: "https://your-api-endpoint.com",
+          ANTHROPIC_AUTH_TOKEN: "",
+          // 可选配置
+          // ANTHROPIC_MODEL: "your-model-name",
+          // ANTHROPIC_SMALL_FAST_MODEL: "your-fast-model-name"
+        }
+      };
+      
+      setFormData(prev => ({
+        ...prev,
+        settingsConfig: JSON.stringify(customTemplate, null, 2),
+      }));
+      setApiKey("");
+    }
+  }, []); // 只在组件挂载时执行一次
 
   // 初始化时检查禁用签名状态
   useEffect(() => {
@@ -303,7 +325,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     const customTemplate = {
       env: {
         ANTHROPIC_BASE_URL: "https://your-api-endpoint.com",
-        ANTHROPIC_AUTH_TOKEN: "sk-your-api-key-here",
+        ANTHROPIC_AUTH_TOKEN: "",
         // 可选配置
         // ANTHROPIC_MODEL: "your-model-name",
         // ANTHROPIC_SMALL_FAST_MODEL: "your-fast-model-name"
@@ -315,7 +337,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       websiteUrl: "",
       settingsConfig: JSON.stringify(customTemplate, null, 2),
     });
-    setApiKey("sk-your-api-key-here");
+    setApiKey("");
     setDisableCoAuthored(false);
     setClaudeModel("");
     setClaudeSmallFastModel("");
@@ -394,9 +416,9 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   };
 
   // 根据当前配置决定是否展示 API Key 输入框
-  // 自定义模式(-1)不显示独立的 API Key 输入框
+  // 自定义模式(-1)也需要显示 API Key 输入框
   const showApiKey =
-    (selectedPreset !== null && selectedPreset !== -1) ||
+    (selectedPreset !== null) ||
     (!showPresets && hasApiKeyField(formData.settingsConfig));
 
   // 判断当前选中的预设是否是官方
@@ -760,9 +782,8 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
             </button>
             <button
               type="submit"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium"
+              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium"
             >
-              <Save size={16} />
               {submitText}
             </button>
           </div>
