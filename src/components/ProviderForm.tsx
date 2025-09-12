@@ -727,9 +727,9 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                       href={getCurrentWebsiteUrl()}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-gray-500 hover:text-blue-600 transition-colors"
+                      className="text-xs text-blue-400 hover:text-blue-500 transition-colors"
                     >
-                      获取 API Key →
+                      获取 API Key
                     </a>
                   </div>
                 )}
@@ -797,9 +797,9 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                       href={getCurrentCodexWebsiteUrl()}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-gray-500 hover:text-blue-600 transition-colors"
+                      className="text-xs text-blue-400 hover:text-blue-500 transition-colors"
                     >
-                      获取 API Key →
+                      获取 API Key
                     </a>
                   </div>
                 )}
