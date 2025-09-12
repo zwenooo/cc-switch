@@ -41,6 +41,8 @@ export const providerPresets: ProviderPreset[] = [
       env: {
         ANTHROPIC_BASE_URL: "https://open.bigmodel.cn/api/anthropic",
         ANTHROPIC_AUTH_TOKEN: "",
+        ANTHROPIC_MODEL: "glm-4-plus",
+        ANTHROPIC_SMALL_FAST_MODEL: "glm-4-flash",
       },
     },
     category: "cn_official",
@@ -50,9 +52,10 @@ export const providerPresets: ProviderPreset[] = [
     websiteUrl: "https://bailian.console.aliyun.com",
     settingsConfig: {
       env: {
-        ANTHROPIC_BASE_URL:
-          "https://dashscope.aliyuncs.com/api/v2/apps/claude-code-proxy",
+        ANTHROPIC_BASE_URL: "https://dashscope.aliyuncs.com/api/v2/apps/claude-code-proxy",
         ANTHROPIC_AUTH_TOKEN: "",
+        ANTHROPIC_MODEL: "qwen-coder-turbo",
+        ANTHROPIC_SMALL_FAST_MODEL: "qwen-coder-turbo",
       },
     },
     category: "cn_official",
@@ -75,8 +78,8 @@ export const providerPresets: ProviderPreset[] = [
     websiteUrl: "https://modelscope.cn",
     settingsConfig: {
       env: {
-        ANTHROPIC_AUTH_TOKEN: "ms-your-api-key",
         ANTHROPIC_BASE_URL: "https://api-inference.modelscope.cn",
+        ANTHROPIC_AUTH_TOKEN: "",
         ANTHROPIC_MODEL: "ZhipuAI/GLM-4.5",
         ANTHROPIC_SMALL_FAST_MODEL: "ZhipuAI/GLM-4.5",
       },

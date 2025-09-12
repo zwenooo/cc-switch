@@ -38,8 +38,8 @@ const ClaudeConfigEditor: React.FC<ClaudeConfigEditorProps> = ({
         onChange={onChange}
         placeholder={`{
   "env": {
-    "ANTHROPIC_BASE_URL": "https://api.anthropic.com",
-    "ANTHROPIC_AUTH_TOKEN": "sk-your-api-key-here"
+    "ANTHROPIC_BASE_URL": "https://your-api-endpoint.com",
+    "ANTHROPIC_AUTH_TOKEN": "your-api-key-here"
   }
 }`}
         rows={12}

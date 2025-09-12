@@ -51,6 +51,10 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     initialData?.category,
   );
 
+  // Claude 模型配置状态
+  const [claudeModel, setClaudeModel] = useState("");
+  const [claudeSmallFastModel, setClaudeSmallFastModel] = useState("");
+
   // Codex 特有的状态
   const [codexAuth, setCodexAuth] = useState("");
   const [codexConfig, setCodexConfig] = useState("");
@@ -99,7 +103,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       const hasCoAuthoredDisabled = checkCoAuthoredSetting(configString);
       setDisableCoAuthored(hasCoAuthoredDisabled);
 
-      // 初始化 Kimi 模型选择（编辑模式）
+      // 初始化模型配置（编辑模式）
       if (
         initialData.settingsConfig &&
         typeof initialData.settingsConfig === "object"
@@ -108,6 +112,10 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
           env?: Record<string, any>;
         };
         if (config.env) {
+          setClaudeModel(config.env.ANTHROPIC_MODEL || "");
+          setClaudeSmallFastModel(config.env.ANTHROPIC_SMALL_FAST_MODEL || "");
+          
+          // 初始化 Kimi 模型选择
           setKimiAnthropicModel(config.env.ANTHROPIC_MODEL || "");
           setKimiAnthropicSmallFastModel(
             config.env.ANTHROPIC_SMALL_FAST_MODEL || "",
@@ -268,35 +276,49 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     const hasCoAuthoredDisabled = checkCoAuthoredSetting(configString);
     setDisableCoAuthored(hasCoAuthoredDisabled);
 
-    // 如果是 Kimi 预设，初始化模型选择
-    if (
-      preset.name?.includes("Kimi") &&
-      preset.settingsConfig &&
-      typeof preset.settingsConfig === "object"
-    ) {
+    // 如果预设包含模型配置，初始化模型输入框
+    if (preset.settingsConfig && typeof preset.settingsConfig === "object") {
       const config = preset.settingsConfig as { env?: Record<string, any> };
       if (config.env) {
-        setKimiAnthropicModel(config.env.ANTHROPIC_MODEL || "");
-        setKimiAnthropicSmallFastModel(
-          config.env.ANTHROPIC_SMALL_FAST_MODEL || "",
-        );
+        setClaudeModel(config.env.ANTHROPIC_MODEL || "");
+        setClaudeSmallFastModel(config.env.ANTHROPIC_SMALL_FAST_MODEL || "");
+        
+        // 如果是 Kimi 预设，同步 Kimi 模型选择
+        if (preset.name?.includes("Kimi")) {
+          setKimiAnthropicModel(config.env.ANTHROPIC_MODEL || "");
+          setKimiAnthropicSmallFastModel(config.env.ANTHROPIC_SMALL_FAST_MODEL || "");
+        }
+      } else {
+        setClaudeModel("");
+        setClaudeSmallFastModel("");
       }
-    } else {
-      setKimiAnthropicModel("");
-      setKimiAnthropicSmallFastModel("");
     }
   };
 
   // 处理点击自定义按钮
   const handleCustomClick = () => {
     setSelectedPreset(-1);
+    
+    // 设置自定义模板
+    const customTemplate = {
+      env: {
+        ANTHROPIC_BASE_URL: "https://your-api-endpoint.com",
+        ANTHROPIC_AUTH_TOKEN: "your-api-key-here",
+        // 可选配置
+        // ANTHROPIC_MODEL: "your-model-name",
+        // ANTHROPIC_SMALL_FAST_MODEL: "your-fast-model-name"
+      }
+    };
+    
     setFormData({
       name: "",
       websiteUrl: "",
-      settingsConfig: "",
+      settingsConfig: JSON.stringify(customTemplate, null, 2),
     });
     setApiKey("");
     setDisableCoAuthored(false);
+    setClaudeModel("");
+    setClaudeSmallFastModel("");
     setKimiAnthropicModel("");
     setKimiAnthropicSmallFastModel("");
     setCategory("custom");
@@ -425,6 +447,34 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       (codexProviderPresets[selectedCodexPreset]?.isOfficial === true ||
         codexProviderPresets[selectedCodexPreset]?.category === "official")) ||
     category === "official";
+
+  // 处理模型输入变化，自动更新 JSON 配置
+  const handleModelChange = (field: 'ANTHROPIC_MODEL' | 'ANTHROPIC_SMALL_FAST_MODEL', value: string) => {
+    if (field === 'ANTHROPIC_MODEL') {
+      setClaudeModel(value);
+    } else {
+      setClaudeSmallFastModel(value);
+    }
+
+    // 更新 JSON 配置
+    try {
+      const currentConfig = formData.settingsConfig ? JSON.parse(formData.settingsConfig) : { env: {} };
+      if (!currentConfig.env) currentConfig.env = {};
+      
+      if (value.trim()) {
+        currentConfig.env[field] = value.trim();
+      } else {
+        delete currentConfig.env[field];
+      }
+
+      setFormData(prev => ({
+        ...prev,
+        settingsConfig: JSON.stringify(currentConfig, null, 2),
+      }));
+    } catch (err) {
+      // 如果 JSON 解析失败，不做处理
+    }
+  };
 
   // Kimi 模型选择处理函数
   const handleKimiModelChange = (
@@ -557,6 +607,25 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
               />
             </div>
 
+            <div className="space-y-2">
+              <label
+                htmlFor="websiteUrl"
+                className="block text-sm font-medium text-gray-900"
+              >
+                官网地址
+              </label>
+              <input
+                type="url"
+                id="websiteUrl"
+                name="websiteUrl"
+                value={formData.websiteUrl}
+                onChange={handleChange}
+                placeholder="https://example.com（可选）"
+                autoComplete="off"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+              />
+            </div>
+
             {!isCodex && showApiKey && (
               <ApiKeyInput
                 value={apiKey}
@@ -602,25 +671,6 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
               />
             )}
 
-            <div className="space-y-2">
-              <label
-                htmlFor="websiteUrl"
-                className="block text-sm font-medium text-gray-900"
-              >
-                官网地址
-              </label>
-              <input
-                type="url"
-                id="websiteUrl"
-                name="websiteUrl"
-                value={formData.websiteUrl}
-                onChange={handleChange}
-                placeholder="https://example.com（可选）"
-                autoComplete="off"
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
-              />
-            </div>
-
             {/* Claude 或 Codex 的配置部分 */}
             {isCodex ? (
               <CodexConfigEditor
@@ -642,16 +692,59 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                 }}
               />
             ) : (
-              <ClaudeConfigEditor
-                value={formData.settingsConfig}
-                onChange={(value) =>
-                  handleChange({
-                    target: { name: "settingsConfig", value },
-                  } as React.ChangeEvent<HTMLTextAreaElement>)
-                }
-                disableCoAuthored={disableCoAuthored}
-                onCoAuthoredToggle={handleCoAuthoredToggle}
-              />
+              <>
+                {/* 可选的模型配置输入框 - 简化为一行 */}
+                {!isOfficialPreset && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label
+                        htmlFor="anthropicModel"
+                        className="block text-sm font-medium text-gray-900"
+                      >
+                        主模型 (可选)
+                      </label>
+                      <input
+                        type="text"
+                        id="anthropicModel"
+                        value={claudeModel}
+                        onChange={(e) => handleModelChange('ANTHROPIC_MODEL', e.target.value)}
+                        placeholder="例如: deepseek-chat"
+                        autoComplete="off"
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+                      />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <label
+                        htmlFor="anthropicSmallFastModel"
+                        className="block text-sm font-medium text-gray-900"
+                      >
+                        快速模型 (可选)
+                      </label>
+                      <input
+                        type="text"
+                        id="anthropicSmallFastModel"
+                        value={claudeSmallFastModel}
+                        onChange={(e) => handleModelChange('ANTHROPIC_SMALL_FAST_MODEL', e.target.value)}
+                        placeholder="例如: glm-4-flash"
+                        autoComplete="off"
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+                      />
+                    </div>
+                  </div>
+                )}
+                
+                <ClaudeConfigEditor
+                  value={formData.settingsConfig}
+                  onChange={(value) =>
+                    handleChange({
+                      target: { name: "settingsConfig", value },
+                    } as React.ChangeEvent<HTMLTextAreaElement>)
+                  }
+                  disableCoAuthored={disableCoAuthored}
+                  onCoAuthoredToggle={handleCoAuthoredToggle}
+                />
+              </>
             )}
           </div>
 
