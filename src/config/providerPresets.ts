@@ -13,7 +13,7 @@ export interface ProviderPreset {
 
 export const providerPresets: ProviderPreset[] = [
   {
-    name: "Claude官方登录",
+    name: "Claude官方",
     websiteUrl: "https://www.anthropic.com/claude-code",
     settingsConfig: {
       env: {},
@@ -22,7 +22,7 @@ export const providerPresets: ProviderPreset[] = [
     category: "official",
   },
   {
-    name: "DeepSeek v3.1",
+    name: "DeepSeek",
     websiteUrl: "https://platform.deepseek.com",
     settingsConfig: {
       env: {
@@ -41,21 +41,21 @@ export const providerPresets: ProviderPreset[] = [
       env: {
         ANTHROPIC_BASE_URL: "https://open.bigmodel.cn/api/anthropic",
         ANTHROPIC_AUTH_TOKEN: "",
-        ANTHROPIC_MODEL: "glm-4-plus",
-        ANTHROPIC_SMALL_FAST_MODEL: "glm-4-flash",
+        ANTHROPIC_MODEL: "GLM-4.5",
+        ANTHROPIC_SMALL_FAST_MODEL: "GLM-4.5-Air",
       },
     },
     category: "cn_official",
   },
   {
-    name: "千问Qwen-Coder",
+    name: "Qwen-Coder",
     websiteUrl: "https://bailian.console.aliyun.com",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://dashscope.aliyuncs.com/api/v2/apps/claude-code-proxy",
         ANTHROPIC_AUTH_TOKEN: "",
-        ANTHROPIC_MODEL: "qwen-coder-turbo",
-        ANTHROPIC_SMALL_FAST_MODEL: "qwen-coder-turbo",
+        ANTHROPIC_MODEL: "qwen3-coder-plus",
+        ANTHROPIC_SMALL_FAST_MODEL: "qwen3-coder-plus",
       },
     },
     category: "cn_official",

@@ -172,9 +172,9 @@ const KimiModelSelector: React.FC<KimiModelSelectorProps> = ({
       </div>
 
       {!apiKey.trim() && (
-        <div className="p-3 bg-gray-100 border border-gray-200 rounded-lg">
-          <p className="text-xs text-gray-500">
-            📝 请先填写 API Key（格式：sk-xxx-api-key-here）以获取可用模型列表
+        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+          <p className="text-xs text-amber-600">
+            💡 填写 API Key 后将自动获取可用模型列表
           </p>
         </div>
       )}

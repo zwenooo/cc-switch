@@ -54,6 +54,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   // Claude 模型配置状态
   const [claudeModel, setClaudeModel] = useState("");
   const [claudeSmallFastModel, setClaudeSmallFastModel] = useState("");
+  const [baseUrl, setBaseUrl] = useState(""); // 新增：基础 URL 状态
 
   // Codex 特有的状态
   const [codexAuth, setCodexAuth] = useState("");
@@ -136,6 +137,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
         if (config.env) {
           setClaudeModel(config.env.ANTHROPIC_MODEL || "");
           setClaudeSmallFastModel(config.env.ANTHROPIC_SMALL_FAST_MODEL || "");
+          setBaseUrl(config.env.ANTHROPIC_BASE_URL || ""); // 初始化基础 URL
           
           // 初始化 Kimi 模型选择
           setKimiAnthropicModel(config.env.ANTHROPIC_MODEL || "");
@@ -293,6 +295,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
 
     // 清空 API Key 输入框，让用户重新输入
     setApiKey("");
+    setBaseUrl(""); // 清空基础 URL
 
     // 同步选择框状态
     const hasCoAuthoredDisabled = checkCoAuthoredSetting(configString);
@@ -338,6 +341,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       settingsConfig: JSON.stringify(customTemplate, null, 2),
     });
     setApiKey("");
+    setBaseUrl("https://your-api-endpoint.com"); // 设置默认的基础 URL
     setDisableCoAuthored(false);
     setClaudeModel("");
     setClaudeSmallFastModel("");
@@ -403,6 +407,26 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     setDisableCoAuthored(hasCoAuthoredDisabled);
   };
 
+  // 处理基础 URL 变化
+  const handleBaseUrlChange = (url: string) => {
+    setBaseUrl(url);
+    
+    try {
+      const config = JSON.parse(formData.settingsConfig || "{}");
+      if (!config.env) {
+        config.env = {};
+      }
+      config.env.ANTHROPIC_BASE_URL = url.trim();
+      
+      setFormData(prev => ({
+        ...prev,
+        settingsConfig: JSON.stringify(config, null, 2)
+      }));
+    } catch {
+      // ignore
+    }
+  };
+
   // Codex: 处理 API Key 输入并写回 auth.json
   const handleCodexApiKeyChange = (key: string) => {
     setCodexApiKey(key);
@@ -446,6 +470,32 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   // 综合判断是否应该显示 Kimi 模型选择器
   const shouldShowKimiSelector = isKimiPreset || isEditingKimi;
 
+  // 判断是否显示基础 URL 输入框（仅自定义模式显示）
+  const showBaseUrlInput = selectedPreset === -1 && !isCodex;
+
+  // 判断是否显示"获取 API Key"链接（国产官方和聚合站显示）
+  const shouldShowApiKeyLink = !isCodex && !isOfficialPreset && 
+    (category === "cn_official" || category === "aggregator" || 
+     (selectedPreset !== null && selectedPreset >= 0 && 
+      (providerPresets[selectedPreset]?.category === "cn_official" || 
+       providerPresets[selectedPreset]?.category === "aggregator")));
+  
+  // 获取当前供应商的网址
+  const getCurrentWebsiteUrl = () => {
+    if (selectedPreset !== null && selectedPreset >= 0) {
+      return providerPresets[selectedPreset]?.websiteUrl || "";
+    }
+    return formData.websiteUrl || "";
+  };
+
+  // 获取 Codex 当前供应商的网址
+  const getCurrentCodexWebsiteUrl = () => {
+    if (selectedCodexPreset !== null && selectedCodexPreset >= 0) {
+      return codexProviderPresets[selectedCodexPreset]?.websiteUrl || "";
+    }
+    return formData.websiteUrl || "";
+  };
+
   // Codex: 控制显示 API Key 与官方标记
   const getCodexAuthApiKey = (authString: string): string => {
     try {
@@ -469,6 +519,14 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       (codexProviderPresets[selectedCodexPreset]?.isOfficial === true ||
         codexProviderPresets[selectedCodexPreset]?.category === "official")) ||
     category === "official";
+
+  // 判断是否显示 Codex 的"获取 API Key"链接
+  const shouldShowCodexApiKeyLink = isCodex && !isCodexOfficialPreset && 
+    (category === "cn_official" || category === "aggregator" || category === "third_party" ||
+     (selectedCodexPreset !== null && selectedCodexPreset >= 0 && 
+      (codexProviderPresets[selectedCodexPreset]?.category === "cn_official" || 
+       codexProviderPresets[selectedCodexPreset]?.category === "aggregator" ||
+       codexProviderPresets[selectedCodexPreset]?.category === "third_party")));
 
   // 处理模型输入变化，自动更新 JSON 配置
   const handleModelChange = (field: 'ANTHROPIC_MODEL' | 'ANTHROPIC_SMALL_FAST_MODEL', value: string) => {
@@ -649,22 +707,62 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
             </div>
 
             {!isCodex && showApiKey && (
-              <ApiKeyInput
-                value={apiKey}
-                onChange={handleApiKeyChange}
-                required={!isOfficialPreset}
-                placeholder={
-                  isOfficialPreset
-                    ? "官方登录无需填写 API Key，直接保存即可"
-                    : shouldShowKimiSelector
-                      ? "sk-xxx-api-key-here (填写后可获取模型列表)"
-                      : "只需要填这里，下方配置会自动填充"
-                }
-                disabled={isOfficialPreset}
-              />
+              <div className="space-y-1">
+                <ApiKeyInput
+                  value={apiKey}
+                  onChange={handleApiKeyChange}
+                  required={!isOfficialPreset}
+                  placeholder={
+                    isOfficialPreset
+                      ? "官方登录无需填写 API Key，直接保存即可"
+                      : shouldShowKimiSelector
+                        ? "填写后可获取模型列表"
+                        : "只需要填这里，下方配置会自动填充"
+                  }
+                  disabled={isOfficialPreset}
+                />
+                {shouldShowApiKeyLink && getCurrentWebsiteUrl() && (
+                  <div className="-mt-1 pl-1">
+                    <a
+                      href={getCurrentWebsiteUrl()}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-gray-500 hover:text-blue-600 transition-colors"
+                    >
+                      获取 API Key →
+                    </a>
+                  </div>
+                )}
+              </div>
             )}
 
-            {!isCodex && shouldShowKimiSelector && apiKey.trim() && (
+            {/* 基础 URL 输入框 - 仅在自定义模式下显示 */}
+            {!isCodex && showBaseUrlInput && (
+              <div className="space-y-2">
+                <label
+                  htmlFor="baseUrl"
+                  className="block text-sm font-medium text-gray-900"
+                >
+                  请求地址
+                </label>
+                <input
+                  type="url"
+                  id="baseUrl"
+                  value={baseUrl}
+                  onChange={(e) => handleBaseUrlChange(e.target.value)}
+                  placeholder="https://your-api-endpoint.com"
+                  autoComplete="off"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+                />
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <p className="text-xs text-amber-600">
+                    💡 填写兼容 Claude API 的服务端点地址
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {!isCodex && shouldShowKimiSelector && (
               <KimiModelSelector
                 apiKey={apiKey}
                 anthropicModel={kimiAnthropicModel}
@@ -675,23 +773,37 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
             )}
 
             {isCodex && showCodexApiKey && (
-              <ApiKeyInput
-                id="codexApiKey"
-                label="API Key"
-                value={codexApiKey}
-                onChange={handleCodexApiKeyChange}
-                placeholder={
-                  isCodexOfficialPreset
-                    ? "官方无需填写 API Key，直接保存即可"
-                    : "只需要填这里，下方 auth.json 会自动填充"
-                }
-                disabled={isCodexOfficialPreset}
-                required={
-                  selectedCodexPreset !== null &&
-                  selectedCodexPreset >= 0 &&
-                  !isCodexOfficialPreset
-                }
-              />
+              <div className="space-y-1">
+                <ApiKeyInput
+                  id="codexApiKey"
+                  label="API Key"
+                  value={codexApiKey}
+                  onChange={handleCodexApiKeyChange}
+                  placeholder={
+                    isCodexOfficialPreset
+                      ? "官方无需填写 API Key，直接保存即可"
+                      : "只需要填这里，下方 auth.json 会自动填充"
+                  }
+                  disabled={isCodexOfficialPreset}
+                  required={
+                    selectedCodexPreset !== null &&
+                    selectedCodexPreset >= 0 &&
+                    !isCodexOfficialPreset
+                  }
+                />
+                {shouldShowCodexApiKeyLink && getCurrentCodexWebsiteUrl() && (
+                  <div className="-mt-1 pl-1">
+                    <a
+                      href={getCurrentCodexWebsiteUrl()}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-gray-500 hover:text-blue-600 transition-colors"
+                    >
+                      获取 API Key →
+                    </a>
+                  </div>
+                )}
+              </div>
             )}
 
             {/* Claude 或 Codex 的配置部分 */}
@@ -716,43 +828,51 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
               />
             ) : (
               <>
-                {/* 可选的模型配置输入框 - 简化为一行 */}
-                {!isOfficialPreset && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label
-                        htmlFor="anthropicModel"
-                        className="block text-sm font-medium text-gray-900"
-                      >
-                        主模型 (可选)
-                      </label>
-                      <input
-                        type="text"
-                        id="anthropicModel"
-                        value={claudeModel}
-                        onChange={(e) => handleModelChange('ANTHROPIC_MODEL', e.target.value)}
-                        placeholder="例如: deepseek-chat"
-                        autoComplete="off"
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
-                      />
+                {/* 可选的模型配置输入框 - 仅在非官方且非 Kimi 时显示 */}
+                {!isOfficialPreset && !shouldShowKimiSelector && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label
+                          htmlFor="anthropicModel"
+                          className="block text-sm font-medium text-gray-900"
+                        >
+                          主模型 (可选)
+                        </label>
+                        <input
+                          type="text"
+                          id="anthropicModel"
+                          value={claudeModel}
+                          onChange={(e) => handleModelChange('ANTHROPIC_MODEL', e.target.value)}
+                          placeholder="例如: GLM-4.5"
+                          autoComplete="off"
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <label
+                          htmlFor="anthropicSmallFastModel"
+                          className="block text-sm font-medium text-gray-900"
+                        >
+                          快速模型 (可选)
+                        </label>
+                        <input
+                          type="text"
+                          id="anthropicSmallFastModel"
+                          value={claudeSmallFastModel}
+                          onChange={(e) => handleModelChange('ANTHROPIC_SMALL_FAST_MODEL', e.target.value)}
+                          placeholder="例如: GLM-4.5-Air"
+                          autoComplete="off"
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+                        />
+                      </div>
                     </div>
                     
-                    <div className="space-y-2">
-                      <label
-                        htmlFor="anthropicSmallFastModel"
-                        className="block text-sm font-medium text-gray-900"
-                      >
-                        快速模型 (可选)
-                      </label>
-                      <input
-                        type="text"
-                        id="anthropicSmallFastModel"
-                        value={claudeSmallFastModel}
-                        onChange={(e) => handleModelChange('ANTHROPIC_SMALL_FAST_MODEL', e.target.value)}
-                        placeholder="例如: glm-4-flash"
-                        autoComplete="off"
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
-                      />
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                      <p className="text-xs text-amber-600">
+                        💡 留空将使用供应商的默认模型
+                      </p>
                     </div>
                   </div>
                 )}
