@@ -303,7 +303,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     const customTemplate = {
       env: {
         ANTHROPIC_BASE_URL: "https://your-api-endpoint.com",
-        ANTHROPIC_AUTH_TOKEN: "your-api-key-here",
+        ANTHROPIC_AUTH_TOKEN: "sk-your-api-key-here",
         // 可选配置
         // ANTHROPIC_MODEL: "your-model-name",
         // ANTHROPIC_SMALL_FAST_MODEL: "your-fast-model-name"
@@ -315,7 +315,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       websiteUrl: "",
       settingsConfig: JSON.stringify(customTemplate, null, 2),
     });
-    setApiKey("");
+    setApiKey("sk-your-api-key-here");
     setDisableCoAuthored(false);
     setClaudeModel("");
     setClaudeSmallFastModel("");
@@ -630,6 +630,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
               <ApiKeyInput
                 value={apiKey}
                 onChange={handleApiKeyChange}
+                required={!isOfficialPreset}
                 placeholder={
                   isOfficialPreset
                     ? "官方登录无需填写 API Key，直接保存即可"
