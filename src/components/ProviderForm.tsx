@@ -473,12 +473,13 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   // 判断是否显示基础 URL 输入框（仅自定义模式显示）
   const showBaseUrlInput = selectedPreset === -1 && !isCodex;
 
-  // 判断是否显示"获取 API Key"链接（国产官方和聚合站显示）
+  // 判断是否显示"获取 API Key"链接（国产官方、聚合站和第三方显示）
   const shouldShowApiKeyLink = !isCodex && !isOfficialPreset && 
-    (category === "cn_official" || category === "aggregator" || 
+    (category === "cn_official" || category === "aggregator" || category === "third_party" ||
      (selectedPreset !== null && selectedPreset >= 0 && 
       (providerPresets[selectedPreset]?.category === "cn_official" || 
-       providerPresets[selectedPreset]?.category === "aggregator")));
+       providerPresets[selectedPreset]?.category === "aggregator" ||
+       providerPresets[selectedPreset]?.category === "third_party")));
   
   // 获取当前供应商的网址
   const getCurrentWebsiteUrl = () => {

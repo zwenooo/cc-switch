@@ -158,12 +158,12 @@ const KimiModelSelector: React.FC<KimiModelSelectorProps> = ({
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <ModelSelect
-          label="主模型 (ANTHROPIC_MODEL)"
+          label="主模型"
           value={anthropicModel}
           onChange={(value) => onModelChange("ANTHROPIC_MODEL", value)}
         />
         <ModelSelect
-          label="快速模型 (ANTHROPIC_SMALL_FAST_MODEL)"
+          label="快速模型"
           value={anthropicSmallFastModel}
           onChange={(value) =>
             onModelChange("ANTHROPIC_SMALL_FAST_MODEL", value)
