@@ -44,18 +44,15 @@ export function useDarkMode() {
       try {
         if (isDarkMode) {
           document.documentElement.classList.add("dark");
-          if (isDev)
-            console.log("[DarkMode] Added dark class to document");
+          if (isDev) console.log("[DarkMode] Added dark class to document");
         } else {
           document.documentElement.classList.remove("dark");
-          if (isDev)
-            console.log("[DarkMode] Removed dark class from document");
+          if (isDev) console.log("[DarkMode] Removed dark class from document");
         }
 
         // 检查类名是否已成功应用
         const hasClass = document.documentElement.classList.contains("dark");
-        if (isDev)
-          console.log("[DarkMode] Document has dark class:", hasClass);
+        if (isDev) console.log("[DarkMode] Document has dark class:", hasClass);
       } catch (error) {
         console.error("[DarkMode] Error applying dark class:", error);
       }
@@ -70,8 +67,7 @@ export function useDarkMode() {
 
     try {
       localStorage.setItem("darkMode", isDarkMode.toString());
-      if (isDev)
-        console.log("[DarkMode] Saved to localStorage:", isDarkMode);
+      if (isDev) console.log("[DarkMode] Saved to localStorage:", isDarkMode);
     } catch (error) {
       console.error("[DarkMode] Error saving preference:", error);
     }
@@ -80,8 +76,7 @@ export function useDarkMode() {
   const toggleDarkMode = () => {
     setIsDarkMode((prev) => {
       const newValue = !prev;
-      if (isDev)
-        console.log("[DarkMode] Toggling from", prev, "to", newValue);
+      if (isDev) console.log("[DarkMode] Toggling from", prev, "to", newValue);
       return newValue;
     });
   };
