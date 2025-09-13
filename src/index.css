@@ -21,7 +21,9 @@ body {
 }
 
 /* 暗色模式下启用暗色原生控件/滚动条配色 */
-html.dark { color-scheme: dark; }
+html.dark {
+  color-scheme: dark;
+}
 
 /* 滚动条样式 */
 ::-webkit-scrollbar {

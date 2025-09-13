@@ -96,10 +96,15 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   const [kimiAnthropicModel, setKimiAnthropicModel] = useState("");
   const [kimiAnthropicSmallFastModel, setKimiAnthropicSmallFastModel] =
     useState("");
-    
+
   // 初始化自定义模式的默认配置
   useEffect(() => {
-    if (showPresets && selectedPreset === -1 && !initialData && formData.settingsConfig === "") {
+    if (
+      showPresets &&
+      selectedPreset === -1 &&
+      !initialData &&
+      formData.settingsConfig === ""
+    ) {
       // 设置自定义模板
       const customTemplate = {
         env: {
@@ -108,10 +113,10 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
           // 可选配置
           // ANTHROPIC_MODEL: "your-model-name",
           // ANTHROPIC_SMALL_FAST_MODEL: "your-fast-model-name"
-        }
+        },
       };
-      
-      setFormData(prev => ({
+
+      setFormData((prev) => ({
         ...prev,
         settingsConfig: JSON.stringify(customTemplate, null, 2),
       }));
@@ -138,7 +143,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
           setClaudeModel(config.env.ANTHROPIC_MODEL || "");
           setClaudeSmallFastModel(config.env.ANTHROPIC_SMALL_FAST_MODEL || "");
           setBaseUrl(config.env.ANTHROPIC_BASE_URL || ""); // 初始化基础 URL
-          
+
           // 初始化 Kimi 模型选择
           setKimiAnthropicModel(config.env.ANTHROPIC_MODEL || "");
           setKimiAnthropicSmallFastModel(
@@ -155,14 +160,18 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     if (!isCodex) {
       if (selectedPreset !== null && selectedPreset >= 0) {
         const preset = providerPresets[selectedPreset];
-        setCategory(preset?.category || (preset?.isOfficial ? "official" : undefined));
+        setCategory(
+          preset?.category || (preset?.isOfficial ? "official" : undefined),
+        );
       } else if (selectedPreset === -1) {
         setCategory("custom");
       }
     } else {
       if (selectedCodexPreset !== null && selectedCodexPreset >= 0) {
         const preset = codexProviderPresets[selectedCodexPreset];
-        setCategory(preset?.category || (preset?.isOfficial ? "official" : undefined));
+        setCategory(
+          preset?.category || (preset?.isOfficial ? "official" : undefined),
+        );
       } else if (selectedCodexPreset === -1) {
         setCategory("custom");
       }
@@ -288,7 +297,9 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       websiteUrl: preset.websiteUrl,
       settingsConfig: configString,
     });
-    setCategory(preset.category || (preset.isOfficial ? "official" : undefined));
+    setCategory(
+      preset.category || (preset.isOfficial ? "official" : undefined),
+    );
 
     // 设置选中的预设
     setSelectedPreset(index);
@@ -307,11 +318,13 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       if (config.env) {
         setClaudeModel(config.env.ANTHROPIC_MODEL || "");
         setClaudeSmallFastModel(config.env.ANTHROPIC_SMALL_FAST_MODEL || "");
-        
+
         // 如果是 Kimi 预设，同步 Kimi 模型选择
         if (preset.name?.includes("Kimi")) {
           setKimiAnthropicModel(config.env.ANTHROPIC_MODEL || "");
-          setKimiAnthropicSmallFastModel(config.env.ANTHROPIC_SMALL_FAST_MODEL || "");
+          setKimiAnthropicSmallFastModel(
+            config.env.ANTHROPIC_SMALL_FAST_MODEL || "",
+          );
         }
       } else {
         setClaudeModel("");
@@ -323,7 +336,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   // 处理点击自定义按钮
   const handleCustomClick = () => {
     setSelectedPreset(-1);
-    
+
     // 设置自定义模板
     const customTemplate = {
       env: {
@@ -332,9 +345,9 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
         // 可选配置
         // ANTHROPIC_MODEL: "your-model-name",
         // ANTHROPIC_SMALL_FAST_MODEL: "your-fast-model-name"
-      }
+      },
     };
-    
+
     setFormData({
       name: "",
       websiteUrl: "",
@@ -366,7 +379,9 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     }));
 
     setSelectedCodexPreset(index);
-    setCategory(preset.category || (preset.isOfficial ? "official" : undefined));
+    setCategory(
+      preset.category || (preset.isOfficial ? "official" : undefined),
+    );
 
     // 清空 API Key，让用户重新输入
     setCodexApiKey("");
@@ -410,17 +425,17 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   // 处理基础 URL 变化
   const handleBaseUrlChange = (url: string) => {
     setBaseUrl(url);
-    
+
     try {
       const config = JSON.parse(formData.settingsConfig || "{}");
       if (!config.env) {
         config.env = {};
       }
       config.env.ANTHROPIC_BASE_URL = url.trim();
-      
-      setFormData(prev => ({
+
+      setFormData((prev) => ({
         ...prev,
-        settingsConfig: JSON.stringify(config, null, 2)
+        settingsConfig: JSON.stringify(config, null, 2),
       }));
     } catch {
       // ignore
@@ -442,7 +457,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   // 根据当前配置决定是否展示 API Key 输入框
   // 自定义模式(-1)也需要显示 API Key 输入框
   const showApiKey =
-    (selectedPreset !== null) ||
+    selectedPreset !== null ||
     (!showPresets && hasApiKeyField(formData.settingsConfig));
 
   // 判断当前选中的预设是否是官方
@@ -474,13 +489,18 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   const showBaseUrlInput = selectedPreset === -1 && !isCodex;
 
   // 判断是否显示"获取 API Key"链接（国产官方、聚合站和第三方显示）
-  const shouldShowApiKeyLink = !isCodex && !isOfficialPreset && 
-    (category === "cn_official" || category === "aggregator" || category === "third_party" ||
-     (selectedPreset !== null && selectedPreset >= 0 && 
-      (providerPresets[selectedPreset]?.category === "cn_official" || 
-       providerPresets[selectedPreset]?.category === "aggregator" ||
-       providerPresets[selectedPreset]?.category === "third_party")));
-  
+  const shouldShowApiKeyLink =
+    !isCodex &&
+    !isOfficialPreset &&
+    (category === "cn_official" ||
+      category === "aggregator" ||
+      category === "third_party" ||
+      (selectedPreset !== null &&
+        selectedPreset >= 0 &&
+        (providerPresets[selectedPreset]?.category === "cn_official" ||
+          providerPresets[selectedPreset]?.category === "aggregator" ||
+          providerPresets[selectedPreset]?.category === "third_party")));
+
   // 获取当前供应商的网址
   const getCurrentWebsiteUrl = () => {
     if (selectedPreset !== null && selectedPreset >= 0) {
@@ -522,16 +542,27 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     category === "official";
 
   // 判断是否显示 Codex 的"获取 API Key"链接
-  const shouldShowCodexApiKeyLink = isCodex && !isCodexOfficialPreset && 
-    (category === "cn_official" || category === "aggregator" || category === "third_party" ||
-     (selectedCodexPreset !== null && selectedCodexPreset >= 0 && 
-      (codexProviderPresets[selectedCodexPreset]?.category === "cn_official" || 
-       codexProviderPresets[selectedCodexPreset]?.category === "aggregator" ||
-       codexProviderPresets[selectedCodexPreset]?.category === "third_party")));
+  const shouldShowCodexApiKeyLink =
+    isCodex &&
+    !isCodexOfficialPreset &&
+    (category === "cn_official" ||
+      category === "aggregator" ||
+      category === "third_party" ||
+      (selectedCodexPreset !== null &&
+        selectedCodexPreset >= 0 &&
+        (codexProviderPresets[selectedCodexPreset]?.category ===
+          "cn_official" ||
+          codexProviderPresets[selectedCodexPreset]?.category ===
+            "aggregator" ||
+          codexProviderPresets[selectedCodexPreset]?.category ===
+            "third_party")));
 
   // 处理模型输入变化，自动更新 JSON 配置
-  const handleModelChange = (field: 'ANTHROPIC_MODEL' | 'ANTHROPIC_SMALL_FAST_MODEL', value: string) => {
-    if (field === 'ANTHROPIC_MODEL') {
+  const handleModelChange = (
+    field: "ANTHROPIC_MODEL" | "ANTHROPIC_SMALL_FAST_MODEL",
+    value: string,
+  ) => {
+    if (field === "ANTHROPIC_MODEL") {
       setClaudeModel(value);
     } else {
       setClaudeSmallFastModel(value);
@@ -539,16 +570,18 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
 
     // 更新 JSON 配置
     try {
-      const currentConfig = formData.settingsConfig ? JSON.parse(formData.settingsConfig) : { env: {} };
+      const currentConfig = formData.settingsConfig
+        ? JSON.parse(formData.settingsConfig)
+        : { env: {} };
       if (!currentConfig.env) currentConfig.env = {};
-      
+
       if (value.trim()) {
         currentConfig.env[field] = value.trim();
       } else {
         delete currentConfig.env[field];
       }
 
-      setFormData(prev => ({
+      setFormData((prev) => ({
         ...prev,
         settingsConfig: JSON.stringify(currentConfig, null, 2),
       }));
@@ -619,9 +652,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       <div className="relative bg-white rounded-xl shadow-lg max-w-3xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">
-            {title}
-          </h2>
+          <h2 className="text-xl font-semibold text-gray-900">{title}</h2>
           <button
             type="button"
             onClick={onClose}
@@ -636,13 +667,8 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
           <div className="flex-1 overflow-auto p-6 space-y-6">
             {error && (
               <div className="flex items-center gap-3 p-4 bg-red-100 border border-red-500/20 rounded-lg">
-                <AlertCircle
-                  size={20}
-                  className="text-red-500 flex-shrink-0"
-                />
-                <p className="text-red-500 text-sm font-medium">
-                  {error}
-                </p>
+                <AlertCircle size={20} className="text-red-500 flex-shrink-0" />
+                <p className="text-red-500 text-sm font-medium">{error}</p>
               </div>
             )}
 
@@ -844,13 +870,15 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                           type="text"
                           id="anthropicModel"
                           value={claudeModel}
-                          onChange={(e) => handleModelChange('ANTHROPIC_MODEL', e.target.value)}
+                          onChange={(e) =>
+                            handleModelChange("ANTHROPIC_MODEL", e.target.value)
+                          }
                           placeholder="例如: GLM-4.5"
                           autoComplete="off"
                           className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
                         />
                       </div>
-                      
+
                       <div className="space-y-2">
                         <label
                           htmlFor="anthropicSmallFastModel"
@@ -862,14 +890,19 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                           type="text"
                           id="anthropicSmallFastModel"
                           value={claudeSmallFastModel}
-                          onChange={(e) => handleModelChange('ANTHROPIC_SMALL_FAST_MODEL', e.target.value)}
+                          onChange={(e) =>
+                            handleModelChange(
+                              "ANTHROPIC_SMALL_FAST_MODEL",
+                              e.target.value,
+                            )
+                          }
                           placeholder="例如: GLM-4.5-Air"
                           autoComplete="off"
                           className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
                         />
                       </div>
                     </div>
-                    
+
                     <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
                       <p className="text-xs text-amber-600">
                         💡 留空将使用供应商的默认模型
@@ -877,7 +910,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                     </div>
                   </div>
                 )}
-                
+
                 <ClaudeConfigEditor
                   value={formData.settingsConfig}
                   onChange={(value) =>

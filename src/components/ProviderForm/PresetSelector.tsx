@@ -25,7 +25,11 @@ const PresetSelector: React.FC<PresetSelectorProps> = ({
   onCustomClick,
   customLabel = "自定义",
 }) => {
-  const getButtonClass = (index: number, isOfficial?: boolean, category?: ProviderCategory) => {
+  const getButtonClass = (
+    index: number,
+    isOfficial?: boolean,
+    category?: ProviderCategory,
+  ) => {
     const isSelected = selectedIndex === index;
     const baseClass =
       "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors";
@@ -63,7 +67,7 @@ const PresetSelector: React.FC<PresetSelectorProps> = ({
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            className={`${getButtonClass(-1)} ${selectedIndex === -1 ? '' : ''}`}
+            className={`${getButtonClass(-1)} ${selectedIndex === -1 ? "" : ""}`}
             onClick={onCustomClick}
           >
             {customLabel}
@@ -72,19 +76,23 @@ const PresetSelector: React.FC<PresetSelectorProps> = ({
             <button
               key={index}
               type="button"
-              className={getButtonClass(index, preset.isOfficial, preset.category)}
+              className={getButtonClass(
+                index,
+                preset.isOfficial,
+                preset.category,
+              )}
               onClick={() => onSelectPreset(index)}
             >
-              {(preset.isOfficial || preset.category === "official") && <Zap size={14} />}
+              {(preset.isOfficial || preset.category === "official") && (
+                <Zap size={14} />
+              )}
               {preset.name}
             </button>
           ))}
         </div>
       </div>
       {getDescription() && (
-        <p className="text-sm text-gray-500">
-          {getDescription()}
-        </p>
+        <p className="text-sm text-gray-500">{getDescription()}</p>
       )}
     </div>
   );

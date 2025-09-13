@@ -52,7 +52,8 @@ export const providerPresets: ProviderPreset[] = [
     websiteUrl: "https://bailian.console.aliyun.com",
     settingsConfig: {
       env: {
-        ANTHROPIC_BASE_URL: "https://dashscope.aliyuncs.com/api/v2/apps/claude-code-proxy",
+        ANTHROPIC_BASE_URL:
+          "https://dashscope.aliyuncs.com/api/v2/apps/claude-code-proxy",
         ANTHROPIC_AUTH_TOKEN: "",
         ANTHROPIC_MODEL: "qwen3-coder-plus",
         ANTHROPIC_SMALL_FAST_MODEL: "qwen3-coder-plus",

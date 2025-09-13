@@ -36,9 +36,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
           required
           className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors resize-y min-h-[8rem]"
         />
-        <p className="text-xs text-gray-500">
-          Codex auth.json 配置内容
-        </p>
+        <p className="text-xs text-gray-500">Codex auth.json 配置内容</p>
       </div>
 
       <div className="space-y-2">
@@ -56,9 +54,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
           rows={8}
           className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors resize-y min-h-[10rem]"
         />
-        <p className="text-xs text-gray-500">
-          Codex config.toml 配置内容
-        </p>
+        <p className="text-xs text-gray-500">Codex config.toml 配置内容</p>
       </div>
     </div>
   );

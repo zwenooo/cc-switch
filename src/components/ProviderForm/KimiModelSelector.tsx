@@ -98,9 +98,7 @@ const KimiModelSelector: React.FC<KimiModelSelectorProps> = ({
     onChange: (value: string) => void;
   }> = ({ label, value, onChange }) => (
     <div className="space-y-2">
-      <label className="block text-sm font-medium text-gray-900">
-        {label}
-      </label>
+      <label className="block text-sm font-medium text-gray-900">{label}</label>
       <div className="relative">
         <select
           value={value}
@@ -132,9 +130,7 @@ const KimiModelSelector: React.FC<KimiModelSelectorProps> = ({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-gray-900">
-          模型配置
-        </h3>
+        <h3 className="text-sm font-medium text-gray-900">模型配置</h3>
         <button
           type="button"
           onClick={() => debouncedKey && fetchModelsWithKey(debouncedKey)}
@@ -148,10 +144,7 @@ const KimiModelSelector: React.FC<KimiModelSelectorProps> = ({
 
       {error && (
         <div className="flex items-center gap-2 p-3 bg-red-100 border border-red-500/20 rounded-lg">
-          <AlertCircle
-            size={16}
-            className="text-red-500 flex-shrink-0"
-          />
+          <AlertCircle size={16} className="text-red-500 flex-shrink-0" />
           <p className="text-red-500 text-xs">{error}</p>
         </div>
       )}

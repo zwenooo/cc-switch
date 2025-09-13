@@ -53,16 +53,16 @@ const ProviderList: React.FC<ProviderListProps> = ({
     // 有时间戳的按时间升序排列
     const timeA = a.createdAt || 0;
     const timeB = b.createdAt || 0;
-    
+
     // 如果都没有时间戳，按名称排序
     if (timeA === 0 && timeB === 0) {
-      return a.name.localeCompare(b.name, 'zh-CN');
+      return a.name.localeCompare(b.name, "zh-CN");
     }
-    
+
     // 如果只有一个没有时间戳，没有时间戳的排在前面
     if (timeA === 0) return -1;
     if (timeB === 0) return 1;
-    
+
     // 都有时间戳，按时间升序
     return timeA - timeB;
   });
@@ -91,7 +91,7 @@ const ProviderList: React.FC<ProviderListProps> = ({
               <div
                 key={provider.id}
                 className={cn(
-                  isCurrent ? cardStyles.selected : cardStyles.interactive
+                  isCurrent ? cardStyles.selected : cardStyles.interactive,
                 )}
               >
                 <div className="flex items-start justify-between">
@@ -140,7 +140,7 @@ const ProviderList: React.FC<ProviderListProps> = ({
                         "inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
                         isCurrent
                           ? "bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500 cursor-not-allowed"
-                          : "bg-blue-500 text-white hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700"
+                          : "bg-blue-500 text-white hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700",
                       )}
                     >
                       <Play size={14} />
@@ -162,7 +162,7 @@ const ProviderList: React.FC<ProviderListProps> = ({
                         buttonStyles.icon,
                         isCurrent
                           ? "text-gray-400 cursor-not-allowed"
-                          : "text-gray-500 hover:text-red-500 hover:bg-red-100 dark:text-gray-400 dark:hover:text-red-400 dark:hover:bg-red-500/10"
+                          : "text-gray-500 hover:text-red-500 hover:bg-red-100 dark:text-gray-400 dark:hover:text-red-400 dark:hover:bg-red-500/10",
                       )}
                       title="删除供应商"
                     >

@@ -116,7 +116,6 @@ function App() {
     }
   };
 
-
   // 生成唯一ID
   const generateId = () => {
     return crypto.randomUUID();
@@ -204,7 +203,6 @@ function App() {
     }
   };
 
-
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-950">
       {/* Linear 风格的顶部导航 */}
@@ -270,7 +268,6 @@ function App() {
             onDelete={handleDeleteProvider}
             onEdit={setEditingProviderId}
           />
-
         </div>
       </main>
 

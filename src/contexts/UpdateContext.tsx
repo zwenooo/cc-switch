@@ -1,4 +1,11 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+} from "react";
 import type { UpdateInfo, UpdateHandle } from "../lib/updater";
 import { checkForUpdate } from "../lib/updater";
 
@@ -9,11 +16,11 @@ interface UpdateContextValue {
   updateHandle: UpdateHandle | null;
   isChecking: boolean;
   error: string | null;
-  
+
   // 提示状态
   isDismissed: boolean;
   dismissUpdate: () => void;
-  
+
   // 操作方法
   checkUpdate: () => Promise<boolean>;
   resetDismiss: () => void;
@@ -31,7 +38,7 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
   const [isChecking, setIsChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDismissed, setIsDismissed] = useState(false);
-  
+
   // 从 localStorage 读取已关闭的版本
   useEffect(() => {
     const current = updateInfo?.availableVersion;
@@ -50,7 +57,7 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
 
     setIsDismissed(dismissedVersion === current);
   }, [updateInfo?.availableVersion]);
-  
+
   const isCheckingRef = useRef(false);
 
   const checkUpdate = useCallback(async () => {
@@ -96,7 +103,7 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
       isCheckingRef.current = false;
     }
   }, []);
-  
+
   const dismissUpdate = useCallback(() => {
     setIsDismissed(true);
     if (updateInfo?.availableVersion) {
@@ -105,13 +112,13 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem(LEGACY_DISMISSED_KEY);
     }
   }, [updateInfo?.availableVersion]);
-  
+
   const resetDismiss = useCallback(() => {
     setIsDismissed(false);
     localStorage.removeItem(DISMISSED_VERSION_KEY);
     localStorage.removeItem(LEGACY_DISMISSED_KEY);
   }, []);
-  
+
   // 应用启动时自动检查更新
   useEffect(() => {
     // 延迟1秒后检查，避免影响启动体验
@@ -121,7 +128,7 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
 
     return () => clearTimeout(timer);
   }, [checkUpdate]);
-  
+
   const value: UpdateContextValue = {
     hasUpdate,
     updateInfo,
@@ -133,11 +140,9 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
     checkUpdate,
     resetDismiss,
   };
-  
+
   return (
-    <UpdateContext.Provider value={value}>
-      {children}
-    </UpdateContext.Provider>
+    <UpdateContext.Provider value={value}>{children}</UpdateContext.Provider>
   );
 }
 
