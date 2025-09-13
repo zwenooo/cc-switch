@@ -1,6 +1,7 @@
 import React from "react";
 import { Zap } from "lucide-react";
 import { ProviderCategory } from "../../types";
+import { ClaudeIcon, CodexIcon } from "../BrandIcons";
 
 interface Preset {
   name: string;
@@ -27,17 +28,22 @@ const PresetSelector: React.FC<PresetSelectorProps> = ({
 }) => {
   const getButtonClass = (
     index: number,
-    isOfficial?: boolean,
-    category?: ProviderCategory,
+    preset?: Preset,
   ) => {
     const isSelected = selectedIndex === index;
     const baseClass =
       "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors";
 
     if (isSelected) {
-      return isOfficial || category === "official"
-        ? `${baseClass} bg-amber-500 text-white`
-        : `${baseClass} bg-blue-500 text-white`;
+      if (preset?.isOfficial || preset?.category === "official") {
+        // Codex 官方使用黑色背景
+        if (preset?.name.includes("Codex")) {
+          return `${baseClass} bg-gray-900 text-white`;
+        }
+        // Claude 官方使用品牌色背景
+        return `${baseClass} bg-[#D97757] text-white`;
+      }
+      return `${baseClass} bg-blue-500 text-white`;
     }
 
     return `${baseClass} bg-gray-100 text-gray-500 hover:bg-gray-200`;
@@ -76,15 +82,19 @@ const PresetSelector: React.FC<PresetSelectorProps> = ({
             <button
               key={index}
               type="button"
-              className={getButtonClass(
-                index,
-                preset.isOfficial,
-                preset.category,
-              )}
+              className={getButtonClass(index, preset)}
               onClick={() => onSelectPreset(index)}
             >
               {(preset.isOfficial || preset.category === "official") && (
-                <Zap size={14} />
+                <>
+                  {preset.name.includes("Claude") ? (
+                    <ClaudeIcon size={14} />
+                  ) : preset.name.includes("Codex") ? (
+                    <CodexIcon size={14} />
+                  ) : (
+                    <Zap size={14} />
+                  )}
+                </>
               )}
               {preset.name}
             </button>
