@@ -109,16 +109,16 @@ fn create_tray_menu(
 
 /// 处理托盘菜单事件
 fn handle_tray_menu_event(app: &tauri::AppHandle, event_id: &str) {
-    println!("处理托盘菜单事件: {}", event_id);
+    log::info!("处理托盘菜单事件: {}", event_id);
 
     match event_id {
         "quit" => {
-            println!("退出应用");
+            log::info!("退出应用");
             app.exit(0);
         }
         id if id.starts_with("claude_") => {
             let provider_id = id.strip_prefix("claude_").unwrap();
-            println!("切换到Claude供应商: {}", provider_id);
+            log::info!("切换到Claude供应商: {}", provider_id);
 
             // 执行切换
             let app_handle = app.clone();
@@ -130,14 +130,12 @@ fn handle_tray_menu_event(app: &tauri::AppHandle, event_id: &str) {
                     provider_id,
                 )
                 .await
-                {
-                    eprintln!("切换Claude供应商失败: {}", e);
-                }
+                { log::error!("切换Claude供应商失败: {}", e); }
             });
         }
         id if id.starts_with("codex_") => {
             let provider_id = id.strip_prefix("codex_").unwrap();
-            println!("切换到Codex供应商: {}", provider_id);
+            log::info!("切换到Codex供应商: {}", provider_id);
 
             // 执行切换
             let app_handle = app.clone();
@@ -149,13 +147,11 @@ fn handle_tray_menu_event(app: &tauri::AppHandle, event_id: &str) {
                     provider_id,
                 )
                 .await
-                {
-                    eprintln!("切换Codex供应商失败: {}", e);
-                }
+                { log::error!("切换Codex供应商失败: {}", e); }
             });
         }
         _ => {
-            println!("未处理的菜单事件: {}", event_id);
+            log::warn!("未处理的菜单事件: {}", event_id);
         }
     }
 }
@@ -184,7 +180,7 @@ async fn switch_provider_internal(
         if let Ok(new_menu) = create_tray_menu(app, app_state.inner()) {
             if let Some(tray) = app.tray_by_id("main") {
                 if let Err(e) = tray.set_menu(Some(new_menu)) {
-                    eprintln!("更新托盘菜单失败: {}", e);
+                    log::error!("更新托盘菜单失败: {}", e);
                 }
             }
         }
@@ -195,7 +191,7 @@ async fn switch_provider_internal(
             "providerId": provider_id_clone
         });
         if let Err(e) = app.emit("provider-switched", event_data) {
-            eprintln!("发射供应商切换事件失败: {}", e);
+            log::error!("发射供应商切换事件失败: {}", e);
         }
     }
     Ok(())
@@ -301,7 +297,7 @@ pub fn run() {
                         button_state: MouseButtonState::Up,
                         ..
                     } => {
-                        println!("left click pressed and released");
+                        log::info!("left click pressed and released");
                         // 在这个例子中，当点击托盘图标时，将展示并聚焦于主窗口
                         let app = tray.app_handle();
                         if let Some(window) = app.get_webview_window("main") {
@@ -311,7 +307,7 @@ pub fn run() {
                         }
                     }
                     _ => {
-                        println!("unhandled event {event:?}");
+                        log::debug!("unhandled event {event:?}");
                     }
                 })
                 .menu(&menu)
