@@ -646,17 +646,19 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       }}
     >
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm" />
 
       {/* Modal */}
-      <div className="relative bg-white rounded-xl shadow-lg max-w-3xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="relative bg-white dark:bg-gray-900 rounded-xl shadow-lg max-w-3xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">{title}</h2>
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-800">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+            {title}
+          </h2>
           <button
             type="button"
             onClick={onClose}
-            className="p-1 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
+            className="p-1 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors"
             aria-label="关闭"
           >
             <X size={18} />
@@ -666,9 +668,14 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
           <div className="flex-1 overflow-auto p-6 space-y-6">
             {error && (
-              <div className="flex items-center gap-3 p-4 bg-red-100 border border-red-500/20 rounded-lg">
-                <AlertCircle size={20} className="text-red-500 flex-shrink-0" />
-                <p className="text-red-500 text-sm font-medium">{error}</p>
+              <div className="flex items-center gap-3 p-4 bg-red-100 dark:bg-red-900/20 border border-red-500/20 dark:border-red-500/30 rounded-lg">
+                <AlertCircle
+                  size={20}
+                  className="text-red-500 dark:text-red-400 flex-shrink-0"
+                />
+                <p className="text-red-500 dark:text-red-400 text-sm font-medium">
+                  {error}
+                </p>
               </div>
             )}
 
@@ -697,7 +704,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
             <div className="space-y-2">
               <label
                 htmlFor="name"
-                className="block text-sm font-medium text-gray-900"
+                className="block text-sm font-medium text-gray-900 dark:text-gray-100"
               >
                 供应商名称 *
               </label>
@@ -710,14 +717,14 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                 placeholder="例如：Anthropic 官方"
                 required
                 autoComplete="off"
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:focus:ring-blue-400/20 focus:border-blue-500 dark:focus:border-blue-400 transition-colors"
               />
             </div>
 
             <div className="space-y-2">
               <label
                 htmlFor="websiteUrl"
-                className="block text-sm font-medium text-gray-900"
+                className="block text-sm font-medium text-gray-900 dark:text-gray-100"
               >
                 官网地址
               </label>
@@ -729,7 +736,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                 onChange={handleChange}
                 placeholder="https://example.com（可选）"
                 autoComplete="off"
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:focus:ring-blue-400/20 focus:border-blue-500 dark:focus:border-blue-400 transition-colors"
               />
             </div>
 
@@ -754,7 +761,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                       href={getCurrentWebsiteUrl()}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-blue-400 hover:text-blue-500 transition-colors"
+                      className="text-xs text-blue-400 dark:text-blue-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
                     >
                       获取 API Key
                     </a>
@@ -768,7 +775,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
               <div className="space-y-2">
                 <label
                   htmlFor="baseUrl"
-                  className="block text-sm font-medium text-gray-900"
+                  className="block text-sm font-medium text-gray-900 dark:text-gray-100"
                 >
                   请求地址
                 </label>
@@ -779,10 +786,10 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                   onChange={(e) => handleBaseUrlChange(e.target.value)}
                   placeholder="https://your-api-endpoint.com"
                   autoComplete="off"
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+                  className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:focus:ring-blue-400/20 focus:border-blue-500 dark:focus:border-blue-400 transition-colors"
                 />
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                  <p className="text-xs text-amber-600">
+                <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg">
+                  <p className="text-xs text-amber-600 dark:text-amber-400">
                     💡 填写兼容 Claude API 的服务端点地址
                   </p>
                 </div>
@@ -824,7 +831,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                       href={getCurrentCodexWebsiteUrl()}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-blue-400 hover:text-blue-500 transition-colors"
+                      className="text-xs text-blue-400 dark:text-blue-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
                     >
                       获取 API Key
                     </a>
@@ -862,7 +869,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                       <div className="space-y-2">
                         <label
                           htmlFor="anthropicModel"
-                          className="block text-sm font-medium text-gray-900"
+                          className="block text-sm font-medium text-gray-900 dark:text-gray-100"
                         >
                           主模型 (可选)
                         </label>
@@ -875,14 +882,14 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                           }
                           placeholder="例如: GLM-4.5"
                           autoComplete="off"
-                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+                          className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:focus:ring-blue-400/20 focus:border-blue-500 dark:focus:border-blue-400 transition-colors"
                         />
                       </div>
 
                       <div className="space-y-2">
                         <label
                           htmlFor="anthropicSmallFastModel"
-                          className="block text-sm font-medium text-gray-900"
+                          className="block text-sm font-medium text-gray-900 dark:text-gray-100"
                         >
                           快速模型 (可选)
                         </label>
@@ -898,13 +905,13 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                           }
                           placeholder="例如: GLM-4.5-Air"
                           autoComplete="off"
-                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-colors"
+                          className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:focus:ring-blue-400/20 focus:border-blue-500 dark:focus:border-blue-400 transition-colors"
                         />
                       </div>
                     </div>
 
-                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                      <p className="text-xs text-amber-600">
+                    <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg">
+                      <p className="text-xs text-amber-600 dark:text-amber-400">
                         💡 留空将使用供应商的默认模型
                       </p>
                     </div>
@@ -926,17 +933,17 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 bg-gray-100">
+          <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-800 bg-gray-100 dark:bg-gray-800">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-900 hover:bg-white rounded-lg transition-colors"
+              className="px-4 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-white dark:hover:bg-gray-700 rounded-lg transition-colors"
             >
               取消
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium flex items-center gap-2"
+              className="px-4 py-2 bg-blue-500 dark:bg-blue-600 text-white rounded-lg hover:bg-blue-600 dark:hover:bg-blue-700 transition-colors text-sm font-medium flex items-center gap-2"
             >
               <Save className="w-4 h-4" />
               {submitText}
