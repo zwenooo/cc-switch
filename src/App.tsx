@@ -82,7 +82,9 @@ function App() {
     const setupListener = async () => {
       try {
         unlisten = await window.api.onProviderSwitched(async (data) => {
-          console.log("收到供应商切换事件:", data);
+          if (import.meta.env.DEV) {
+            console.log("收到供应商切换事件:", data);
+          }
 
           // 如果当前应用类型匹配，则重新加载数据
           if (data.appType === activeApp) {
