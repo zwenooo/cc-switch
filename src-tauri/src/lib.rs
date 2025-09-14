@@ -25,6 +25,11 @@ fn create_tray_menu(
 
     let mut menu_builder = MenuBuilder::new(app);
 
+    // 顶部：打开主界面
+    let show_main_item = MenuItem::with_id(app, "show_main", "打开主界面", true, None::<&str>)
+        .map_err(|e| format!("创建打开主界面菜单失败: {}", e))?;
+    menu_builder = menu_builder.item(&show_main_item).separator();
+
     // 直接添加所有供应商到主菜单（扁平化结构，更简单可靠）
     if let Some(claude_manager) = config.get_manager(&crate::app_config::AppType::Claude) {
         // 添加Claude标题（禁用状态，仅作为分组标识）
@@ -112,6 +117,13 @@ fn handle_tray_menu_event(app: &tauri::AppHandle, event_id: &str) {
     log::info!("处理托盘菜单事件: {}", event_id);
 
     match event_id {
+        "show_main" => {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }
         "quit" => {
             log::info!("退出应用");
             app.exit(0);
@@ -155,6 +167,8 @@ fn handle_tray_menu_event(app: &tauri::AppHandle, event_id: &str) {
         }
     }
 }
+
+//
 
 /// 内部切换供应商函数
 async fn switch_provider_internal(
@@ -216,6 +230,14 @@ async fn update_tray_menu(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // 拦截窗口关闭：仅隐藏窗口，保持进程与托盘常驻
+        .on_window_event(|window, event| match event {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+            _ => {}
+        })
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
@@ -291,24 +313,10 @@ pub fn run() {
             let menu = create_tray_menu(&app.handle(), &app_state)?;
 
             let _tray = TrayIconBuilder::with_id("main")
-                .on_tray_icon_event(|tray, event| match event {
-                    TrayIconEvent::Click {
-                        button: MouseButton::Left,
-                        button_state: MouseButtonState::Up,
-                        ..
-                    } => {
-                        log::info!("left click pressed and released");
-                        // 在这个例子中，当点击托盘图标时，将展示并聚焦于主窗口
-                        let app = tray.app_handle();
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.unminimize();
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                        }
-                    }
-                    _ => {
-                        log::debug!("unhandled event {event:?}");
-                    }
+                .on_tray_icon_event(|_tray, event| match event {
+                    // 左键点击已通过 show_menu_on_left_click(true) 打开菜单，这里不再额外处理
+                    TrayIconEvent::Click { .. } => {}
+                    _ => log::debug!("unhandled event {event:?}"),
                 })
                 .menu(&menu)
                 .on_menu_event(|app, event| {
