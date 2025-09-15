@@ -211,9 +211,15 @@ function App() {
       <header className="flex-shrink-0 bg-white border-b border-gray-200 dark:bg-gray-900 dark:border-gray-800 px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-semibold text-blue-500 dark:text-blue-400">
+            <a
+              href="https://github.com/farion1231/cc-switch"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xl font-semibold text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 transition-colors"
+              title="在 GitHub 上查看"
+            >
               CC Switch
-            </h1>
+            </a>
             <button
               onClick={toggleDarkMode}
               className={buttonStyles.icon}
