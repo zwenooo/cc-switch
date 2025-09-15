@@ -196,6 +196,10 @@ cargo test
 
 欢迎提交 Issue 和 Pull Request！
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=farion1231/cc-switch&type=Date)](https://www.star-history.com/#farion1231/cc-switch&Date)
+
 ## License
 
 MIT © Jason Young
