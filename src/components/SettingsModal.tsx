@@ -157,8 +157,14 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 dark:bg-black/70 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-[500px] overflow-hidden">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="absolute inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm" />
+      <div className="relative bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-[500px] overflow-hidden">
         {/* 标题栏 */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-800">
           <h2 className="text-lg font-semibold text-blue-500 dark:text-blue-400">
