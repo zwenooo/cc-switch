@@ -12,6 +12,8 @@ use tauri::{
     tray::{TrayIconBuilder, TrayIconEvent},
 };
 use tauri::{Emitter, Manager};
+#[cfg(target_os = "macos")]
+use tauri::RunEvent;
 
 /// 创建动态托盘菜单
 fn create_tray_menu(
@@ -229,7 +231,7 @@ async fn update_tray_menu(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         // 拦截窗口关闭：仅隐藏窗口，保持进程与托盘常驻
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::CloseRequested { api, .. } => {
@@ -352,7 +354,29 @@ pub fn run() {
             commands::save_settings,
             commands::check_for_updates,
             update_tray_menu,
-        ])
-        .run(tauri::generate_context!())
+        ]);
+
+    let app = builder
+        .build(tauri::generate_context!())
         .expect("error while running tauri application");
+
+    app.run(|app_handle, event| {
+        #[cfg(target_os = "macos")]
+        // macOS 在 Dock 图标被点击并重新激活应用时会触发 Reopen 事件，这里手动恢复主窗口
+        match event {
+            RunEvent::Reopen { .. } => {
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    let _ = window.unminimize();
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+            _ => {}
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = (app_handle, event);
+        }
+    });
 }
