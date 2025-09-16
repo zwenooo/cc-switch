@@ -2,8 +2,8 @@ import React, { useState, useEffect } from "react";
 import { Provider, ProviderCategory } from "../types";
 import { AppType } from "../lib/tauri-api";
 import {
-  updateCoAuthoredSetting,
-  checkCoAuthoredSetting,
+  updateCommonConfigSnippet,
+  hasCommonConfigSnippet,
   getApiKeyFromConfig,
   hasApiKeyField,
   setApiKeyInConfig,
@@ -17,6 +17,11 @@ import CodexConfigEditor from "./ProviderForm/CodexConfigEditor";
 import KimiModelSelector from "./ProviderForm/KimiModelSelector";
 import { X, AlertCircle, Save } from "lucide-react";
 // 分类仅用于控制少量交互（如官方禁用 API Key），不显示介绍组件
+
+const COMMON_CONFIG_STORAGE_KEY = "cc-switch:common-config-snippet";
+const DEFAULT_COMMON_CONFIG_SNIPPET = `{
+  "includeCoAuthoredBy": false
+}`;
 
 interface ProviderFormProps {
   appType?: AppType;
@@ -85,7 +90,22 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   }, [isCodex, initialData]);
 
   const [error, setError] = useState("");
-  const [disableCoAuthored, setDisableCoAuthored] = useState(false);
+  const [useCommonConfig, setUseCommonConfig] = useState(false);
+  const [commonConfigSnippet, setCommonConfigSnippet] = useState<string>(() => {
+    if (typeof window === "undefined") {
+      return DEFAULT_COMMON_CONFIG_SNIPPET;
+    }
+    try {
+      const stored = window.localStorage.getItem(COMMON_CONFIG_STORAGE_KEY);
+      if (stored && stored.trim()) {
+        return stored;
+      }
+    } catch {
+      // ignore localStorage 读取失败
+    }
+    return DEFAULT_COMMON_CONFIG_SNIPPET;
+  });
+  const [commonConfigError, setCommonConfigError] = useState("");
   // -1 表示自定义，null 表示未选择，>= 0 表示预设索引
   const [selectedPreset, setSelectedPreset] = useState<number | null>(
     showPresets ? -1 : null,
@@ -124,12 +144,15 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     }
   }, []); // 只在组件挂载时执行一次
 
-  // 初始化时检查禁用签名状态
+  // 初始化时检查通用配置片段
   useEffect(() => {
     if (initialData) {
       const configString = JSON.stringify(initialData.settingsConfig, null, 2);
-      const hasCoAuthoredDisabled = checkCoAuthoredSetting(configString);
-      setDisableCoAuthored(hasCoAuthoredDisabled);
+      const hasCommon = hasCommonConfigSnippet(
+        configString,
+        commonConfigSnippet,
+      );
+      setUseCommonConfig(hasCommon);
 
       // 初始化模型配置（编辑模式）
       if (
@@ -152,7 +175,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
         }
       }
     }
-  }, [initialData]);
+  }, [initialData, commonConfigSnippet]);
 
   // 当选择预设变化时，同步类别
   useEffect(() => {
@@ -177,6 +200,23 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       }
     }
   }, [showPresets, isCodex, selectedPreset, selectedCodexPreset]);
+
+  // 同步本地存储的通用配置片段
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      if (commonConfigSnippet.trim()) {
+        window.localStorage.setItem(
+          COMMON_CONFIG_STORAGE_KEY,
+          commonConfigSnippet,
+        );
+      } else {
+        window.localStorage.removeItem(COMMON_CONFIG_STORAGE_KEY);
+      }
+    } catch {
+      // ignore
+    }
+  }, [commonConfigSnippet]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -254,8 +294,8 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
 
     if (name === "settingsConfig") {
       // 同时检查并同步选择框状态
-      const hasCoAuthoredDisabled = checkCoAuthoredSetting(value);
-      setDisableCoAuthored(hasCoAuthoredDisabled);
+      const hasCommon = hasCommonConfigSnippet(value, commonConfigSnippet);
+      setUseCommonConfig(hasCommon);
 
       // 同步 API Key 输入框显示与值
       const parsedKey = getApiKeyFromConfig(value);
@@ -274,19 +314,82 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     }
   };
 
-  // 处理选择框变化
-  const handleCoAuthoredToggle = (checked: boolean) => {
-    setDisableCoAuthored(checked);
-
-    // 更新JSON配置
-    const updatedConfig = updateCoAuthoredSetting(
+  // 处理通用配置开关
+  const handleCommonConfigToggle = (checked: boolean) => {
+    const { updatedConfig, error: snippetError } = updateCommonConfigSnippet(
       formData.settingsConfig,
+      commonConfigSnippet,
       checked,
     );
-    setFormData({
-      ...formData,
+
+    if (snippetError) {
+      setCommonConfigError(snippetError);
+      setUseCommonConfig(false);
+      return;
+    }
+
+    setCommonConfigError("");
+    setUseCommonConfig(checked);
+    setFormData((prev) => ({
+      ...prev,
       settingsConfig: updatedConfig,
-    });
+    }));
+  };
+
+  const handleCommonConfigSnippetChange = (value: string) => {
+    const previousSnippet = commonConfigSnippet;
+    setCommonConfigSnippet(value);
+
+    if (!value.trim()) {
+      setCommonConfigError("");
+      if (useCommonConfig) {
+        const { updatedConfig } = updateCommonConfigSnippet(
+          formData.settingsConfig,
+          previousSnippet,
+          false,
+        );
+        setFormData((prev) => ({
+          ...prev,
+          settingsConfig: updatedConfig,
+        }));
+        setUseCommonConfig(false);
+      }
+      return;
+    }
+
+    // 验证JSON格式
+    let isValidJson = false;
+    try {
+      JSON.parse(value);
+      isValidJson = true;
+      setCommonConfigError("");
+    } catch (err) {
+      setCommonConfigError("通用配置片段格式错误，需为合法 JSON");
+    }
+
+    // 若当前启用通用配置且格式正确，需要替换为最新片段
+    if (useCommonConfig && isValidJson) {
+      const removeResult = updateCommonConfigSnippet(
+        formData.settingsConfig,
+        previousSnippet,
+        false,
+      );
+      const addResult = updateCommonConfigSnippet(
+        removeResult.updatedConfig,
+        value,
+        true,
+      );
+
+      if (addResult.error) {
+        setCommonConfigError(addResult.error);
+        return;
+      }
+
+      setFormData((prev) => ({
+        ...prev,
+        settingsConfig: addResult.updatedConfig,
+      }));
+    }
   };
 
   const applyPreset = (preset: (typeof providerPresets)[0], index: number) => {
@@ -308,9 +411,13 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     setApiKey("");
     setBaseUrl(""); // 清空基础 URL
 
-    // 同步选择框状态
-    const hasCoAuthoredDisabled = checkCoAuthoredSetting(configString);
-    setDisableCoAuthored(hasCoAuthoredDisabled);
+    // 同步通用配置状态
+    const hasCommon = hasCommonConfigSnippet(
+      configString,
+      commonConfigSnippet,
+    );
+    setUseCommonConfig(hasCommon);
+    setCommonConfigError("");
 
     // 如果预设包含模型配置，初始化模型输入框
     if (preset.settingsConfig && typeof preset.settingsConfig === "object") {
@@ -355,7 +462,8 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     });
     setApiKey("");
     setBaseUrl("https://your-api-endpoint.com"); // 设置默认的基础 URL
-    setDisableCoAuthored(false);
+    setUseCommonConfig(false);
+    setCommonConfigError("");
     setClaudeModel("");
     setClaudeSmallFastModel("");
     setKimiAnthropicModel("");
@@ -417,9 +525,12 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       settingsConfig: configString,
     }));
 
-    // 同步选择框状态
-    const hasCoAuthoredDisabled = checkCoAuthoredSetting(configString);
-    setDisableCoAuthored(hasCoAuthoredDisabled);
+    // 同步通用配置开关
+    const hasCommon = hasCommonConfigSnippet(
+      configString,
+      commonConfigSnippet,
+    );
+    setUseCommonConfig(hasCommon);
   };
 
   // 处理基础 URL 变化
@@ -925,8 +1036,11 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                       target: { name: "settingsConfig", value },
                     } as React.ChangeEvent<HTMLTextAreaElement>)
                   }
-                  disableCoAuthored={disableCoAuthored}
-                  onCoAuthoredToggle={handleCoAuthoredToggle}
+                  useCommonConfig={useCommonConfig}
+                  onCommonConfigToggle={handleCommonConfigToggle}
+                  commonConfigSnippet={commonConfigSnippet}
+                  onCommonConfigSnippetChange={handleCommonConfigSnippetChange}
+                  commonConfigError={commonConfigError}
                 />
               </>
             )}
