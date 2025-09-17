@@ -6,6 +6,10 @@ use std::path::{Path, PathBuf};
 
 /// 获取 Claude Code 配置目录路径
 pub fn get_claude_config_dir() -> PathBuf {
+    if let Some(custom) = crate::settings::get_claude_override_dir() {
+        return custom;
+    }
+
     dirs::home_dir()
         .expect("无法获取用户主目录")
         .join(".claude")

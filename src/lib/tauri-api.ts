@@ -122,6 +122,16 @@ export const tauriAPI = {
     }
   },
 
+  // 获取当前生效的配置目录
+  getConfigDir: async (app?: AppType): Promise<string> => {
+    try {
+      return await invoke("get_config_dir", { app_type: app, app });
+    } catch (error) {
+      console.error("获取配置目录失败:", error);
+      return "";
+    }
+  },
+
   // 获取 Claude Code 配置状态
   getClaudeConfigStatus: async (): Promise<ConfigStatus> => {
     try {

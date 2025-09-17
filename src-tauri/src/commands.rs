@@ -483,6 +483,26 @@ pub async fn get_claude_code_config_path() -> Result<String, String> {
     Ok(get_claude_settings_path().to_string_lossy().to_string())
 }
 
+/// 获取当前生效的配置目录
+#[tauri::command]
+pub async fn get_config_dir(
+    app_type: Option<AppType>,
+    app: Option<String>,
+    appType: Option<String>,
+) -> Result<String, String> {
+    let app = app_type
+        .or_else(|| app.as_deref().map(|s| s.into()))
+        .or_else(|| appType.as_deref().map(|s| s.into()))
+        .unwrap_or(AppType::Claude);
+
+    let dir = match app {
+        AppType::Claude => crate::config::get_claude_config_dir(),
+        AppType::Codex => crate::codex_config::get_codex_config_dir(),
+    };
+
+    Ok(dir.to_string_lossy().to_string())
+}
+
 /// 打开配置文件夹
 /// 兼容两种参数：`app_type`（推荐）或 `app`（字符串）
 #[tauri::command]
@@ -566,21 +586,15 @@ pub async fn open_app_config_folder(handle: tauri::AppHandle) -> Result<bool, St
 
 /// 获取设置
 #[tauri::command]
-pub async fn get_settings(_state: State<'_, AppState>) -> Result<serde_json::Value, String> {
-    // 暂时返回默认设置：系统托盘（菜单栏）显示开关
-    Ok(serde_json::json!({
-        "showInTray": true
-    }))
+pub async fn get_settings() -> Result<serde_json::Value, String> {
+    serde_json::to_value(crate::settings::get_settings())
+        .map_err(|e| format!("序列化设置失败: {}", e))
 }
 
 /// 保存设置
 #[tauri::command]
-pub async fn save_settings(
-    _state: State<'_, AppState>,
-    settings: serde_json::Value,
-) -> Result<bool, String> {
-    // TODO: 实现系统托盘显示开关的保存与应用（显示/隐藏菜单栏托盘图标）
-    log::info!("保存设置: {:?}", settings);
+pub async fn save_settings(settings: crate::settings::AppSettings) -> Result<bool, String> {
+    crate::settings::update_settings(settings)?;
     Ok(true)
 }
 

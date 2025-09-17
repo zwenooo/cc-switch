@@ -4,6 +4,7 @@ mod commands;
 mod config;
 mod migration;
 mod provider;
+mod settings;
 mod store;
 
 use store::AppState;
@@ -242,6 +243,7 @@ pub fn run() {
         })
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // 注册 Updater 插件（桌面端）
             #[cfg(desktop)]
@@ -346,6 +348,7 @@ pub fn run() {
             commands::get_claude_config_status,
             commands::get_config_status,
             commands::get_claude_code_config_path,
+            commands::get_config_dir,
             commands::open_config_folder,
             commands::open_external,
             commands::get_app_config_path,
