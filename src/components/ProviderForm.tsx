@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Provider, ProviderCategory } from "../types";
 import { AppType } from "../lib/tauri-api";
 import {
@@ -106,6 +106,8 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     return DEFAULT_COMMON_CONFIG_SNIPPET;
   });
   const [commonConfigError, setCommonConfigError] = useState("");
+  // 用于跟踪是否正在通过通用配置更新
+  const isUpdatingFromCommonConfig = useRef(false);
   // -1 表示自定义，null 表示未选择，>= 0 表示预设索引
   const [selectedPreset, setSelectedPreset] = useState<number | null>(
     showPresets ? -1 : null,
@@ -293,9 +295,11 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     const { name, value } = e.target;
 
     if (name === "settingsConfig") {
-      // 同时检查并同步选择框状态
-      const hasCommon = hasCommonConfigSnippet(value, commonConfigSnippet);
-      setUseCommonConfig(hasCommon);
+      // 只有在不是通过通用配置更新时，才检查并同步选择框状态
+      if (!isUpdatingFromCommonConfig.current) {
+        const hasCommon = hasCommonConfigSnippet(value, commonConfigSnippet);
+        setUseCommonConfig(hasCommon);
+      }
 
       // 同步 API Key 输入框显示与值
       const parsedKey = getApiKeyFromConfig(value);
@@ -330,10 +334,16 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
 
     setCommonConfigError("");
     setUseCommonConfig(checked);
+    // 标记正在通过通用配置更新
+    isUpdatingFromCommonConfig.current = true;
     setFormData((prev) => ({
       ...prev,
       settingsConfig: updatedConfig,
     }));
+    // 在下一个事件循环中重置标记
+    setTimeout(() => {
+      isUpdatingFromCommonConfig.current = false;
+    }, 0);
   };
 
   const handleCommonConfigSnippetChange = (value: string) => {
@@ -348,6 +358,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
           previousSnippet,
           false,
         );
+        // 直接更新 formData，不通过 handleChange
         setFormData((prev) => ({
           ...prev,
           settingsConfig: updatedConfig,
@@ -385,10 +396,25 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
         return;
       }
 
+      // 标记正在通过通用配置更新，避免触发状态检查
+      isUpdatingFromCommonConfig.current = true;
       setFormData((prev) => ({
         ...prev,
         settingsConfig: addResult.updatedConfig,
       }));
+      // 在下一个事件循环中重置标记
+      setTimeout(() => {
+        isUpdatingFromCommonConfig.current = false;
+      }, 0);
+    }
+    
+    // 保存通用配置到 localStorage
+    if (isValidJson && typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(COMMON_CONFIG_STORAGE_KEY, value);
+      } catch {
+        // ignore localStorage 写入失败
+      }
     }
   };
 
