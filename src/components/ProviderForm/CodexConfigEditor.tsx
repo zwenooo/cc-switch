@@ -52,6 +52,18 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
     setIsCommonConfigModalOpen(false);
   };
 
+  const handleAuthChange = (value: string) => {
+    onAuthChange(value);
+  };
+
+  const handleConfigChange = (value: string) => {
+    onConfigChange(value);
+  };
+
+  const handleCommonConfigSnippetChange = (value: string) => {
+    onCommonConfigSnippetChange(value);
+  };
+
   return (
     <div className="space-y-6">
       <div className="space-y-2">
@@ -64,7 +76,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
         <textarea
           id="codexAuth"
           value={authValue}
-          onChange={(e) => onAuthChange(e.target.value)}
+          onChange={(e) => handleAuthChange(e.target.value)}
           onBlur={onAuthBlur}
           placeholder={`{
   "OPENAI_API_KEY": "sk-your-api-key-here"
@@ -72,6 +84,15 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
           rows={6}
           required
           className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:focus:ring-blue-400/20 focus:border-blue-500 dark:focus:border-blue-400 transition-colors resize-y min-h-[8rem]"
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="none"
+          spellCheck={false}
+          lang="en"
+          inputMode="text"
+          data-gramm="false"
+          data-gramm_editor="false"
+          data-enable-grammarly="false"
         />
         <p className="text-xs text-gray-500 dark:text-gray-400">
           Codex auth.json 配置内容
@@ -113,10 +134,19 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
         <textarea
           id="codexConfig"
           value={configValue}
-          onChange={(e) => onConfigChange(e.target.value)}
+          onChange={(e) => handleConfigChange(e.target.value)}
           placeholder=""
           rows={8}
           className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:focus:ring-blue-400/20 focus:border-blue-500 dark:focus:border-blue-400 transition-colors resize-y min-h-[10rem]"
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="none"
+          spellCheck={false}
+          lang="en"
+          inputMode="text"
+          data-gramm="false"
+          data-gramm_editor="false"
+          data-enable-grammarly="false"
         />
         <p className="text-xs text-gray-500 dark:text-gray-400">
           Codex config.toml 配置内容
@@ -157,11 +187,20 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
               </p>
               <textarea
                 value={commonConfigSnippet}
-                onChange={(e) => onCommonConfigSnippetChange(e.target.value)}
+                onChange={(e) => handleCommonConfigSnippetChange(e.target.value)}
                 placeholder={`# Common Codex config
 # Add your common TOML configuration here`}
                 rows={12}
                 className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:focus:ring-blue-400/20 focus:border-blue-500 dark:focus:border-blue-400 transition-colors resize-y"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                lang="en"
+                inputMode="text"
+                data-gramm="false"
+                data-gramm_editor="false"
+                data-enable-grammarly="false"
               />
               {commonConfigError && (
                 <p className="text-sm text-red-500 dark:text-red-400">

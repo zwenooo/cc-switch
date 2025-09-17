@@ -67,13 +67,25 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   const [baseUrl, setBaseUrl] = useState(""); // 新增：基础 URL 状态
 
   // Codex 特有的状态
-  const [codexAuth, setCodexAuth] = useState("");
-  const [codexConfig, setCodexConfig] = useState("");
+  const [codexAuth, setCodexAuthState] = useState("");
+  const [codexConfig, setCodexConfigState] = useState("");
   const [codexApiKey, setCodexApiKey] = useState("");
   // -1 表示自定义，null 表示未选择，>= 0 表示预设索引
   const [selectedCodexPreset, setSelectedCodexPreset] = useState<number | null>(
     showPresets && isCodex ? -1 : null,
   );
+
+  const setCodexAuth = (value: string) => {
+    setCodexAuthState(value);
+  };
+
+  const setCodexConfig = (value: string) => {
+    setCodexConfigState(value);
+  };
+
+  const setCodexCommonConfigSnippet = (value: string) => {
+    setCodexCommonConfigSnippetState(value);
+  };
 
   // 初始化 Codex 配置
   useEffect(() => {
@@ -116,12 +128,14 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   
   // Codex 通用配置状态
   const [useCodexCommonConfig, setUseCodexCommonConfig] = useState(false);
-  const [codexCommonConfigSnippet, setCodexCommonConfigSnippet] = useState<string>(() => {
+  const [codexCommonConfigSnippet, setCodexCommonConfigSnippetState] = useState<string>(() => {
     if (typeof window === "undefined") {
       return DEFAULT_CODEX_COMMON_CONFIG_SNIPPET;
     }
     try {
-      const stored = window.localStorage.getItem(CODEX_COMMON_CONFIG_STORAGE_KEY);
+      const stored = window.localStorage.getItem(
+        CODEX_COMMON_CONFIG_STORAGE_KEY,
+      );
       if (stored && stored.trim()) {
         return stored;
       }
@@ -694,11 +708,14 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
         isUpdatingFromCodexCommonConfig.current = false;
       }, 0);
     }
-    
+
     // 保存 Codex 通用配置到 localStorage
     if (typeof window !== "undefined") {
       try {
-        window.localStorage.setItem(CODEX_COMMON_CONFIG_STORAGE_KEY, value);
+        window.localStorage.setItem(
+          CODEX_COMMON_CONFIG_STORAGE_KEY,
+          value,
+        );
       } catch {
         // ignore localStorage 写入失败
       }
