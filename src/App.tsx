@@ -11,6 +11,7 @@ import { UpdateBadge } from "./components/UpdateBadge";
 import { Plus, Settings, Moon, Sun } from "lucide-react";
 import { buttonStyles } from "./lib/styles";
 import { useDarkMode } from "./hooks/useDarkMode";
+import { extractErrorMessage } from "./utils/errorUtils";
 
 function App() {
   const { isDarkMode, toggleDarkMode } = useDarkMode();
@@ -148,7 +149,11 @@ function App() {
     } catch (error) {
       console.error("更新供应商失败:", error);
       setEditingProviderId(null);
-      showNotification("保存失败，请重试", "error");
+      const errorMessage = extractErrorMessage(error);
+      const message = errorMessage
+        ? `保存失败：${errorMessage}`
+        : "保存失败，请重试";
+      showNotification(message, "error", errorMessage ? 6000 : 3000);
     }
   };
 
