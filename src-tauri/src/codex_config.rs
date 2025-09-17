@@ -10,10 +10,6 @@ use std::path::Path;
 
 /// 获取 Codex 配置目录路径
 pub fn get_codex_config_dir() -> PathBuf {
-    if let Some(custom) = crate::settings::get_codex_override_dir() {
-        return custom;
-    }
-
     dirs::home_dir().expect("无法获取用户主目录").join(".codex")
 }
 

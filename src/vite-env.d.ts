@@ -28,7 +28,6 @@ declare global {
       getClaudeCodeConfigPath: () => Promise<string>;
       getClaudeConfigStatus: () => Promise<ConfigStatus>;
       getConfigStatus: (app?: AppType) => Promise<ConfigStatus>;
-      getConfigDir: (app?: AppType) => Promise<string>;
       selectConfigFile: () => Promise<string | null>;
       openConfigFolder: (app?: AppType) => Promise<void>;
       openExternal: (url: string) => Promise<void>;

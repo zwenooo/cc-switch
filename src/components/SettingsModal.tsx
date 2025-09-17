@@ -6,16 +6,12 @@ import {
   Download,
   ExternalLink,
   Check,
-  Undo2,
-  FolderSearch,
 } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
-import { open } from "@tauri-apps/plugin-dialog";
 import "../lib/tauri-api";
 import { relaunchApp } from "../lib/updater";
 import { useUpdate } from "../contexts/UpdateContext";
 import type { Settings } from "../types";
-import type { AppType } from "../lib/tauri-api";
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -24,16 +20,12 @@ interface SettingsModalProps {
 export default function SettingsModal({ onClose }: SettingsModalProps) {
   const [settings, setSettings] = useState<Settings>({
     showInTray: true,
-    claudeConfigDir: undefined,
-    codexConfigDir: undefined,
   });
   const [configPath, setConfigPath] = useState<string>("");
   const [version, setVersion] = useState<string>("");
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [showUpToDate, setShowUpToDate] = useState(false);
-  const [resolvedClaudeDir, setResolvedClaudeDir] = useState<string>("");
-  const [resolvedCodexDir, setResolvedCodexDir] = useState<string>("");
   const { hasUpdate, updateInfo, updateHandle, checkUpdate, resetDismiss } =
     useUpdate();
 
@@ -41,7 +33,6 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     loadSettings();
     loadConfigPath();
     loadVersion();
-    loadResolvedDirs();
   }, []);
 
   const loadVersion = async () => {
@@ -58,21 +49,12 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const loadSettings = async () => {
     try {
       const loadedSettings = await window.api.getSettings();
-      const showInTray =
-        (loadedSettings as any)?.showInTray ??
-        (loadedSettings as any)?.showInDock ??
-        true;
-      setSettings({
-        showInTray,
-        claudeConfigDir:
-          typeof (loadedSettings as any)?.claudeConfigDir === "string"
-            ? (loadedSettings as any).claudeConfigDir
-            : undefined,
-        codexConfigDir:
-          typeof (loadedSettings as any)?.codexConfigDir === "string"
-            ? (loadedSettings as any).codexConfigDir
-            : undefined,
-      });
+      if ((loadedSettings as any)?.showInTray !== undefined) {
+        setSettings({ showInTray: (loadedSettings as any).showInTray });
+      } else if ((loadedSettings as any)?.showInDock !== undefined) {
+        // 向后兼容：若历史上有 showInDock，则映射为 showInTray
+        setSettings({ showInTray: (loadedSettings as any).showInDock });
+      }
     } catch (error) {
       console.error("加载设置失败:", error);
     }
@@ -89,34 +71,9 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     }
   };
 
-  const loadResolvedDirs = async () => {
-    try {
-      const [claudeDir, codexDir] = await Promise.all([
-        window.api.getConfigDir("claude"),
-        window.api.getConfigDir("codex"),
-      ]);
-      setResolvedClaudeDir(claudeDir || "");
-      setResolvedCodexDir(codexDir || "");
-    } catch (error) {
-      console.error("获取配置目录失败:", error);
-    }
-  };
-
   const saveSettings = async () => {
     try {
-      const payload: Settings = {
-        ...settings,
-        claudeConfigDir:
-          settings.claudeConfigDir && settings.claudeConfigDir.trim() !== ""
-            ? settings.claudeConfigDir.trim()
-            : undefined,
-        codexConfigDir:
-          settings.codexConfigDir && settings.codexConfigDir.trim() !== ""
-            ? settings.codexConfigDir.trim()
-            : undefined,
-      };
-      await window.api.saveSettings(payload);
-      setSettings(payload);
+      await window.api.saveSettings(settings);
       onClose();
     } catch (error) {
       console.error("保存设置失败:", error);
@@ -175,35 +132,6 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
       await window.api.openAppConfigFolder();
     } catch (error) {
       console.error("打开配置文件夹失败:", error);
-    }
-  };
-
-  const handleBrowseConfigDir = async (app: AppType) => {
-    try {
-      const currentResolved =
-        app === "claude"
-          ? settings.claudeConfigDir ?? resolvedClaudeDir
-          : settings.codexConfigDir ?? resolvedCodexDir;
-
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        defaultPath: currentResolved || undefined,
-      });
-
-      if (!selected || Array.isArray(selected)) {
-        return;
-      }
-
-      if (app === "claude") {
-        setSettings((prev) => ({ ...prev, claudeConfigDir: selected }));
-        setResolvedClaudeDir(selected);
-      } else {
-        setSettings((prev) => ({ ...prev, codexConfigDir: selected }));
-        setResolvedCodexDir(selected);
-      }
-    } catch (error) {
-      console.error("选择配置目录失败:", error);
     }
   };
 
@@ -294,102 +222,6 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                   className="text-gray-500 dark:text-gray-400"
                 />
               </button>
-            </div>
-          </div>
-
-          {/* 配置目录覆盖 */}
-          <div>
-            <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
-              配置目录覆盖（高级）
-            </h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3 leading-relaxed">
-              在 Windows WSL 等环境下，可手动指定 Claude Code 或 Codex 的配置目录。
-              留空则继续使用系统默认路径（macOS/Windows 会自动识别）。
-            </p>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  Claude Code 配置目录
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={
-                      settings.claudeConfigDir ?? resolvedClaudeDir ?? ""
-                    }
-                    onChange={(e) =>
-                      setSettings({
-                        ...settings,
-                        claudeConfigDir: e.target.value,
-                      })
-                    }
-                    placeholder="例如：/mnt/c/Users/<你的用户名>/.claude"
-                    className="flex-1 px-3 py-2 text-xs font-mono bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleBrowseConfigDir("claude")}
-                    className="px-2 py-2 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                    title="浏览目录"
-                  >
-                    <FolderSearch size={16} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setSettings({
-                        ...settings,
-                        claudeConfigDir: undefined,
-                      })
-                    }
-                    className="px-2 py-2 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                    title="恢复默认目录"
-                  >
-                    <Undo2 size={16} />
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  Codex 配置目录
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={settings.codexConfigDir ?? resolvedCodexDir ?? ""}
-                    onChange={(e) =>
-                      setSettings({
-                        ...settings,
-                        codexConfigDir: e.target.value,
-                      })
-                    }
-                    placeholder="例如：/mnt/c/Users/<你的用户名>/.codex"
-                    className="flex-1 px-3 py-2 text-xs font-mono bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleBrowseConfigDir("codex")}
-                    className="px-2 py-2 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                    title="浏览目录"
-                  >
-                    <FolderSearch size={16} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setSettings({
-                        ...settings,
-                        codexConfigDir: undefined,
-                      })
-                    }
-                    className="px-2 py-2 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                    title="恢复默认目录"
-                  >
-                    <Undo2 size={16} />
-                  </button>
-                </div>
-              </div>
             </div>
           </div>
 
