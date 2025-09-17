@@ -192,3 +192,89 @@ export const setApiKeyInConfig = (
     return jsonString;
   }
 };
+
+// ========== TOML Config Utilities ==========
+
+const COMMON_CONFIG_MARKER_START = "# === COMMON CONFIG START ===";
+const COMMON_CONFIG_MARKER_END = "# === COMMON CONFIG END ===";
+
+export interface UpdateTomlCommonConfigResult {
+  updatedConfig: string;
+  error?: string;
+}
+
+// 将通用配置片段写入/移除 TOML 配置
+export const updateTomlCommonConfigSnippet = (
+  tomlString: string,
+  snippetString: string,
+  enabled: boolean,
+): UpdateTomlCommonConfigResult => {
+  if (!snippetString.trim()) {
+    // 如果片段为空，移除已存在的通用配置部分
+    const cleaned = removeTomlCommonConfig(tomlString);
+    return {
+      updatedConfig: cleaned,
+    };
+  }
+
+  if (enabled) {
+    // 添加通用配置
+    const withoutOld = removeTomlCommonConfig(tomlString);
+    const commonSection = `\n${COMMON_CONFIG_MARKER_START}\n${snippetString}\n${COMMON_CONFIG_MARKER_END}\n`;
+    return {
+      updatedConfig: withoutOld + commonSection,
+    };
+  } else {
+    // 移除通用配置
+    const cleaned = removeTomlCommonConfig(tomlString);
+    return {
+      updatedConfig: cleaned,
+    };
+  }
+};
+
+// 从 TOML 中移除通用配置部分
+const removeTomlCommonConfig = (tomlString: string): string => {
+  const startIdx = tomlString.indexOf(COMMON_CONFIG_MARKER_START);
+  const endIdx = tomlString.indexOf(COMMON_CONFIG_MARKER_END);
+  
+  if (startIdx === -1 || endIdx === -1) {
+    return tomlString;
+  }
+  
+  // 找到标记前的换行符（如果有）
+  let realStartIdx = startIdx;
+  if (startIdx > 0 && tomlString[startIdx - 1] === '\n') {
+    realStartIdx = startIdx - 1;
+  }
+  
+  // 找到标记后的换行符（如果有）
+  let realEndIdx = endIdx + COMMON_CONFIG_MARKER_END.length;
+  if (realEndIdx < tomlString.length && tomlString[realEndIdx] === '\n') {
+    realEndIdx = realEndIdx + 1;
+  }
+  
+  return tomlString.slice(0, realStartIdx) + tomlString.slice(realEndIdx);
+};
+
+// 检查 TOML 配置是否已包含通用配置片段
+export const hasTomlCommonConfigSnippet = (
+  tomlString: string,
+  snippetString: string,
+): boolean => {
+  if (!snippetString.trim()) return false;
+  
+  const startIdx = tomlString.indexOf(COMMON_CONFIG_MARKER_START);
+  const endIdx = tomlString.indexOf(COMMON_CONFIG_MARKER_END);
+  
+  if (startIdx === -1 || endIdx === -1 || startIdx >= endIdx) {
+    return false;
+  }
+  
+  // 提取标记之间的内容
+  const existingSnippet = tomlString
+    .slice(startIdx + COMMON_CONFIG_MARKER_START.length, endIdx)
+    .trim();
+  
+  return existingSnippet === snippetString.trim();
+};

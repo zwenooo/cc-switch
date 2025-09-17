@@ -7,6 +7,8 @@ import {
   getApiKeyFromConfig,
   hasApiKeyField,
   setApiKeyInConfig,
+  updateTomlCommonConfigSnippet,
+  hasTomlCommonConfigSnippet,
 } from "../utils/providerConfigUtils";
 import { providerPresets } from "../config/providerPresets";
 import { codexProviderPresets } from "../config/codexProviderPresets";
@@ -19,9 +21,12 @@ import { X, AlertCircle, Save } from "lucide-react";
 // 分类仅用于控制少量交互（如官方禁用 API Key），不显示介绍组件
 
 const COMMON_CONFIG_STORAGE_KEY = "cc-switch:common-config-snippet";
+const CODEX_COMMON_CONFIG_STORAGE_KEY = "cc-switch:codex-common-config-snippet";
 const DEFAULT_COMMON_CONFIG_SNIPPET = `{
   "includeCoAuthoredBy": false
 }`;
+const DEFAULT_CODEX_COMMON_CONFIG_SNIPPET = `# Common Codex config
+# Add your common TOML configuration here`;
 
 interface ProviderFormProps {
   appType?: AppType;
@@ -108,6 +113,25 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   const [commonConfigError, setCommonConfigError] = useState("");
   // 用于跟踪是否正在通过通用配置更新
   const isUpdatingFromCommonConfig = useRef(false);
+  
+  // Codex 通用配置状态
+  const [useCodexCommonConfig, setUseCodexCommonConfig] = useState(false);
+  const [codexCommonConfigSnippet, setCodexCommonConfigSnippet] = useState<string>(() => {
+    if (typeof window === "undefined") {
+      return DEFAULT_CODEX_COMMON_CONFIG_SNIPPET;
+    }
+    try {
+      const stored = window.localStorage.getItem(CODEX_COMMON_CONFIG_STORAGE_KEY);
+      if (stored && stored.trim()) {
+        return stored;
+      }
+    } catch {
+      // ignore localStorage 读取失败
+    }
+    return DEFAULT_CODEX_COMMON_CONFIG_SNIPPET;
+  });
+  const [codexCommonConfigError, setCodexCommonConfigError] = useState("");
+  const isUpdatingFromCodexCommonConfig = useRef(false);
   // -1 表示自定义，null 表示未选择，>= 0 表示预设索引
   const [selectedPreset, setSelectedPreset] = useState<number | null>(
     showPresets ? -1 : null,
@@ -149,35 +173,44 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   // 初始化时检查通用配置片段
   useEffect(() => {
     if (initialData) {
-      const configString = JSON.stringify(initialData.settingsConfig, null, 2);
-      const hasCommon = hasCommonConfigSnippet(
-        configString,
-        commonConfigSnippet,
-      );
-      setUseCommonConfig(hasCommon);
+      if (!isCodex) {
+        const configString = JSON.stringify(initialData.settingsConfig, null, 2);
+        const hasCommon = hasCommonConfigSnippet(
+          configString,
+          commonConfigSnippet,
+        );
+        setUseCommonConfig(hasCommon);
 
-      // 初始化模型配置（编辑模式）
-      if (
-        initialData.settingsConfig &&
-        typeof initialData.settingsConfig === "object"
-      ) {
-        const config = initialData.settingsConfig as {
-          env?: Record<string, any>;
-        };
-        if (config.env) {
-          setClaudeModel(config.env.ANTHROPIC_MODEL || "");
-          setClaudeSmallFastModel(config.env.ANTHROPIC_SMALL_FAST_MODEL || "");
-          setBaseUrl(config.env.ANTHROPIC_BASE_URL || ""); // 初始化基础 URL
+        // 初始化模型配置（编辑模式）
+        if (
+          initialData.settingsConfig &&
+          typeof initialData.settingsConfig === "object"
+        ) {
+          const config = initialData.settingsConfig as {
+            env?: Record<string, any>;
+          };
+          if (config.env) {
+            setClaudeModel(config.env.ANTHROPIC_MODEL || "");
+            setClaudeSmallFastModel(config.env.ANTHROPIC_SMALL_FAST_MODEL || "");
+            setBaseUrl(config.env.ANTHROPIC_BASE_URL || ""); // 初始化基础 URL
 
-          // 初始化 Kimi 模型选择
-          setKimiAnthropicModel(config.env.ANTHROPIC_MODEL || "");
-          setKimiAnthropicSmallFastModel(
-            config.env.ANTHROPIC_SMALL_FAST_MODEL || "",
-          );
+            // 初始化 Kimi 模型选择
+            setKimiAnthropicModel(config.env.ANTHROPIC_MODEL || "");
+            setKimiAnthropicSmallFastModel(
+              config.env.ANTHROPIC_SMALL_FAST_MODEL || "",
+            );
+          }
         }
+      } else {
+        // Codex 初始化时检查 TOML 通用配置
+        const hasCommon = hasTomlCommonConfigSnippet(
+          codexConfig,
+          codexCommonConfigSnippet,
+        );
+        setUseCodexCommonConfig(hasCommon);
       }
     }
-  }, [initialData, commonConfigSnippet]);
+  }, [initialData, commonConfigSnippet, codexCommonConfigSnippet, isCodex, codexConfig]);
 
   // 当选择预设变化时，同步类别
   useEffect(() => {
@@ -591,6 +624,99 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     }
   };
 
+  // Codex: 处理通用配置开关
+  const handleCodexCommonConfigToggle = (checked: boolean) => {
+    const { updatedConfig, error: snippetError } = updateTomlCommonConfigSnippet(
+      codexConfig,
+      codexCommonConfigSnippet,
+      checked,
+    );
+
+    if (snippetError) {
+      setCodexCommonConfigError(snippetError);
+      setUseCodexCommonConfig(false);
+      return;
+    }
+
+    setCodexCommonConfigError("");
+    setUseCodexCommonConfig(checked);
+    // 标记正在通过通用配置更新
+    isUpdatingFromCodexCommonConfig.current = true;
+    setCodexConfig(updatedConfig);
+    // 在下一个事件循环中重置标记
+    setTimeout(() => {
+      isUpdatingFromCodexCommonConfig.current = false;
+    }, 0);
+  };
+
+  // Codex: 处理通用配置片段变化
+  const handleCodexCommonConfigSnippetChange = (value: string) => {
+    const previousSnippet = codexCommonConfigSnippet;
+    setCodexCommonConfigSnippet(value);
+
+    if (!value.trim()) {
+      setCodexCommonConfigError("");
+      if (useCodexCommonConfig) {
+        const { updatedConfig } = updateTomlCommonConfigSnippet(
+          codexConfig,
+          previousSnippet,
+          false,
+        );
+        setCodexConfig(updatedConfig);
+        setUseCodexCommonConfig(false);
+      }
+      return;
+    }
+
+    // TOML 不需要验证 JSON 格式，直接更新
+    if (useCodexCommonConfig) {
+      const removeResult = updateTomlCommonConfigSnippet(
+        codexConfig,
+        previousSnippet,
+        false,
+      );
+      const addResult = updateTomlCommonConfigSnippet(
+        removeResult.updatedConfig,
+        value,
+        true,
+      );
+
+      if (addResult.error) {
+        setCodexCommonConfigError(addResult.error);
+        return;
+      }
+
+      // 标记正在通过通用配置更新
+      isUpdatingFromCodexCommonConfig.current = true;
+      setCodexConfig(addResult.updatedConfig);
+      // 在下一个事件循环中重置标记
+      setTimeout(() => {
+        isUpdatingFromCodexCommonConfig.current = false;
+      }, 0);
+    }
+    
+    // 保存 Codex 通用配置到 localStorage
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(CODEX_COMMON_CONFIG_STORAGE_KEY, value);
+      } catch {
+        // ignore localStorage 写入失败
+      }
+    }
+  };
+
+  // Codex: 处理 config 变化
+  const handleCodexConfigChange = (value: string) => {
+    if (!isUpdatingFromCodexCommonConfig.current) {
+      const hasCommon = hasTomlCommonConfigSnippet(
+        value,
+        codexCommonConfigSnippet,
+      );
+      setUseCodexCommonConfig(hasCommon);
+    }
+    setCodexConfig(value);
+  };
+
   // 根据当前配置决定是否展示 API Key 输入框
   // 自定义模式(-1)也需要显示 API Key 输入框
   const showApiKey =
@@ -983,7 +1109,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                 authValue={codexAuth}
                 configValue={codexConfig}
                 onAuthChange={setCodexAuth}
-                onConfigChange={setCodexConfig}
+                onConfigChange={handleCodexConfigChange}
                 onAuthBlur={() => {
                   try {
                     const auth = JSON.parse(codexAuth || "{}");
@@ -996,6 +1122,11 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                     // ignore
                   }
                 }}
+                useCommonConfig={useCodexCommonConfig}
+                onCommonConfigToggle={handleCodexCommonConfigToggle}
+                commonConfigSnippet={codexCommonConfigSnippet}
+                onCommonConfigSnippetChange={handleCodexCommonConfigSnippetChange}
+                commonConfigError={codexCommonConfigError}
               />
             ) : (
               <>
