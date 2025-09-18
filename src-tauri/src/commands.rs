@@ -32,6 +32,9 @@ fn validate_provider_settings(app_type: &AppType, provider: &Provider) -> Result
                 if !(config_value.is_string() || config_value.is_null()) {
                     return Err("Codex config 字段必须是字符串".to_string());
                 }
+                if let Some(cfg_text) = config_value.as_str() {
+                    codex_config::validate_config_toml(cfg_text)?;
+                }
             }
         }
     }
