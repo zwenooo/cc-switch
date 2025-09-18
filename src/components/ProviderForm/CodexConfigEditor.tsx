@@ -33,7 +33,6 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
   const [writeVscodeConfig, setWriteVscodeConfig] = useState(false);
   const [vscodeError, setVscodeError] = useState("");
   const [vscodeSuccess, setVscodeSuccess] = useState("");
-  const [isWritingVscode, setIsWritingVscode] = useState(false);
 
   useEffect(() => {
     if (commonConfigError && !isCommonConfigModalOpen) {
@@ -49,20 +48,20 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
     return () => window.clearTimeout(timer);
   }, [vscodeSuccess]);
 
-  const handleVscodeConfigToggle = async (checked: boolean) => {
-    if (isWritingVscode) return;
+  // 监听 writeVscodeConfig 变化并执行写入
+  useEffect(() => {
+    if (!writeVscodeConfig) return;
 
-    setWriteVscodeConfig(checked);
-    setVscodeError("");
-    setVscodeSuccess("");
+    const performWrite = async () => {
+      setVscodeError("");
+      setVscodeSuccess("");
 
-    if (typeof window === "undefined" || !window.api?.writeVscodeSettings) {
-      setVscodeError("当前环境暂不支持写入 VS Code 配置");
-      setWriteVscodeConfig(!checked);
-      return;
-    }
+      if (typeof window === "undefined" || !window.api?.writeVscodeSettings) {
+        setVscodeError("当前环境暂不支持写入 VS Code 配置");
+        setWriteVscodeConfig(false);
+        return;
+      }
 
-    if (checked) {
       const trimmed = configValue.trim();
       if (!trimmed) {
         setVscodeError("请先填写 config.toml，再写入 VS Code 配置");
@@ -77,7 +76,6 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
         return;
       }
 
-      setIsWritingVscode(true);
       try {
         const success = await window.api.writeVscodeSettings(baseUrl);
         if (success) {
@@ -89,29 +87,11 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
       } catch (error) {
         setVscodeError(`写入 VS Code 配置失败: ${String(error)}`);
         setWriteVscodeConfig(false);
-      } finally {
-        setIsWritingVscode(false);
       }
+    };
 
-      return;
-    }
-
-    setIsWritingVscode(true);
-    try {
-      const success = await window.api.writeVscodeSettings();
-      if (success) {
-        setVscodeSuccess("已移除 VS Code 配置");
-      } else {
-        setVscodeError("移除 VS Code 配置失败，请稍后重试");
-        setWriteVscodeConfig(true);
-      }
-    } catch (error) {
-      setVscodeError(`移除 VS Code 配置失败: ${String(error)}`);
-      setWriteVscodeConfig(true);
-    } finally {
-      setIsWritingVscode(false);
-    }
-  };
+    performWrite();
+  }, [writeVscodeConfig, configValue]);
 
   // 支持按下 ESC 关闭弹窗
   useEffect(() => {
@@ -188,8 +168,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
                 <input
                   type="checkbox"
                   checked={writeVscodeConfig}
-                  onChange={(e) => handleVscodeConfigToggle(e.target.checked)}
-                  disabled={isWritingVscode}
+                  onChange={(e) => setWriteVscodeConfig(e.target.checked)}
                   className="w-4 h-4 text-blue-500 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 rounded focus:ring-blue-500 dark:focus:ring-blue-400 focus:ring-2"
                 />
                 写入 VS Code 配置
