@@ -30,7 +30,6 @@ declare global {
       getConfigStatus: (app?: AppType) => Promise<ConfigStatus>;
       selectConfigFile: () => Promise<string | null>;
       openConfigFolder: (app?: AppType) => Promise<void>;
-      writeVscodeSettings: (baseUrl?: string) => Promise<boolean>;
       openExternal: (url: string) => Promise<void>;
       updateTrayMenu: () => Promise<boolean>;
       onProviderSwitched: (

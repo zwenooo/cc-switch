@@ -5,7 +5,6 @@ mod config;
 mod migration;
 mod provider;
 mod store;
-mod vscode_config;
 
 use store::AppState;
 #[cfg(target_os = "macos")]
@@ -353,7 +352,6 @@ pub fn run() {
             commands::get_claude_code_config_path,
             commands::open_config_folder,
             commands::open_external,
-            commands::write_vscode_settings_command,
             commands::get_app_config_path,
             commands::open_app_config_folder,
             commands::get_settings,

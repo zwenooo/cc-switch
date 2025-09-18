@@ -288,10 +288,3 @@ export const hasTomlCommonConfigSnippet = (
   
   return existingSnippet === snippetString.trim();
 };
-
-// 从 Codex TOML 配置中提取 base_url
-export const extractBaseUrlFromToml = (tomlString: string): string => {
-  if (!tomlString) return "";
-  const match = tomlString.match(/base_url\s*=\s*"([^"]+)"/);
-  return match?.[1] ?? "";
-};
