@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { X, Save } from "lucide-react";
 import { extractBaseUrlFromToml } from "../../utils/providerConfigUtils";
 
@@ -34,7 +34,6 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
   const [vscodeError, setVscodeError] = useState("");
   const [vscodeSuccess, setVscodeSuccess] = useState("");
   const [isWritingVscode, setIsWritingVscode] = useState(false);
-  const lastAppliedBaseUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (commonConfigError && !isCommonConfigModalOpen) {
@@ -50,67 +49,18 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
     return () => window.clearTimeout(timer);
   }, [vscodeSuccess]);
 
-  const ensureVscodeApiAvailable = () => {
-    if (typeof window === "undefined" || !window.api?.writeVscodeSettings) {
-      setVscodeError("当前环境暂不支持写入 VS Code 配置");
-      return false;
-    }
-    return true;
-  };
-
-  const applyVscodeConfig = async (
-    baseUrl: string,
-    successMessage = "已写入 VS Code 配置",
-  ) => {
-    if (!ensureVscodeApiAvailable()) {
-      return false;
-    }
-
-    setIsWritingVscode(true);
-    try {
-      const success = await window.api.writeVscodeSettings(baseUrl);
-      if (success) {
-        setVscodeSuccess(successMessage);
-        lastAppliedBaseUrlRef.current = baseUrl;
-        return true;
-      }
-      setVscodeError("写入 VS Code 配置失败，请稍后重试");
-    } catch (error) {
-      setVscodeError(`写入 VS Code 配置失败: ${String(error)}`);
-    } finally {
-      setIsWritingVscode(false);
-    }
-    return false;
-  };
-
-  const removeVscodeConfig = async () => {
-    if (!ensureVscodeApiAvailable()) {
-      return false;
-    }
-
-    setIsWritingVscode(true);
-    try {
-      const success = await window.api.writeVscodeSettings();
-      if (success) {
-        setVscodeSuccess("已移除 VS Code 配置");
-        lastAppliedBaseUrlRef.current = null;
-        return true;
-      }
-      setVscodeError("移除 VS Code 配置失败，请稍后重试");
-    } catch (error) {
-      setVscodeError(`移除 VS Code 配置失败: ${String(error)}`);
-    } finally {
-      setIsWritingVscode(false);
-    }
-    return false;
-  };
-
   const handleVscodeConfigToggle = async (checked: boolean) => {
     if (isWritingVscode) return;
 
     setWriteVscodeConfig(checked);
     setVscodeError("");
     setVscodeSuccess("");
+
+    if (typeof window === "undefined" || !window.api?.writeVscodeSettings) {
+      setVscodeError("当前环境暂不支持写入 VS Code 配置");
+      setWriteVscodeConfig(!checked);
+      return;
+    }
 
     if (checked) {
       const trimmed = configValue.trim();
@@ -127,70 +77,46 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
         return;
       }
 
-      const success = await applyVscodeConfig(baseUrl);
-      if (!success) {
-        setWriteVscodeConfig(false);
-      }
-      return;
-    }
-
-    const success = await removeVscodeConfig();
-    if (!success) {
-      setWriteVscodeConfig(true);
-    }
-  };
-
-  useEffect(() => {
-    if (!writeVscodeConfig || isWritingVscode) {
-      return;
-    }
-
-    const trimmed = configValue.trim();
-    if (!trimmed) {
-      return;
-    }
-
-    const baseUrl = extractBaseUrlFromToml(trimmed);
-    if (!baseUrl) {
-      setVscodeError("未在 config.toml 中找到 base_url 字段");
-      setWriteVscodeConfig(false);
-      return;
-    }
-
-    if (lastAppliedBaseUrlRef.current === baseUrl) {
-      return;
-    }
-
-    const sync = async () => {
-      // 直接调用 API 而不依赖 applyVscodeConfig 函数，避免闭包问题
-      if (typeof window === "undefined" || !window.api?.writeVscodeSettings) {
-        setVscodeError("当前环境暂不支持写入 VS Code 配置");
-        return;
-      }
-
       setIsWritingVscode(true);
       try {
         const success = await window.api.writeVscodeSettings(baseUrl);
         if (success) {
-          setVscodeSuccess("已更新 VS Code 配置");
-          lastAppliedBaseUrlRef.current = baseUrl;
+          setVscodeSuccess("已写入 VS Code 配置");
         } else {
           setVscodeError("写入 VS Code 配置失败，请稍后重试");
+          setWriteVscodeConfig(false);
         }
       } catch (error) {
         setVscodeError(`写入 VS Code 配置失败: ${String(error)}`);
+        setWriteVscodeConfig(false);
       } finally {
         setIsWritingVscode(false);
       }
-    };
 
-    sync();
-  }, [configValue, writeVscodeConfig, isWritingVscode]);
+      return;
+    }
+
+    setIsWritingVscode(true);
+    try {
+      const success = await window.api.writeVscodeSettings();
+      if (success) {
+        setVscodeSuccess("已移除 VS Code 配置");
+      } else {
+        setVscodeError("移除 VS Code 配置失败，请稍后重试");
+        setWriteVscodeConfig(true);
+      }
+    } catch (error) {
+      setVscodeError(`移除 VS Code 配置失败: ${String(error)}`);
+      setWriteVscodeConfig(true);
+    } finally {
+      setIsWritingVscode(false);
+    }
+  };
 
   // 支持按下 ESC 关闭弹窗
   useEffect(() => {
     if (!isCommonConfigModalOpen) return;
-
+    
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -236,7 +162,9 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
           data-enable-grammarly="false"
         />
         {authError && (
-          <p className="text-xs text-red-500 dark:text-red-400">{authError}</p>
+          <p className="text-xs text-red-500 dark:text-red-400">
+            {authError}
+          </p>
         )}
         <p className="text-xs text-gray-500 dark:text-gray-400">
           Codex auth.json 配置内容
@@ -251,7 +179,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
           >
             config.toml (TOML)
           </label>
-
+          
           {/* 右侧对齐的双列布局 - 使用flex而非grid以更好控制宽度 */}
           <div className="flex gap-3">
             {/* 左列：VS Code 配置 */}
@@ -273,16 +201,13 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
                   </p>
                 )}
                 {vscodeError && (
-                  <p
-                    className="text-xs text-red-500 dark:text-red-400 text-right truncate"
-                    title={vscodeError}
-                  >
+                  <p className="text-xs text-red-500 dark:text-red-400 text-right truncate" title={vscodeError}>
                     {vscodeError}
                   </p>
                 )}
               </div>
             </div>
-
+            
             {/* 右列：通用配置 - 不设置宽度，让内容自然收缩 */}
             <div className="flex flex-col items-end space-y-1">
               <label className="inline-flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 cursor-pointer">
@@ -302,17 +227,14 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
                 编辑通用配置
               </button>
               {commonConfigError && !isCommonConfigModalOpen && (
-                <p
-                  className="text-xs text-red-500 dark:text-red-400 mt-1 max-w-[120px] truncate"
-                  title={commonConfigError}
-                >
+                <p className="text-xs text-red-500 dark:text-red-400 mt-1 max-w-[120px] truncate" title={commonConfigError}>
                   {commonConfigError}
                 </p>
               )}
             </div>
           </div>
         </div>
-
+        
         <textarea
           id="codexConfig"
           value={configValue}
@@ -336,7 +258,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
       </div>
 
       {isCommonConfigModalOpen && (
-        <div
+        <div 
           className="fixed inset-0 z-50 flex items-center justify-center"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) closeModal();
@@ -344,7 +266,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
         >
           {/* Backdrop - 统一背景样式 */}
           <div className="absolute inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm" />
-
+          
           {/* Modal - 统一窗口样式 */}
           <div className="relative bg-white dark:bg-gray-900 rounded-xl shadow-lg max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
             {/* Header - 统一标题栏样式 */}
@@ -361,7 +283,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
                 <X size={18} />
               </button>
             </div>
-
+            
             {/* Content - 统一内容区域样式 */}
             <div className="flex-1 overflow-auto p-6 space-y-4">
               <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -390,7 +312,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
                 </p>
               )}
             </div>
-
+            
             {/* Footer - 统一底部按钮样式 */}
             <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-800 bg-gray-100 dark:bg-gray-800">
               <button

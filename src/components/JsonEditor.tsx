@@ -62,7 +62,7 @@ const JsonEditor: React.FC<JsonEditorProps> = ({
 
         return diagnostics;
       }),
-    [showValidation],
+    [showValidation]
   );
 
   useEffect(() => {

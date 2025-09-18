@@ -128,26 +128,25 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   const [settingsConfigError, setSettingsConfigError] = useState("");
   // 用于跟踪是否正在通过通用配置更新
   const isUpdatingFromCommonConfig = useRef(false);
-
+  
   // Codex 通用配置状态
   const [useCodexCommonConfig, setUseCodexCommonConfig] = useState(false);
-  const [codexCommonConfigSnippet, setCodexCommonConfigSnippetState] =
-    useState<string>(() => {
-      if (typeof window === "undefined") {
-        return DEFAULT_CODEX_COMMON_CONFIG_SNIPPET;
-      }
-      try {
-        const stored = window.localStorage.getItem(
-          CODEX_COMMON_CONFIG_STORAGE_KEY,
-        );
-        if (stored && stored.trim()) {
-          return stored;
-        }
-      } catch {
-        // ignore localStorage 读取失败
-      }
+  const [codexCommonConfigSnippet, setCodexCommonConfigSnippetState] = useState<string>(() => {
+    if (typeof window === "undefined") {
       return DEFAULT_CODEX_COMMON_CONFIG_SNIPPET;
-    });
+    }
+    try {
+      const stored = window.localStorage.getItem(
+        CODEX_COMMON_CONFIG_STORAGE_KEY,
+      );
+      if (stored && stored.trim()) {
+        return stored;
+      }
+    } catch {
+      // ignore localStorage 读取失败
+    }
+    return DEFAULT_CODEX_COMMON_CONFIG_SNIPPET;
+  });
   const [codexCommonConfigError, setCodexCommonConfigError] = useState("");
   const isUpdatingFromCodexCommonConfig = useRef(false);
   // -1 表示自定义，null 表示未选择，>= 0 表示预设索引
@@ -218,11 +217,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   useEffect(() => {
     if (initialData) {
       if (!isCodex) {
-        const configString = JSON.stringify(
-          initialData.settingsConfig,
-          null,
-          2,
-        );
+        const configString = JSON.stringify(initialData.settingsConfig, null, 2);
         const hasCommon = hasCommonConfigSnippet(
           configString,
           commonConfigSnippet,
@@ -240,9 +235,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
           };
           if (config.env) {
             setClaudeModel(config.env.ANTHROPIC_MODEL || "");
-            setClaudeSmallFastModel(
-              config.env.ANTHROPIC_SMALL_FAST_MODEL || "",
-            );
+            setClaudeSmallFastModel(config.env.ANTHROPIC_SMALL_FAST_MODEL || "");
             setBaseUrl(config.env.ANTHROPIC_BASE_URL || ""); // 初始化基础 URL
 
             // 初始化 Kimi 模型选择
@@ -261,13 +254,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
         setUseCodexCommonConfig(hasCommon);
       }
     }
-  }, [
-    initialData,
-    commonConfigSnippet,
-    codexCommonConfigSnippet,
-    isCodex,
-    codexConfig,
-  ]);
+  }, [initialData, commonConfigSnippet, codexCommonConfigSnippet, isCodex, codexConfig]);
 
   // 当选择预设变化时，同步类别
   useEffect(() => {
@@ -510,7 +497,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
         isUpdatingFromCommonConfig.current = false;
       }, 0);
     }
-
+    
     // 保存通用配置到 localStorage
     if (!validationError && typeof window !== "undefined") {
       try {
@@ -542,7 +529,10 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     setBaseUrl(""); // 清空基础 URL
 
     // 同步通用配置状态
-    const hasCommon = hasCommonConfigSnippet(configString, commonConfigSnippet);
+    const hasCommon = hasCommonConfigSnippet(
+      configString,
+      commonConfigSnippet,
+    );
     setUseCommonConfig(hasCommon);
     setCommonConfigError("");
 
@@ -653,7 +643,10 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     updateSettingsConfigValue(configString);
 
     // 同步通用配置开关
-    const hasCommon = hasCommonConfigSnippet(configString, commonConfigSnippet);
+    const hasCommon = hasCommonConfigSnippet(
+      configString,
+      commonConfigSnippet,
+    );
     setUseCommonConfig(hasCommon);
   };
 
@@ -688,12 +681,11 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
 
   // Codex: 处理通用配置开关
   const handleCodexCommonConfigToggle = (checked: boolean) => {
-    const { updatedConfig, error: snippetError } =
-      updateTomlCommonConfigSnippet(
-        codexConfig,
-        codexCommonConfigSnippet,
-        checked,
-      );
+    const { updatedConfig, error: snippetError } = updateTomlCommonConfigSnippet(
+      codexConfig,
+      codexCommonConfigSnippet,
+      checked,
+    );
 
     if (snippetError) {
       setCodexCommonConfigError(snippetError);
@@ -761,7 +753,10 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     // 保存 Codex 通用配置到 localStorage
     if (typeof window !== "undefined") {
       try {
-        window.localStorage.setItem(CODEX_COMMON_CONFIG_STORAGE_KEY, value);
+        window.localStorage.setItem(
+          CODEX_COMMON_CONFIG_STORAGE_KEY,
+          value,
+        );
       } catch {
         // ignore localStorage 写入失败
       }
@@ -1182,9 +1177,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                 useCommonConfig={useCodexCommonConfig}
                 onCommonConfigToggle={handleCodexCommonConfigToggle}
                 commonConfigSnippet={codexCommonConfigSnippet}
-                onCommonConfigSnippetChange={
-                  handleCodexCommonConfigSnippetChange
-                }
+                onCommonConfigSnippetChange={handleCodexCommonConfigSnippetChange}
                 commonConfigError={codexCommonConfigError}
                 authError={codexAuthError}
               />
