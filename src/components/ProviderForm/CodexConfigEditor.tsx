@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { X, Save } from "lucide-react";
+import { extractBaseUrlFromToml } from "../../utils/providerConfigUtils";
 
 interface CodexConfigEditorProps {
   authValue: string;
@@ -29,12 +30,23 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
   authError,
 }) => {
   const [isCommonConfigModalOpen, setIsCommonConfigModalOpen] = useState(false);
+  const [isWritingVscode, setIsWritingVscode] = useState(false);
+  const [vscodeError, setVscodeError] = useState("");
+  const [vscodeSuccess, setVscodeSuccess] = useState("");
 
   useEffect(() => {
     if (commonConfigError && !isCommonConfigModalOpen) {
       setIsCommonConfigModalOpen(true);
     }
   }, [commonConfigError, isCommonConfigModalOpen]);
+
+  useEffect(() => {
+    if (!vscodeSuccess) return;
+    const timer = window.setTimeout(() => {
+      setVscodeSuccess("");
+    }, 3000);
+    return () => window.clearTimeout(timer);
+  }, [vscodeSuccess]);
 
   // 支持按下 ESC 关闭弹窗
   useEffect(() => {
@@ -64,6 +76,42 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
 
   const handleCommonConfigSnippetChange = (value: string) => {
     onCommonConfigSnippetChange(value);
+  };
+
+  const handleWriteVscodeConfig = async () => {
+    setVscodeError("");
+    setVscodeSuccess("");
+
+    if (typeof window === "undefined" || !window.api?.writeVscodeSettings) {
+      setVscodeError("当前环境暂不支持写入 VS Code 配置");
+      return;
+    }
+
+    const trimmed = configValue.trim();
+    if (!trimmed) {
+      setVscodeError("请先填写 config.toml，再写入 VS Code 配置");
+      return;
+    }
+
+    const baseUrl = extractBaseUrlFromToml(trimmed);
+    if (!baseUrl) {
+      setVscodeError("未在 config.toml 中找到 base_url 字段");
+      return;
+    }
+
+    setIsWritingVscode(true);
+    try {
+      const success = await window.api.writeVscodeSettings(baseUrl);
+      if (success) {
+        setVscodeSuccess("已写入 VS Code 配置");
+      } else {
+        setVscodeError("写入 VS Code 配置失败，请稍后重试");
+      }
+    } catch (error) {
+      setVscodeError(`写入 VS Code 配置失败: ${String(error)}`);
+    } finally {
+      setIsWritingVscode(false);
+    }
   };
 
   return (
@@ -124,7 +172,15 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
             写入通用配置
           </label>
         </div>
-        <div className="flex items-center justify-end">
+        <div className="flex items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={handleWriteVscodeConfig}
+            disabled={isWritingVscode}
+            className="text-xs text-blue-500 dark:text-blue-400 hover:underline disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {isWritingVscode ? "写入中..." : "写入 VS Code 配置"}
+          </button>
           <button
             type="button"
             onClick={() => setIsCommonConfigModalOpen(true)}
@@ -136,6 +192,16 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
         {commonConfigError && !isCommonConfigModalOpen && (
           <p className="text-xs text-red-500 dark:text-red-400 text-right">
             {commonConfigError}
+          </p>
+        )}
+        {vscodeError && (
+          <p className="text-xs text-red-500 dark:text-red-400 text-right">
+            {vscodeError}
+          </p>
+        )}
+        {vscodeSuccess && !vscodeError && (
+          <p className="text-xs text-emerald-600 dark:text-emerald-400 text-right">
+            {vscodeSuccess}
           </p>
         )}
         <textarea

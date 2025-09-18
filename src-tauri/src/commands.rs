@@ -9,6 +9,7 @@ use crate::codex_config;
 use crate::config::{get_claude_settings_path, ConfigStatus};
 use crate::provider::Provider;
 use crate::store::AppState;
+use crate::vscode_config;
 
 fn validate_provider_settings(app_type: &AppType, provider: &Provider) -> Result<(), String> {
     match app_type {
@@ -39,6 +40,44 @@ fn validate_provider_settings(app_type: &AppType, provider: &Provider) -> Result
         }
     }
     Ok(())
+}
+
+fn extract_base_url_from_toml(cfg_text: &str) -> Result<Option<String>, String> {
+    if cfg_text.trim().is_empty() {
+        return Ok(None);
+    }
+
+    let value: toml::Value =
+        toml::from_str(cfg_text).map_err(|e| format!("解析 config.toml 失败: {}", e))?;
+
+    fn walk(value: &toml::Value) -> Option<String> {
+        match value {
+            toml::Value::Table(table) => {
+                if let Some(toml::Value::String(v)) = table.get("base_url") {
+                    if !v.trim().is_empty() {
+                        return Some(v.clone());
+                    }
+                }
+                for item in table.values() {
+                    if let Some(found) = walk(item) {
+                        return Some(found);
+                    }
+                }
+                None
+            }
+            toml::Value::Array(arr) => {
+                for item in arr {
+                    if let Some(found) = walk(item) {
+                        return Some(found);
+                    }
+                }
+                None
+            }
+            _ => None,
+        }
+    }
+
+    Ok(walk(&value))
 }
 
 /// 获取所有供应商
@@ -360,6 +399,26 @@ pub async fn switch_provider(
                 .get("config")
                 .and_then(|v| v.as_str());
             crate::codex_config::write_codex_live_atomic(auth, cfg_text)?;
+
+            let is_official = provider
+                .category
+                .as_ref()
+                .map(|c| c == "official")
+                .unwrap_or(false);
+
+            if is_official {
+                vscode_config::write_vscode_settings(None)?;
+            } else {
+                let cfg_text = cfg_text.unwrap_or_default();
+                match extract_base_url_from_toml(cfg_text)? {
+                    Some(base_url) => {
+                        vscode_config::write_vscode_settings(Some(&base_url))?;
+                    }
+                    None => {
+                        return Err("目标 Codex 配置缺少 base_url 字段".to_string());
+                    }
+                }
+            }
         }
         AppType::Claude => {
             use crate::config::{read_json_file, write_json_file};
@@ -566,6 +625,17 @@ pub async fn open_external(app: tauri::AppHandle, url: String) -> Result<bool, S
         .open_url(&url, None::<String>)
         .map_err(|e| format!("打开链接失败: {}", e))?;
 
+    Ok(true)
+}
+
+/// 写入 VS Code 配置
+#[tauri::command]
+pub async fn write_vscode_settings_command(
+    base_url: Option<String>,
+    baseUrl: Option<String>,
+) -> Result<bool, String> {
+    let payload = base_url.or(baseUrl);
+    vscode_config::write_vscode_settings(payload.as_deref())?;
     Ok(true)
 }
 

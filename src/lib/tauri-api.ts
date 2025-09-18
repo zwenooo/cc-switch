@@ -159,6 +159,16 @@ export const tauriAPI = {
     }
   },
 
+  // 写入 VS Code 配置
+  writeVscodeSettings: async (baseUrl?: string): Promise<boolean> => {
+    try {
+      return await invoke("write_vscode_settings_command", { baseUrl });
+    } catch (error) {
+      console.error("写入 VS Code 配置失败:", error);
+      return false;
+    }
+  },
+
   // 打开外部链接
   openExternal: async (url: string): Promise<void> => {
     try {
