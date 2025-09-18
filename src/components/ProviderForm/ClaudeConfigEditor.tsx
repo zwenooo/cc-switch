@@ -10,6 +10,7 @@ interface ClaudeConfigEditorProps {
   commonConfigSnippet: string;
   onCommonConfigSnippetChange: (value: string) => void;
   commonConfigError: string;
+  configError: string;
 }
 
 const ClaudeConfigEditor: React.FC<ClaudeConfigEditorProps> = ({
@@ -20,6 +21,7 @@ const ClaudeConfigEditor: React.FC<ClaudeConfigEditorProps> = ({
   commonConfigSnippet,
   onCommonConfigSnippetChange,
   commonConfigError,
+  configError,
 }) => {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isCommonConfigModalOpen, setIsCommonConfigModalOpen] = useState(false);
@@ -117,6 +119,11 @@ const ClaudeConfigEditor: React.FC<ClaudeConfigEditorProps> = ({
 }`}
         rows={12}
       />
+      {configError && (
+        <p className="text-xs text-red-500 dark:text-red-400">
+          {configError}
+        </p>
+      )}
       <p className="text-xs text-gray-500 dark:text-gray-400">
         完整的 Claude Code settings.json 配置内容
       </p>

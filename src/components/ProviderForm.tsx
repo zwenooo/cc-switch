@@ -9,6 +9,7 @@ import {
   setApiKeyInConfig,
   updateTomlCommonConfigSnippet,
   hasTomlCommonConfigSnippet,
+  validateJsonConfig,
 } from "../utils/providerConfigUtils";
 import { providerPresets } from "../config/providerPresets";
 import { codexProviderPresets } from "../config/codexProviderPresets";
@@ -77,6 +78,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
 
   const setCodexAuth = (value: string) => {
     setCodexAuthState(value);
+    setCodexAuthError(validateCodexAuth(value));
   };
 
   const setCodexConfig = (value: string) => {
@@ -123,6 +125,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     return DEFAULT_COMMON_CONFIG_SNIPPET;
   });
   const [commonConfigError, setCommonConfigError] = useState("");
+  const [settingsConfigError, setSettingsConfigError] = useState("");
   // 用于跟踪是否正在通过通用配置更新
   const isUpdatingFromCommonConfig = useRef(false);
   
@@ -151,11 +154,39 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     showPresets ? -1 : null,
   );
   const [apiKey, setApiKey] = useState("");
+  const [codexAuthError, setCodexAuthError] = useState("");
 
   // Kimi 模型选择状态
   const [kimiAnthropicModel, setKimiAnthropicModel] = useState("");
   const [kimiAnthropicSmallFastModel, setKimiAnthropicSmallFastModel] =
     useState("");
+
+  const validateSettingsConfig = (value: string): string => {
+    return validateJsonConfig(value, "配置内容");
+  };
+
+  const validateCodexAuth = (value: string): string => {
+    if (!value.trim()) {
+      return "";
+    }
+    try {
+      const parsed = JSON.parse(value);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return "auth.json 必须是 JSON 对象";
+      }
+      return "";
+    } catch {
+      return "auth.json 格式错误，请检查JSON语法";
+    }
+  };
+
+  const updateSettingsConfigValue = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      settingsConfig: value,
+    }));
+    setSettingsConfigError(validateSettingsConfig(value));
+  };
 
   // 初始化自定义模式的默认配置
   useEffect(() => {
@@ -175,11 +206,9 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
           // ANTHROPIC_SMALL_FAST_MODEL: "your-fast-model-name"
         },
       };
+      const templateString = JSON.stringify(customTemplate, null, 2);
 
-      setFormData((prev) => ({
-        ...prev,
-        settingsConfig: JSON.stringify(customTemplate, null, 2),
-      }));
+      updateSettingsConfigValue(templateString);
       setApiKey("");
     }
   }, []); // 只在组件挂载时执行一次
@@ -194,6 +223,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
           commonConfigSnippet,
         );
         setUseCommonConfig(hasCommon);
+        setSettingsConfigError(validateSettingsConfig(configString));
 
         // 初始化模型配置（编辑模式）
         if (
@@ -279,6 +309,12 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     let settingsConfig: Record<string, any>;
 
     if (isCodex) {
+      const currentAuthError = validateCodexAuth(codexAuth);
+      setCodexAuthError(currentAuthError);
+      if (currentAuthError) {
+        setError(currentAuthError);
+        return;
+      }
       // Codex: 仅要求 auth.json 必填；config.toml 可为空
       if (!codexAuth.trim()) {
         setError("请填写 auth.json 配置");
@@ -313,6 +349,14 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
         return;
       }
     } else {
+      const currentSettingsError = validateSettingsConfig(
+        formData.settingsConfig,
+      );
+      setSettingsConfigError(currentSettingsError);
+      if (currentSettingsError) {
+        setError(currentSettingsError);
+        return;
+      }
       // Claude: 原有逻辑
       if (!formData.settingsConfig.trim()) {
         setError("请填写配置内容");
@@ -353,10 +397,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       setApiKey(parsedKey);
 
       // 不再从 JSON 自动提取或覆盖官网地址，只更新配置内容
-      setFormData((prev) => ({
-        ...prev,
-        [name]: value,
-      }));
+      updateSettingsConfigValue(value);
     } else {
       setFormData({
         ...formData,
@@ -375,6 +416,9 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
 
     if (snippetError) {
       setCommonConfigError(snippetError);
+      if (snippetError.includes("配置 JSON 解析失败")) {
+        setSettingsConfigError("配置JSON格式错误，请检查语法");
+      }
       setUseCommonConfig(false);
       return;
     }
@@ -383,10 +427,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     setUseCommonConfig(checked);
     // 标记正在通过通用配置更新
     isUpdatingFromCommonConfig.current = true;
-    setFormData((prev) => ({
-      ...prev,
-      settingsConfig: updatedConfig,
-    }));
+    updateSettingsConfigValue(updatedConfig);
     // 在下一个事件循环中重置标记
     setTimeout(() => {
       isUpdatingFromCommonConfig.current = false;
@@ -406,32 +447,34 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
           false,
         );
         // 直接更新 formData，不通过 handleChange
-        setFormData((prev) => ({
-          ...prev,
-          settingsConfig: updatedConfig,
-        }));
+        updateSettingsConfigValue(updatedConfig);
         setUseCommonConfig(false);
       }
       return;
     }
 
     // 验证JSON格式
-    let isValidJson = false;
-    try {
-      JSON.parse(value);
-      isValidJson = true;
+    const validationError = validateJsonConfig(value, "通用配置片段");
+    if (validationError) {
+      setCommonConfigError(validationError);
+    } else {
       setCommonConfigError("");
-    } catch (err) {
-      setCommonConfigError("通用配置片段格式错误，需为合法 JSON");
     }
 
     // 若当前启用通用配置且格式正确，需要替换为最新片段
-    if (useCommonConfig && isValidJson) {
+    if (useCommonConfig && !validationError) {
       const removeResult = updateCommonConfigSnippet(
         formData.settingsConfig,
         previousSnippet,
         false,
       );
+      if (removeResult.error) {
+        setCommonConfigError(removeResult.error);
+        if (removeResult.error.includes("配置 JSON 解析失败")) {
+          setSettingsConfigError("配置JSON格式错误，请检查语法");
+        }
+        return;
+      }
       const addResult = updateCommonConfigSnippet(
         removeResult.updatedConfig,
         value,
@@ -440,15 +483,15 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
 
       if (addResult.error) {
         setCommonConfigError(addResult.error);
+        if (addResult.error.includes("配置 JSON 解析失败")) {
+          setSettingsConfigError("配置JSON格式错误，请检查语法");
+        }
         return;
       }
 
       // 标记正在通过通用配置更新，避免触发状态检查
       isUpdatingFromCommonConfig.current = true;
-      setFormData((prev) => ({
-        ...prev,
-        settingsConfig: addResult.updatedConfig,
-      }));
+      updateSettingsConfigValue(addResult.updatedConfig);
       // 在下一个事件循环中重置标记
       setTimeout(() => {
         isUpdatingFromCommonConfig.current = false;
@@ -456,7 +499,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     }
     
     // 保存通用配置到 localStorage
-    if (isValidJson && typeof window !== "undefined") {
+    if (!validationError && typeof window !== "undefined") {
       try {
         window.localStorage.setItem(COMMON_CONFIG_STORAGE_KEY, value);
       } catch {
@@ -473,6 +516,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       websiteUrl: preset.websiteUrl,
       settingsConfig: configString,
     });
+    setSettingsConfigError(validateSettingsConfig(configString));
     setCategory(
       preset.category || (preset.isOfficial ? "official" : undefined),
     );
@@ -527,12 +571,14 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
         // ANTHROPIC_SMALL_FAST_MODEL: "your-fast-model-name"
       },
     };
+    const templateString = JSON.stringify(customTemplate, null, 2);
 
     setFormData({
       name: "",
       websiteUrl: "",
-      settingsConfig: JSON.stringify(customTemplate, null, 2),
+      settingsConfig: templateString,
     });
+    setSettingsConfigError(validateSettingsConfig(templateString));
     setApiKey("");
     setBaseUrl("https://your-api-endpoint.com"); // 设置默认的基础 URL
     setUseCommonConfig(false);
@@ -576,6 +622,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       websiteUrl: "",
       settingsConfig: "",
     });
+    setSettingsConfigError(validateSettingsConfig(""));
     setCodexAuth("");
     setCodexConfig("");
     setCodexApiKey("");
@@ -593,10 +640,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     );
 
     // 更新表单配置
-    setFormData((prev) => ({
-      ...prev,
-      settingsConfig: configString,
-    }));
+    updateSettingsConfigValue(configString);
 
     // 同步通用配置开关
     const hasCommon = hasCommonConfigSnippet(
@@ -617,10 +661,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       }
       config.env.ANTHROPIC_BASE_URL = url.trim();
 
-      setFormData((prev) => ({
-        ...prev,
-        settingsConfig: JSON.stringify(config, null, 2),
-      }));
+      updateSettingsConfigValue(JSON.stringify(config, null, 2));
     } catch {
       // ignore
     }
@@ -861,10 +902,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
         delete currentConfig.env[field];
       }
 
-      setFormData((prev) => ({
-        ...prev,
-        settingsConfig: JSON.stringify(currentConfig, null, 2),
-      }));
+      updateSettingsConfigValue(JSON.stringify(currentConfig, null, 2));
     } catch (err) {
       // 如果 JSON 解析失败，不做处理
     }
@@ -888,10 +926,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       currentConfig.env[field] = value;
 
       const updatedConfigString = JSON.stringify(currentConfig, null, 2);
-      setFormData((prev) => ({
-        ...prev,
-        settingsConfig: updatedConfigString,
-      }));
+      updateSettingsConfigValue(updatedConfigString);
     } catch (err) {
       console.error("更新 Kimi 模型配置失败:", err);
     }
@@ -1144,6 +1179,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                 commonConfigSnippet={codexCommonConfigSnippet}
                 onCommonConfigSnippetChange={handleCodexCommonConfigSnippetChange}
                 commonConfigError={codexCommonConfigError}
+                authError={codexAuthError}
               />
             ) : (
               <>
@@ -1215,6 +1251,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                   commonConfigSnippet={commonConfigSnippet}
                   onCommonConfigSnippetChange={handleCommonConfigSnippetChange}
                   commonConfigError={commonConfigError}
+                  configError={settingsConfigError}
                 />
               </>
             )}

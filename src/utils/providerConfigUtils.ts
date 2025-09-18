@@ -77,6 +77,22 @@ export interface UpdateCommonConfigResult {
   error?: string;
 }
 
+// 验证JSON配置格式
+export const validateJsonConfig = (value: string, fieldName: string = "配置"): string => {
+  if (!value.trim()) {
+    return "";
+  }
+  try {
+    const parsed = JSON.parse(value);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return `${fieldName}必须是 JSON 对象`;
+    }
+    return "";
+  } catch {
+    return `${fieldName}JSON格式错误，请检查语法`;
+  }
+};
+
 // 将通用配置片段写入/移除 settingsConfig
 export const updateCommonConfigSnippet = (
   jsonString: string,
@@ -99,22 +115,16 @@ export const updateCommonConfigSnippet = (
     };
   }
 
-  let snippet: Record<string, any>;
-  try {
-    const parsed = JSON.parse(snippetString);
-    if (!isPlainObject(parsed)) {
-      return {
-        updatedConfig: JSON.stringify(config, null, 2),
-        error: "通用配置片段必须是 JSON 对象",
-      };
-    }
-    snippet = parsed;
-  } catch (err) {
+  // 使用统一的验证函数
+  const snippetError = validateJsonConfig(snippetString, "通用配置片段");
+  if (snippetError) {
     return {
       updatedConfig: JSON.stringify(config, null, 2),
-      error: "通用配置片段格式错误，需为合法 JSON",
+      error: snippetError,
     };
   }
+  
+  const snippet = JSON.parse(snippetString) as Record<string, any>;
 
   if (enabled) {
     const merged = deepMerge(deepClone(config), snippet);

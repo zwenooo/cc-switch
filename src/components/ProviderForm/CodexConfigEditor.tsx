@@ -12,6 +12,7 @@ interface CodexConfigEditorProps {
   commonConfigSnippet: string;
   onCommonConfigSnippetChange: (value: string) => void;
   commonConfigError: string;
+  authError: string;
 }
 
 const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
@@ -25,6 +26,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
   commonConfigSnippet,
   onCommonConfigSnippetChange,
   commonConfigError,
+  authError,
 }) => {
   const [isCommonConfigModalOpen, setIsCommonConfigModalOpen] = useState(false);
 
@@ -94,6 +96,11 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
           data-gramm_editor="false"
           data-enable-grammarly="false"
         />
+        {authError && (
+          <p className="text-xs text-red-500 dark:text-red-400">
+            {authError}
+          </p>
+        )}
         <p className="text-xs text-gray-500 dark:text-gray-400">
           Codex auth.json 配置内容
         </p>
