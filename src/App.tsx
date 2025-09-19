@@ -12,6 +12,7 @@ import { Plus, Settings, Moon, Sun } from "lucide-react";
 import { buttonStyles } from "./lib/styles";
 import { useDarkMode } from "./hooks/useDarkMode";
 import { extractErrorMessage } from "./utils/errorUtils";
+import { applyProviderToVSCode } from "./utils/vscodeSettings";
 
 function App() {
   const { isDarkMode, toggleDarkMode } = useDarkMode();
@@ -174,6 +175,46 @@ function App() {
     });
   };
 
+  // 同步Codex供应商到VS Code设置
+  const syncCodexToVSCode = async (providerId: string) => {
+    try {
+      const status = await window.api.getVSCodeSettingsStatus();
+      if (!status.exists) {
+        showNotification("未找到 VS Code 用户设置文件 (settings.json)", "error", 3000);
+        return;
+      }
+
+      const raw = await window.api.readVSCodeSettings();
+      const provider = providers[providerId];
+      const isOfficial = provider?.category === "official";
+
+      // 非官方供应商需要解析 base_url
+      let baseUrl: string | undefined = undefined;
+      if (!isOfficial) {
+        const text = typeof provider?.settingsConfig?.config === "string" ? provider.settingsConfig.config : "";
+        const baseUrlMatch = text.match(/base_url\s*=\s*(['"])([^'"]+)\1/);
+        if (!baseUrlMatch || !baseUrlMatch[2]) {
+          showNotification("当前配置缺少 base_url，无法写入 VS Code", "error", 4000);
+          return;
+        }
+        baseUrl = baseUrlMatch[2];
+      }
+
+      const updatedSettings = applyProviderToVSCode(raw, { baseUrl, isOfficial });
+      if (updatedSettings !== raw) {
+        await window.api.writeVSCodeSettings(updatedSettings);
+        showNotification("已同步到 VS Code", "success", 1500);
+      }
+      
+      // 触发providers重新加载，以更新VS Code按钮状态
+      await loadProviders();
+    } catch (error: any) {
+      console.error("同步到VS Code失败:", error);
+      const errorMessage = error?.message || "同步 VS Code 失败";
+      showNotification(errorMessage, "error", 5000);
+    }
+  };
+
   const handleSwitchProvider = async (id: string) => {
     const success = await window.api.switchProvider(id, activeApp);
     if (success) {
@@ -187,6 +228,11 @@ function App() {
       );
       // 更新托盘菜单
       await window.api.updateTrayMenu();
+
+      // Codex: 切换供应商后自动同步到 VS Code
+      if (activeApp === "codex") {
+        await syncCodexToVSCode(id);
+      }
     } else {
       showNotification("切换失败，请检查配置", "error");
     }
