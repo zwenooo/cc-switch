@@ -3,7 +3,7 @@ import { Provider } from "../types";
 import { Play, Edit3, Trash2, CheckCircle2, Users } from "lucide-react";
 import { buttonStyles, cardStyles, badgeStyles, cn } from "../lib/styles";
 import { AppType } from "../lib/tauri-api";
-import { applyProviderToVSCode, detectApplied } from "../utils/vscodeSettings";
+import { applyProviderToVSCode, detectApplied, normalizeBaseUrl } from "../utils/vscodeSettings";
 // 不再在列表中显示分类徽章，避免造成困惑
 
 interface ProviderListProps {
@@ -35,8 +35,9 @@ const ProviderList: React.FC<ProviderListProps> = ({
       }
       // Codex: 从 TOML 配置中解析 base_url
       if (typeof cfg?.config === "string" && cfg.config.includes("base_url")) {
-        const match = cfg.config.match(/base_url\s*=\s*"([^"]+)"/);
-        if (match && match[1]) return match[1];
+        // 支持单/双引号
+        const match = cfg.config.match(/base_url\s*=\s*(['"])([^'\"]+)\1/);
+        if (match && match[2]) return match[2];
       }
       return "未配置官网地址";
     } catch {
@@ -58,8 +59,9 @@ const ProviderList: React.FC<ProviderListProps> = ({
       const cfg = provider.settingsConfig;
       const text = typeof cfg?.config === "string" ? cfg.config : "";
       if (!text) return undefined;
-      const m = text.match(/base_url\s*=\s*"([^"]+)"/);
-      return m && m[1] ? m[1] : undefined;
+      // 支持单/双引号
+      const m = text.match(/base_url\s*=\s*(['"])([^'\"]+)\1/);
+      return m && m[2] ? m[2] : undefined;
     } catch {
       return undefined;
     }
@@ -83,15 +85,22 @@ const ProviderList: React.FC<ProviderListProps> = ({
       try {
         const content = await window.api.readVSCodeSettings();
         const detected = detectApplied(content);
-        // 认为“已应用”的条件：存在任意一个我们管理的键
-        const applied = detected.hasApiBase || detected.hasPreferredAuthMethod;
+        // 认为“已应用”的条件（非官方供应商）：VS Code 中的 apiBase 与当前供应商的 base_url 完全一致
+        const current = providers[currentProviderId];
+        let applied = false;
+        if (current && current.category !== "official") {
+          const base = getCodexBaseUrl(current);
+          if (detected.apiBase && base) {
+            applied = normalizeBaseUrl(detected.apiBase) === normalizeBaseUrl(base);
+          }
+        }
         setVscodeAppliedFor(applied ? currentProviderId : null);
       } catch {
         setVscodeAppliedFor(null);
       }
     };
     check();
-  }, [appType, currentProviderId]);
+  }, [appType, currentProviderId, providers]);
 
   const handleApplyToVSCode = async (provider: Provider) => {
     try {
@@ -104,6 +113,15 @@ const ProviderList: React.FC<ProviderListProps> = ({
       const raw = await window.api.readVSCodeSettings();
 
       const isOfficial = provider.category === "official";
+      // 非官方且缺少 base_url 时直接报错并返回，避免“空写入”假成功
+      if (!isOfficial) {
+        const parsed = getCodexBaseUrl(provider);
+        if (!parsed) {
+          onNotify?.("当前配置缺少 base_url，无法写入 VS Code", "error", 4000);
+          return;
+        }
+      }
+
       const baseUrl = isOfficial ? undefined : getCodexBaseUrl(provider);
       const next = applyProviderToVSCode(raw, { baseUrl, isOfficial });
 
