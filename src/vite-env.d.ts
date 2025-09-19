@@ -40,6 +40,10 @@ declare global {
       checkForUpdates: () => Promise<void>;
       getAppConfigPath: () => Promise<string>;
       openAppConfigFolder: () => Promise<void>;
+      // VS Code settings.json 能力
+      getVSCodeSettingsStatus: () => Promise<ConfigStatus>;
+      readVSCodeSettings: () => Promise<string>;
+      writeVSCodeSettings: (content: string) => Promise<boolean>;
     };
     platform: {
       isMac: boolean;

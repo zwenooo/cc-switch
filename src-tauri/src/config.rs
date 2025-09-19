@@ -175,7 +175,19 @@ pub fn atomic_write(path: &Path, data: &[u8]) -> Result<(), String> {
         }
     }
 
-    fs::rename(&tmp, path).map_err(|e| format!("原子替换失败: {}", e))?;
+    #[cfg(windows)]
+    {
+        // Windows 上 rename 目标存在会失败，先移除再重命名（尽量接近原子性）
+        if path.exists() {
+            let _ = fs::remove_file(path);
+        }
+        fs::rename(&tmp, path).map_err(|e| format!("原子替换失败: {}", e))?;
+    }
+
+    #[cfg(not(windows))]
+    {
+        fs::rename(&tmp, path).map_err(|e| format!("原子替换失败: {}", e))?;
+    }
     Ok(())
 }
 
