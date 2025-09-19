@@ -131,7 +131,7 @@ const ProviderList: React.FC<ProviderListProps> = ({
 
       if (next === raw) {
         // 幂等：没有变化也提示成功
-        onNotify?.("已应用到 VS Code", "success", 1500);
+        onNotify?.("已应用到 VS Code，重启 Codex 插件以生效", "success", 3000);
         setVscodeAppliedFor(provider.id);
         // 用户手动应用时，启用自动同步
         enableAutoSync();
@@ -139,7 +139,7 @@ const ProviderList: React.FC<ProviderListProps> = ({
       }
 
       await window.api.writeVSCodeSettings(next);
-      onNotify?.("已应用到 VS Code", "success", 1500);
+      onNotify?.("已应用到 VS Code，重启 Codex 插件以生效", "success", 3000);
       setVscodeAppliedFor(provider.id);
       // 用户手动应用时，启用自动同步
       enableAutoSync();
@@ -167,14 +167,14 @@ const ProviderList: React.FC<ProviderListProps> = ({
         isOfficial: true,
       });
       if (next === raw) {
-        onNotify?.("已从 VS Code 移除", "success", 1500);
+        onNotify?.("已从 VS Code 移除，重启 Codex 插件以生效", "success", 3000);
         setVscodeAppliedFor(null);
         // 用户手动移除时，禁用自动同步
         disableAutoSync();
         return;
       }
       await window.api.writeVSCodeSettings(next);
-      onNotify?.("已从 VS Code 移除", "success", 1500);
+      onNotify?.("已从 VS Code 移除，重启 Codex 插件以生效", "success", 3000);
       setVscodeAppliedFor(null);
       // 用户手动移除时，禁用自动同步
       disableAutoSync();
@@ -284,7 +284,7 @@ const ProviderList: React.FC<ProviderListProps> = ({
                               : handleApplyToVSCode(provider)
                           }
                           className={cn(
-                            "inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
+                            "inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors w-[130px] justify-center",
                             !isCurrent && "invisible",
                             vscodeAppliedFor === provider.id
                               ? "bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
