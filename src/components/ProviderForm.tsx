@@ -19,6 +19,7 @@ import ClaudeConfigEditor from "./ProviderForm/ClaudeConfigEditor";
 import CodexConfigEditor from "./ProviderForm/CodexConfigEditor";
 import KimiModelSelector from "./ProviderForm/KimiModelSelector";
 import { X, AlertCircle, Save } from "lucide-react";
+import { isLinux } from "../lib/platform";
 // 分类仅用于控制少量交互（如官方禁用 API Key），不显示介绍组件
 
 const COMMON_CONFIG_STORAGE_KEY = "cc-switch:common-config-snippet";
@@ -966,7 +967,11 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       }}
     >
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm" />
+      <div
+        className={`absolute inset-0 bg-black/50 dark:bg-black/70${
+          isLinux() ? "" : " backdrop-blur-sm"
+        }`}
+      />
 
       {/* Modal */}
       <div className="relative bg-white dark:bg-gray-900 rounded-xl shadow-lg max-w-3xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">

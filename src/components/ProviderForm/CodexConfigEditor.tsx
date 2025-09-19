@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { X, Save } from "lucide-react";
+import { isLinux } from "../../lib/platform";
 
 interface CodexConfigEditorProps {
   authValue: string;
@@ -166,7 +167,11 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
           }}
         >
           {/* Backdrop - 统一背景样式 */}
-          <div className="absolute inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm" />
+          <div
+            className={`absolute inset-0 bg-black/50 dark:bg-black/70${
+              isLinux() ? "" : " backdrop-blur-sm"
+            }`}
+          />
 
           {/* Modal - 统一窗口样式 */}
           <div className="relative bg-white dark:bg-gray-900 rounded-xl shadow-lg max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
