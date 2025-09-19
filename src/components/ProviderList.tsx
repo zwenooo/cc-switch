@@ -221,12 +221,13 @@ const ProviderList: React.FC<ProviderListProps> = ({
                         {provider.name}
                       </h3>
                       {/* 分类徽章已移除 */}
-                      {isCurrent && (
-                        <div className={badgeStyles.success}>
-                          <CheckCircle2 size={12} />
-                          当前使用
-                        </div>
-                      )}
+                      <div className={cn(
+                        badgeStyles.success,
+                        !isCurrent && "invisible"
+                      )}>
+                        <CheckCircle2 size={12} />
+                        当前使用
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-2 text-sm">
@@ -253,7 +254,7 @@ const ProviderList: React.FC<ProviderListProps> = ({
                   </div>
 
                   <div className="flex items-center gap-2 ml-4">
-                    {appType === "codex" && isCurrent && provider.category !== "official" && (
+                    {appType === "codex" && provider.category !== "official" && (
                       <button
                         onClick={() =>
                           vscodeAppliedFor === provider.id
@@ -262,6 +263,7 @@ const ProviderList: React.FC<ProviderListProps> = ({
                         }
                         className={cn(
                           "inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
+                          !isCurrent && "invisible",
                           vscodeAppliedFor === provider.id
                             ? "bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
                             : "bg-emerald-500 text-white hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-700",
