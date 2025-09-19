@@ -235,7 +235,7 @@ const ProviderList: React.FC<ProviderListProps> = ({
                   </div>
 
                   <div className="flex items-center gap-2 ml-4">
-                    {appType === "codex" && isCurrent && (
+                    {appType === "codex" && isCurrent && provider.category !== "official" && (
                       <button
                         onClick={() =>
                           vscodeAppliedFor === provider.id
