@@ -33,7 +33,7 @@ export const codexProviderPresets: CodexProviderPreset[] = [
       OPENAI_API_KEY: "sk-your-api-key-here",
     },
     config: `model_provider = "packycode"
-model = "gpt-5"
+model = "gpt-5-codex"
 model_reasoning_effort = "high"
 disable_response_storage = true
 requires_openai_auth = true
