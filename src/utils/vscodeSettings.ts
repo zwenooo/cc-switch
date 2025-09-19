@@ -37,7 +37,10 @@ export function removeManagedKeys(content: string): string {
   let out = content;
   // 删除 chatgpt.apiBase
   try {
-    out = applyEdits(out, modify(out, ["chatgpt.apiBase"], undefined, { formattingOptions: fmt }));
+    out = applyEdits(
+      out,
+      modify(out, ["chatgpt.apiBase"], undefined, { formattingOptions: fmt }),
+    );
   } catch {
     // 忽略删除失败
   }
@@ -69,8 +72,16 @@ export function removeManagedKeys(content: string): string {
   try {
     const data = parse(out) as any;
     const cfg = data?.["chatgpt.config"];
-    if (cfg && typeof cfg === "object" && !Array.isArray(cfg) && Object.keys(cfg).length === 0) {
-      out = applyEdits(out, modify(out, ["chatgpt.config"], undefined, { formattingOptions: fmt }));
+    if (
+      cfg &&
+      typeof cfg === "object" &&
+      !Array.isArray(cfg) &&
+      Object.keys(cfg).length === 0
+    ) {
+      out = applyEdits(
+        out,
+        modify(out, ["chatgpt.config"], undefined, { formattingOptions: fmt }),
+      );
     }
   } catch {
     // 忽略解析失败，保持已删除的键
@@ -97,7 +108,10 @@ export function applyProviderToVSCode(
       };
       out = JSON.stringify(obj, null, 2) + "\n";
     } else {
-      out = applyEdits(out, modify(out, ["chatgpt.apiBase"], apiBase, { formattingOptions: fmt }));
+      out = applyEdits(
+        out,
+        modify(out, ["chatgpt.apiBase"], apiBase, { formattingOptions: fmt }),
+      );
       out = applyEdits(
         out,
         modify(out, ["chatgpt.config", "preferred_auth_method"], "apikey", {

@@ -13,9 +13,12 @@ import { buttonStyles } from "./lib/styles";
 import { useDarkMode } from "./hooks/useDarkMode";
 import { extractErrorMessage } from "./utils/errorUtils";
 import { applyProviderToVSCode } from "./utils/vscodeSettings";
+import { getCodexBaseUrl } from "./utils/providerConfigUtils";
+import { useVSCodeAutoSync } from "./hooks/useVSCodeAutoSync";
 
 function App() {
   const { isDarkMode, toggleDarkMode } = useDarkMode();
+  const { isAutoSyncEnabled } = useVSCodeAutoSync();
   const [activeApp, setActiveApp] = useState<AppType>("claude");
   const [providers, setProviders] = useState<Record<string, Provider>>({});
   const [currentProviderId, setCurrentProviderId] = useState<string>("");
@@ -77,7 +80,7 @@ function App() {
     };
   }, []);
 
-  // 监听托盘切换事件
+  // 监听托盘切换事件（包括菜单切换）
   useEffect(() => {
     let unlisten: (() => void) | null = null;
 
@@ -91,6 +94,11 @@ function App() {
           // 如果当前应用类型匹配，则重新加载数据
           if (data.appType === activeApp) {
             await loadProviders();
+          }
+
+          // 若为 Codex 且开启自动同步，则静默同步到 VS Code（覆盖）
+          if (data.appType === "codex" && isAutoSyncEnabled) {
+            await syncCodexToVSCode(data.providerId, true);
           }
         });
       } catch (error) {
@@ -106,7 +114,7 @@ function App() {
         unlisten();
       }
     };
-  }, [activeApp]); // 依赖activeApp，切换应用时重新设置监听器
+  }, [activeApp, isAutoSyncEnabled]); // 依赖自动同步状态，确保拿到最新开关
 
   const loadProviders = async () => {
     const loadedProviders = await window.api.getProviders(activeApp);
@@ -176,11 +184,17 @@ function App() {
   };
 
   // 同步Codex供应商到VS Code设置
-  const syncCodexToVSCode = async (providerId: string) => {
+  const syncCodexToVSCode = async (providerId: string, silent = false) => {
     try {
       const status = await window.api.getVSCodeSettingsStatus();
       if (!status.exists) {
-        showNotification("未找到 VS Code 用户设置文件 (settings.json)", "error", 3000);
+        if (!silent) {
+          showNotification(
+            "未找到 VS Code 用户设置文件 (settings.json)",
+            "error",
+            3000,
+          );
+        }
         return;
       }
 
@@ -188,30 +202,42 @@ function App() {
       const provider = providers[providerId];
       const isOfficial = provider?.category === "official";
 
-      // 非官方供应商需要解析 base_url
+      // 非官方供应商需要解析 base_url（使用公共工具函数）
       let baseUrl: string | undefined = undefined;
       if (!isOfficial) {
-        const text = typeof provider?.settingsConfig?.config === "string" ? provider.settingsConfig.config : "";
-        const baseUrlMatch = text.match(/base_url\s*=\s*(['"])([^'"]+)\1/);
-        if (!baseUrlMatch || !baseUrlMatch[2]) {
-          showNotification("当前配置缺少 base_url，无法写入 VS Code", "error", 4000);
+        const parsed = getCodexBaseUrl(provider);
+        if (!parsed) {
+          if (!silent) {
+            showNotification(
+              "当前配置缺少 base_url，无法写入 VS Code",
+              "error",
+              4000,
+            );
+          }
           return;
         }
-        baseUrl = baseUrlMatch[2];
+        baseUrl = parsed;
       }
 
-      const updatedSettings = applyProviderToVSCode(raw, { baseUrl, isOfficial });
+      const updatedSettings = applyProviderToVSCode(raw, {
+        baseUrl,
+        isOfficial,
+      });
       if (updatedSettings !== raw) {
         await window.api.writeVSCodeSettings(updatedSettings);
-        showNotification("已同步到 VS Code", "success", 1500);
+        if (!silent) {
+          showNotification("已同步到 VS Code", "success", 1500);
+        }
       }
-      
+
       // 触发providers重新加载，以更新VS Code按钮状态
       await loadProviders();
     } catch (error: any) {
       console.error("同步到VS Code失败:", error);
-      const errorMessage = error?.message || "同步 VS Code 失败";
-      showNotification(errorMessage, "error", 5000);
+      if (!silent) {
+        const errorMessage = error?.message || "同步 VS Code 失败";
+        showNotification(errorMessage, "error", 5000);
+      }
     }
   };
 
@@ -229,9 +255,9 @@ function App() {
       // 更新托盘菜单
       await window.api.updateTrayMenu();
 
-      // Codex: 切换供应商后自动同步到 VS Code
-      if (activeApp === "codex") {
-        await syncCodexToVSCode(id);
+      // Codex: 切换供应商后，只在自动同步启用时同步到 VS Code
+      if (activeApp === "codex" && isAutoSyncEnabled) {
+        await syncCodexToVSCode(id, true); // silent模式，不显示通知
       }
     } else {
       showNotification("切换失败，请检查配置", "error");

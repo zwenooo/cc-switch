@@ -11,6 +11,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import "../lib/tauri-api";
 import { relaunchApp } from "../lib/updater";
 import { useUpdate } from "../contexts/UpdateContext";
+import { useVSCodeAutoSync } from "../hooks/useVSCodeAutoSync";
 import type { Settings } from "../types";
 
 interface SettingsModalProps {
@@ -28,6 +29,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const [showUpToDate, setShowUpToDate] = useState(false);
   const { hasUpdate, updateInfo, updateHandle, checkUpdate, resetDismiss } =
     useUpdate();
+  const { isAutoSyncEnabled, toggleAutoSync } = useVSCodeAutoSync();
 
   useEffect(() => {
     loadSettings();
@@ -200,6 +202,29 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
               />
             </label>
           </div> */}
+
+          {/* VS Code 自动同步设置 */}
+          <div>
+            <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
+              Codex 设置
+            </h3>
+            <label className="flex items-center justify-between cursor-pointer">
+              <div className="flex-1">
+                <span className="text-sm text-gray-700 dark:text-gray-300">
+                  自动同步到 VS Code
+                </span>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  切换 Codex 供应商时自动更新 VS Code 配置
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={isAutoSyncEnabled}
+                onChange={toggleAutoSync}
+                className="w-4 h-4 text-blue-500 rounded focus:ring-blue-500/20"
+              />
+            </label>
+          </div>
 
           {/* 配置文件位置 */}
           <div>

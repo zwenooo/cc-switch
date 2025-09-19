@@ -3,7 +3,13 @@ import { Provider } from "../types";
 import { Play, Edit3, Trash2, CheckCircle2, Users } from "lucide-react";
 import { buttonStyles, cardStyles, badgeStyles, cn } from "../lib/styles";
 import { AppType } from "../lib/tauri-api";
-import { applyProviderToVSCode, detectApplied, normalizeBaseUrl } from "../utils/vscodeSettings";
+import {
+  applyProviderToVSCode,
+  detectApplied,
+  normalizeBaseUrl,
+} from "../utils/vscodeSettings";
+import { getCodexBaseUrl } from "../utils/providerConfigUtils";
+import { useVSCodeAutoSync } from "../hooks/useVSCodeAutoSync";
 // 不再在列表中显示分类徽章，避免造成困惑
 
 interface ProviderListProps {
@@ -13,7 +19,11 @@ interface ProviderListProps {
   onDelete: (id: string) => void;
   onEdit: (id: string) => void;
   appType?: AppType;
-  onNotify?: (message: string, type: "success" | "error", duration?: number) => void;
+  onNotify?: (
+    message: string,
+    type: "success" | "error",
+    duration?: number,
+  ) => void;
 }
 
 const ProviderList: React.FC<ProviderListProps> = ({
@@ -53,22 +63,11 @@ const ProviderList: React.FC<ProviderListProps> = ({
     }
   };
 
-  // 解析 Codex 配置中的 base_url（仅用于 VS Code 写入）
-  const getCodexBaseUrl = (provider: Provider): string | undefined => {
-    try {
-      const cfg = provider.settingsConfig;
-      const text = typeof cfg?.config === "string" ? cfg.config : "";
-      if (!text) return undefined;
-      // 支持单/双引号
-      const m = text.match(/base_url\s*=\s*(['"])([^'\"]+)\1/);
-      return m && m[2] ? m[2] : undefined;
-    } catch {
-      return undefined;
-    }
-  };
+  // 解析 Codex 配置中的 base_url（已提取到公共工具）
 
-  // VS Code 按钮：仅在 Codex + 当前供应商显示；按钮文案根据是否“已应用”变化
+  // VS Code 按钮：仅在 Codex + 当前供应商显示；按钮文案根据是否"已应用"变化
   const [vscodeAppliedFor, setVscodeAppliedFor] = useState<string | null>(null);
+  const { enableAutoSync, disableAutoSync } = useVSCodeAutoSync();
 
   // 当当前供应商或 appType 变化时，尝试读取 VS Code settings 并检测状态
   useEffect(() => {
@@ -91,7 +90,8 @@ const ProviderList: React.FC<ProviderListProps> = ({
         if (current && current.category !== "official") {
           const base = getCodexBaseUrl(current);
           if (detected.apiBase && base) {
-            applied = normalizeBaseUrl(detected.apiBase) === normalizeBaseUrl(base);
+            applied =
+              normalizeBaseUrl(detected.apiBase) === normalizeBaseUrl(base);
           }
         }
         setVscodeAppliedFor(applied ? currentProviderId : null);
@@ -106,7 +106,11 @@ const ProviderList: React.FC<ProviderListProps> = ({
     try {
       const status = await window.api.getVSCodeSettingsStatus();
       if (!status.exists) {
-        onNotify?.("未找到 VS Code 用户设置文件 (settings.json)", "error", 3000);
+        onNotify?.(
+          "未找到 VS Code 用户设置文件 (settings.json)",
+          "error",
+          3000,
+        );
         return;
       }
 
@@ -129,15 +133,19 @@ const ProviderList: React.FC<ProviderListProps> = ({
         // 幂等：没有变化也提示成功
         onNotify?.("已应用到 VS Code", "success", 1500);
         setVscodeAppliedFor(provider.id);
+        // 用户手动应用时，启用自动同步
+        enableAutoSync();
         return;
       }
 
       await window.api.writeVSCodeSettings(next);
       onNotify?.("已应用到 VS Code", "success", 1500);
       setVscodeAppliedFor(provider.id);
+      // 用户手动应用时，启用自动同步
+      enableAutoSync();
     } catch (e: any) {
       console.error(e);
-      const msg = (e && e.message) ? e.message : "应用到 VS Code 失败";
+      const msg = e && e.message ? e.message : "应用到 VS Code 失败";
       onNotify?.(msg, "error", 5000);
     }
   };
@@ -146,22 +154,33 @@ const ProviderList: React.FC<ProviderListProps> = ({
     try {
       const status = await window.api.getVSCodeSettingsStatus();
       if (!status.exists) {
-        onNotify?.("未找到 VS Code 用户设置文件 (settings.json)", "error", 3000);
+        onNotify?.(
+          "未找到 VS Code 用户设置文件 (settings.json)",
+          "error",
+          3000,
+        );
         return;
       }
       const raw = await window.api.readVSCodeSettings();
-      const next = applyProviderToVSCode(raw, { baseUrl: undefined, isOfficial: true });
+      const next = applyProviderToVSCode(raw, {
+        baseUrl: undefined,
+        isOfficial: true,
+      });
       if (next === raw) {
         onNotify?.("已从 VS Code 移除", "success", 1500);
         setVscodeAppliedFor(null);
+        // 用户手动移除时，禁用自动同步
+        disableAutoSync();
         return;
       }
       await window.api.writeVSCodeSettings(next);
       onNotify?.("已从 VS Code 移除", "success", 1500);
       setVscodeAppliedFor(null);
+      // 用户手动移除时，禁用自动同步
+      disableAutoSync();
     } catch (e: any) {
       console.error(e);
-      const msg = (e && e.message) ? e.message : "移除失败";
+      const msg = e && e.message ? e.message : "移除失败";
       onNotify?.(msg, "error", 5000);
     }
   };
@@ -221,10 +240,12 @@ const ProviderList: React.FC<ProviderListProps> = ({
                         {provider.name}
                       </h3>
                       {/* 分类徽章已移除 */}
-                      <div className={cn(
-                        badgeStyles.success,
-                        !isCurrent && "invisible"
-                      )}>
+                      <div
+                        className={cn(
+                          badgeStyles.success,
+                          !isCurrent && "invisible",
+                        )}
+                      >
                         <CheckCircle2 size={12} />
                         当前使用
                       </div>
@@ -254,29 +275,32 @@ const ProviderList: React.FC<ProviderListProps> = ({
                   </div>
 
                   <div className="flex items-center gap-2 ml-4">
-                    {appType === "codex" && provider.category !== "official" && (
-                      <button
-                        onClick={() =>
-                          vscodeAppliedFor === provider.id
-                            ? handleRemoveFromVSCode()
-                            : handleApplyToVSCode(provider)
-                        }
-                        className={cn(
-                          "inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
-                          !isCurrent && "invisible",
-                          vscodeAppliedFor === provider.id
-                            ? "bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                            : "bg-emerald-500 text-white hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-700",
-                        )}
-                        title={
-                          vscodeAppliedFor === provider.id
-                            ? "从 VS Code 移除我们写入的配置"
-                            : "将当前供应商应用到 VS Code"
-                        }
-                      >
-                        {vscodeAppliedFor === provider.id ? "从 VS Code 移除" : "应用到 VS Code"}
-                      </button>
-                    )}
+                    {appType === "codex" &&
+                      provider.category !== "official" && (
+                        <button
+                          onClick={() =>
+                            vscodeAppliedFor === provider.id
+                              ? handleRemoveFromVSCode()
+                              : handleApplyToVSCode(provider)
+                          }
+                          className={cn(
+                            "inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
+                            !isCurrent && "invisible",
+                            vscodeAppliedFor === provider.id
+                              ? "bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                              : "bg-emerald-500 text-white hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-700",
+                          )}
+                          title={
+                            vscodeAppliedFor === provider.id
+                              ? "从 VS Code 移除我们写入的配置"
+                              : "将当前供应商应用到 VS Code"
+                          }
+                        >
+                          {vscodeAppliedFor === provider.id
+                            ? "从 VS Code 移除"
+                            : "应用到 VS Code"}
+                        </button>
+                      )}
                     <button
                       onClick={() => onSwitch(provider.id)}
                       disabled={isCurrent}

@@ -244,7 +244,11 @@ export const tauriAPI = {
   },
 
   // VS Code: 获取 settings.json 状态
-  getVSCodeSettingsStatus: async (): Promise<{ exists: boolean; path: string; error?: string }> => {
+  getVSCodeSettingsStatus: async (): Promise<{
+    exists: boolean;
+    path: string;
+    error?: string;
+  }> => {
     try {
       return await invoke("get_vscode_settings_status");
     } catch (error) {
