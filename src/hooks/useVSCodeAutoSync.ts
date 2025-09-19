@@ -4,7 +4,8 @@ const VSCODE_AUTO_SYNC_KEY = "vscode-auto-sync-enabled";
 const VSCODE_AUTO_SYNC_EVENT = "vscode-auto-sync-changed";
 
 export function useVSCodeAutoSync() {
-  const [isAutoSyncEnabled, setIsAutoSyncEnabled] = useState<boolean>(false);
+  // 默认开启自动同步；若本地存储存在记录，则以记录为准
+  const [isAutoSyncEnabled, setIsAutoSyncEnabled] = useState<boolean>(true);
 
   // 从 localStorage 读取初始状态
   useEffect(() => {
@@ -22,7 +23,9 @@ export function useVSCodeAutoSync() {
   useEffect(() => {
     const onCustom = (e: Event) => {
       try {
-        const detail = (e as CustomEvent).detail as { enabled?: boolean } | undefined;
+        const detail = (e as CustomEvent).detail as
+          | { enabled?: boolean }
+          | undefined;
         if (detail && typeof detail.enabled === "boolean") {
           setIsAutoSyncEnabled(detail.enabled);
         } else {
@@ -42,7 +45,10 @@ export function useVSCodeAutoSync() {
     window.addEventListener(VSCODE_AUTO_SYNC_EVENT, onCustom as EventListener);
     window.addEventListener("storage", onStorage);
     return () => {
-      window.removeEventListener(VSCODE_AUTO_SYNC_EVENT, onCustom as EventListener);
+      window.removeEventListener(
+        VSCODE_AUTO_SYNC_EVENT,
+        onCustom as EventListener,
+      );
       window.removeEventListener("storage", onStorage);
     };
   }, []);

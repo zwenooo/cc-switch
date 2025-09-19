@@ -114,7 +114,7 @@ function App() {
         unlisten();
       }
     };
-  }, [activeApp, isAutoSyncEnabled]); // 依赖自动同步状态，确保拿到最新开关
+  }, [activeApp, isAutoSyncEnabled]);
 
   const loadProviders = async () => {
     const loadedProviders = await window.api.getProviders(activeApp);
@@ -183,7 +183,7 @@ function App() {
     });
   };
 
-  // 同步Codex供应商到VS Code设置
+  // 同步Codex供应商到VS Code设置（静默覆盖）
   const syncCodexToVSCode = async (providerId: string, silent = false) => {
     try {
       const status = await window.api.getVSCodeSettingsStatus();
