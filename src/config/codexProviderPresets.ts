@@ -36,6 +36,8 @@ export const codexProviderPresets: CodexProviderPreset[] = [
 model = "gpt-5"
 model_reasoning_effort = "high"
 disable_response_storage = true
+requires_openai_auth = true
+
 
 [model_providers.packycode]
 name = "packycode"
