@@ -2,10 +2,11 @@ mod app_config;
 mod codex_config;
 mod commands;
 mod config;
-mod vscode;
 mod migration;
 mod provider;
+mod settings;
 mod store;
+mod vscode;
 
 use store::AppState;
 #[cfg(target_os = "macos")]
@@ -246,6 +247,7 @@ pub fn run() {
             _ => {}
         })
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             // 注册 Updater 插件（桌面端）
@@ -351,7 +353,9 @@ pub fn run() {
             commands::get_claude_config_status,
             commands::get_config_status,
             commands::get_claude_code_config_path,
+            commands::get_config_dir,
             commands::open_config_folder,
+            commands::pick_directory,
             commands::open_external,
             commands::get_app_config_path,
             commands::open_app_config_folder,

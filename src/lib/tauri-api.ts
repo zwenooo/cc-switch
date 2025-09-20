@@ -122,6 +122,16 @@ export const tauriAPI = {
     }
   },
 
+  // 获取当前生效的配置目录
+  getConfigDir: async (app?: AppType): Promise<string> => {
+    try {
+      return await invoke("get_config_dir", { app_type: app, app });
+    } catch (error) {
+      console.error("获取配置目录失败:", error);
+      return "";
+    }
+  },
+
   // 获取 Claude Code 配置状态
   getClaudeConfigStatus: async (): Promise<ConfigStatus> => {
     try {
@@ -189,10 +199,22 @@ export const tauriAPI = {
 
   // （保留空位，取消迁移提示）
 
-  // 选择配置文件（Tauri 暂不实现，保留接口兼容性）
-  selectConfigFile: async (): Promise<string | null> => {
-    console.warn("selectConfigFile 在 Tauri 版本中暂不支持");
-    return null;
+  // 选择配置目录
+  selectConfigDirectory: async (
+    defaultPath?: string,
+  ): Promise<string | null> => {
+    try {
+      const sanitized =
+        defaultPath && defaultPath.trim() !== ""
+          ? defaultPath
+          : undefined;
+      return await invoke<string | null>("pick_directory", {
+        defaultPath: sanitized,
+      });
+    } catch (error) {
+      console.error("选择配置目录失败:", error);
+      return null;
+    }
   },
 
   // 获取设置
