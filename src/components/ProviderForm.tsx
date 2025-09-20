@@ -135,19 +135,19 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   const [codexCommonConfigSnippet, setCodexCommonConfigSnippetState] =
     useState<string>(() => {
       if (typeof window === "undefined") {
-        return DEFAULT_CODEX_COMMON_CONFIG_SNIPPET;
+        return DEFAULT_CODEX_COMMON_CONFIG_SNIPPET.trim();
       }
       try {
         const stored = window.localStorage.getItem(
           CODEX_COMMON_CONFIG_STORAGE_KEY,
         );
         if (stored && stored.trim()) {
-          return stored;
+          return stored.trim();
         }
       } catch {
         // ignore localStorage 读取失败
       }
-      return DEFAULT_CODEX_COMMON_CONFIG_SNIPPET;
+      return DEFAULT_CODEX_COMMON_CONFIG_SNIPPET.trim();
     });
   const [codexCommonConfigError, setCodexCommonConfigError] = useState("");
   const isUpdatingFromCodexCommonConfig = useRef(false);
@@ -689,12 +689,12 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
 
   // Codex: 处理通用配置开关
   const handleCodexCommonConfigToggle = (checked: boolean) => {
-    const { updatedConfig, error: snippetError } =
-      updateTomlCommonConfigSnippet(
-        codexConfig,
-        codexCommonConfigSnippet,
-        checked,
-      );
+    const snippet = codexCommonConfigSnippet.trim();
+    const { updatedConfig, error: snippetError } = updateTomlCommonConfigSnippet(
+      codexConfig,
+      snippet,
+      checked,
+    );
 
     if (snippetError) {
       setCodexCommonConfigError(snippetError);
@@ -715,10 +715,11 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
 
   // Codex: 处理通用配置片段变化
   const handleCodexCommonConfigSnippetChange = (value: string) => {
-    const previousSnippet = codexCommonConfigSnippet;
+    const previousSnippet = codexCommonConfigSnippet.trim();
+    const sanitizedValue = value.trim();
     setCodexCommonConfigSnippet(value);
 
-    if (!value.trim()) {
+    if (!sanitizedValue) {
       setCodexCommonConfigError("");
       if (useCodexCommonConfig) {
         const { updatedConfig } = updateTomlCommonConfigSnippet(
@@ -741,7 +742,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       );
       const addResult = updateTomlCommonConfigSnippet(
         removeResult.updatedConfig,
-        value,
+        sanitizedValue,
         true,
       );
 
@@ -762,7 +763,10 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     // 保存 Codex 通用配置到 localStorage
     if (typeof window !== "undefined") {
       try {
-        window.localStorage.setItem(CODEX_COMMON_CONFIG_STORAGE_KEY, value);
+        window.localStorage.setItem(
+          CODEX_COMMON_CONFIG_STORAGE_KEY,
+          sanitizedValue,
+        );
       } catch {
         // ignore localStorage 写入失败
       }
