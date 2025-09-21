@@ -39,6 +39,8 @@ interface CodexConfigEditorProps {
   isTemplateModalOpen?: boolean; // 新增：模态框状态
 
   setIsTemplateModalOpen?: (open: boolean) => void; // 新增：设置模态框状态
+
+  onNameChange?: (name: string) => void; // 新增：更新供应商名称回调
 }
 
 const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
@@ -65,6 +67,8 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
   authError,
 
   onWebsiteUrlChange,
+
+  onNameChange,
 
   isTemplateModalOpen: externalTemplateModalOpen,
 
@@ -99,6 +103,8 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
   const modelNameInputRef = useRef<HTMLInputElement>(null);
 
   // 移除自动填充逻辑，因为现在在点击自定义按钮时就已经填充
+
+  const [templateDisplayName, setTemplateDisplayName] = useState("");
 
   useEffect(() => {
     if (commonConfigError && !isCommonConfigModalOpen) {
@@ -175,6 +181,13 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
       }
     }
 
+    if (onNameChange) {
+      const trimmedName = templateDisplayName.trim();
+      if (trimmedName) {
+        onNameChange(trimmedName);
+      }
+    }
+
     setTemplateApiKey("");
 
     setTemplateProviderName("");
@@ -184,6 +197,8 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
     setTemplateWebsiteUrl("");
 
     setTemplateModelName("gpt-5-codex");
+
+    setTemplateDisplayName("");
 
     closeTemplateModal();
   };
@@ -228,13 +243,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
           onChange={(e) => handleAuthChange(e.target.value)}
           onBlur={onAuthBlur}
           placeholder={`{
-
-
-
   "OPENAI_API_KEY": "sk-your-api-key-here"
-
-
-
 }`}
           rows={6}
           required
@@ -385,6 +394,30 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
 
                     <input
                       type="text"
+                      value={templateDisplayName}
+                      onChange={(e) => {
+                        setTemplateDisplayName(e.target.value);
+                        if (onNameChange) {
+                          onNameChange(e.target.value);
+                        }
+                      }}
+                      onKeyDown={handleTemplateInputKeyDown}
+                      placeholder="例如：Codex 官方（可选）"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                    />
+
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      将显示在供应商列表中，可使用中文
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">
+                      供应商代号（英文）
+                    </label>
+
+                    <input
+                      type="text"
                       value={templateProviderName}
                       onChange={(e) => setTemplateProviderName(e.target.value)}
                       onKeyDown={handleTemplateInputKeyDown}
@@ -496,7 +529,6 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
                     </div>
                   </div>
                 )}
-
               </div>
 
               <div className="flex items-center justify-end gap-3 border-t border-gray-200 bg-gray-100 p-6 dark:border-gray-800 dark:bg-gray-800">
