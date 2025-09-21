@@ -10,6 +10,43 @@ export interface CodexProviderPreset {
   config: string; // 将写入 ~/.codex/config.toml（TOML 字符串）
   isOfficial?: boolean; // 标识是否为官方预设
   category?: ProviderCategory; // 新增：分类
+  isCustomTemplate?: boolean; // 标识是否为自定义模板
+}
+
+/**
+ * 生成第三方供应商的 auth.json
+ */
+export function generateThirdPartyAuth(apiKey: string): Record<string, any> {
+  return {
+    OPENAI_API_KEY: apiKey || "sk-your-api-key-here"
+  };
+}
+
+/**
+ * 生成第三方供应商的 config.toml
+ */
+export function generateThirdPartyConfig(
+  providerName: string,
+  baseUrl: string,
+  modelName = "gpt-5-codex"
+): string {
+  // 清理供应商名称，确保符合TOML键名规范
+  const cleanProviderName = providerName
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, '_')
+    .replace(/^_+|_+$/g, '') || 'custom';
+  
+  return `model_provider = "${cleanProviderName}"
+model = "${modelName}"
+model_reasoning_effort = "high"
+disable_response_storage = true
+requires_openai_auth = true
+
+[model_providers.${cleanProviderName}]
+name = "${cleanProviderName}"
+base_url = "${baseUrl}"
+wire_api = "responses"
+env_key = "${cleanProviderName}"`;
 }
 
 export const codexProviderPresets: CodexProviderPreset[] = [
@@ -18,7 +55,6 @@ export const codexProviderPresets: CodexProviderPreset[] = [
     websiteUrl: "https://chatgpt.com/codex",
     isOfficial: true,
     category: "official",
-    // 官方的 key 为null
     auth: {
       OPENAI_API_KEY: null,
     },
@@ -28,21 +64,11 @@ export const codexProviderPresets: CodexProviderPreset[] = [
     name: "PackyCode",
     websiteUrl: "https://codex.packycode.com/",
     category: "third_party",
-    // PackyCode 一般通过 API Key；请将占位符替换为你的实际 key
-    auth: {
-      OPENAI_API_KEY: "sk-your-api-key-here",
-    },
-    config: `model_provider = "packycode"
-model = "gpt-5-codex"
-model_reasoning_effort = "high"
-disable_response_storage = true
-requires_openai_auth = true
-
-
-[model_providers.packycode]
-name = "packycode"
-base_url = "https://codex-api.packycode.com/v1"
-wire_api = "responses"
-env_key = "packycode"`,
+    auth: generateThirdPartyAuth("sk-your-api-key-here"),
+    config: generateThirdPartyConfig(
+      "packycode",
+      "https://codex-api.packycode.com/v1",
+      "gpt-5-codex"
+    ),
   },
 ];

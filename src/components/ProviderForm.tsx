@@ -12,7 +12,7 @@ import {
   validateJsonConfig,
 } from "../utils/providerConfigUtils";
 import { providerPresets } from "../config/providerPresets";
-import { codexProviderPresets } from "../config/codexProviderPresets";
+import { codexProviderPresets, generateThirdPartyAuth, generateThirdPartyConfig } from "../config/codexProviderPresets";
 import PresetSelector from "./ProviderForm/PresetSelector";
 import ApiKeyInput from "./ProviderForm/ApiKeyInput";
 import ClaudeConfigEditor from "./ProviderForm/ClaudeConfigEditor";
@@ -72,6 +72,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   const [codexAuth, setCodexAuthState] = useState("");
   const [codexConfig, setCodexConfigState] = useState("");
   const [codexApiKey, setCodexApiKey] = useState("");
+  const [isCodexTemplateModalOpen, setIsCodexTemplateModalOpen] = useState(false);
   // -1 表示自定义，null 表示未选择，>= 0 表示预设索引
   const [selectedCodexPreset, setSelectedCodexPreset] = useState<number | null>(
     showPresets && isCodex ? -1 : null,
@@ -628,14 +629,23 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   // Codex: 处理点击自定义按钮
   const handleCodexCustomClick = () => {
     setSelectedCodexPreset(-1);
+    
+    // 设置自定义模板
+    const customAuth = generateThirdPartyAuth("");
+    const customConfig = generateThirdPartyConfig(
+      "custom",
+      "https://your-api-endpoint.com/v1",
+      "gpt-5-codex"
+    );
+    
     setFormData({
       name: "",
       websiteUrl: "",
       settingsConfig: "",
     });
     setSettingsConfigError(validateSettingsConfig(""));
-    setCodexAuth("");
-    setCodexConfig("");
+    setCodexAuth(JSON.stringify(customAuth, null, 2));
+    setCodexConfig(customConfig);
     setCodexApiKey("");
     setCategory("custom");
   };
@@ -1027,6 +1037,18 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                   applyCodexPreset(codexProviderPresets[index], index)
                 }
                 onCustomClick={handleCodexCustomClick}
+                renderCustomDescription={() => (
+                  <>
+                    手动配置供应商，需要填写完整的配置信息，或者
+                    <button
+                      type="button"
+                      onClick={() => setIsCodexTemplateModalOpen(true)}
+                      className="text-blue-400 dark:text-blue-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors ml-1"
+                    >
+                      使用配置向导
+                    </button>
+                  </>
+                )}
               />
             )}
 
@@ -1196,6 +1218,15 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                 }
                 commonConfigError={codexCommonConfigError}
                 authError={codexAuthError}
+                isCustomMode={selectedCodexPreset === -1}
+                onWebsiteUrlChange={(url) => {
+                  setFormData({
+                    ...formData,
+                    websiteUrl: url
+                  });
+                }}
+                isTemplateModalOpen={isCodexTemplateModalOpen}
+                setIsTemplateModalOpen={setIsCodexTemplateModalOpen}
               />
             ) : (
               <>
