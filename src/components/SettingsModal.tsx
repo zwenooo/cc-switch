@@ -183,8 +183,8 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     try {
       const currentResolved =
         app === "claude"
-          ? settings.claudeConfigDir ?? resolvedClaudeDir
-          : settings.codexConfigDir ?? resolvedCodexDir;
+          ? (settings.claudeConfigDir ?? resolvedClaudeDir)
+          : (settings.codexConfigDir ?? resolvedCodexDir);
 
       const selected = await window.api.selectConfigDirectory(currentResolved);
 
@@ -247,7 +247,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
       // 如果未知或为空，回退到 releases 首页
       if (!targetVersion || targetVersion === "未知") {
         await window.api.openExternal(
-          "https://github.com/farion1231/cc-switch/releases",
+          "https://github.com/farion1231/cc-switch/releases"
         );
         return;
       }
@@ -255,7 +255,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         ? targetVersion
         : `v${targetVersion}`;
       await window.api.openExternal(
-        `https://github.com/farion1231/cc-switch/releases/tag/${tag}`,
+        `https://github.com/farion1231/cc-switch/releases/tag/${tag}`
       );
     } catch (error) {
       console.error("打开更新日志失败:", error);
@@ -343,8 +343,8 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
               配置目录覆盖（高级）
             </h3>
             <p className="text-xs text-gray-500 dark:text-gray-400 mb-3 leading-relaxed">
-              在 Windows WSL 等环境下，可手动指定 Claude Code 或 Codex 的配置目录。
-              留空则继续使用系统默认路径（macOS/Windows 会自动识别）。
+              在 WSL 等环境使用 Claude Code 或 Codex 的时候，可手动指定 WSL
+              里的配置目录，供应商数据与主环境保持一致。
             </p>
             <div className="space-y-3">
               <div>
@@ -354,9 +354,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                 <div className="flex gap-2">
                   <input
                     type="text"
-                    value={
-                      settings.claudeConfigDir ?? resolvedClaudeDir ?? ""
-                    }
+                    value={settings.claudeConfigDir ?? resolvedClaudeDir ?? ""}
                     onChange={(e) =>
                       setSettings({
                         ...settings,
