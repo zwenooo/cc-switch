@@ -361,7 +361,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                         claudeConfigDir: e.target.value,
                       })
                     }
-                    placeholder="例如：/mnt/c/Users/<你的用户名>/.claude"
+                    placeholder="例如：/home/<你的用户名>/.claude"
                     className="flex-1 px-3 py-2 text-xs font-mono bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/40"
                   />
                   <button
@@ -397,7 +397,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                         codexConfigDir: e.target.value,
                       })
                     }
-                    placeholder="例如：/mnt/c/Users/<你的用户名>/.codex"
+                    placeholder="例如：/home/<你的用户名>/.codex"
                     className="flex-1 px-3 py-2 text-xs font-mono bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/40"
                   />
                   <button
