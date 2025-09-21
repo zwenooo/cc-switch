@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 
 import { X, Save } from "lucide-react";
 
@@ -92,8 +92,11 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
   const [templateWebsiteUrl, setTemplateWebsiteUrl] = useState("");
 
   const [templateModelName, setTemplateModelName] = useState("gpt-5-codex");
+  const apiKeyInputRef = useRef<HTMLInputElement>(null);
 
-  const [templateError, setTemplateError] = useState("");
+  const baseUrlInputRef = useRef<HTMLInputElement>(null);
+
+  const modelNameInputRef = useRef<HTMLInputElement>(null);
 
   // 移除自动填充逻辑，因为现在在点击自定义按钮时就已经填充
 
@@ -125,18 +128,30 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
     setIsCommonConfigModalOpen(false);
   };
 
+  const closeTemplateModal = () => {
+    setIsTemplateModalOpen(false);
+  };
+
   const applyTemplate = () => {
+    const requiredInputs = [
+      apiKeyInputRef.current,
+      baseUrlInputRef.current,
+      modelNameInputRef.current,
+    ];
+
+    for (const input of requiredInputs) {
+      if (input && !input.checkValidity()) {
+        input.reportValidity();
+        input.focus();
+        return;
+      }
+    }
+
     const trimmedKey = templateApiKey.trim();
 
     const trimmedBaseUrl = templateBaseUrl.trim();
 
     const trimmedModel = templateModelName.trim();
-
-    if (!trimmedKey || !trimmedBaseUrl || !trimmedModel) {
-      setTemplateError("请填写 API 密钥、API 基础地址和模型名称");
-
-      return;
-    }
 
     const auth = generateThirdPartyAuth(trimmedKey);
 
@@ -170,9 +185,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
 
     setTemplateModelName("gpt-5-codex");
 
-    setTemplateError("");
-
-    setIsTemplateModalOpen(false);
+    closeTemplateModal();
   };
 
   const handleTemplateInputKeyDown = (
@@ -310,7 +323,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
           className="fixed inset-0 z-50 flex items-center justify-center"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) {
-              setIsTemplateModalOpen(false);
+              closeTemplateModal();
             }
           }}
         >
@@ -329,7 +342,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => setIsTemplateModalOpen(false)}
+                  onClick={closeTemplateModal}
                   className="rounded-md p-1 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
                   aria-label="关闭"
                 >
@@ -354,12 +367,11 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
                     <input
                       type="text"
                       value={templateApiKey}
-                      onChange={(e) => {
-                        setTemplateApiKey(e.target.value);
-
-                        setTemplateError("");
-                      }}
+                      ref={apiKeyInputRef}
+                      onChange={(e) => setTemplateApiKey(e.target.value)}
                       onKeyDown={handleTemplateInputKeyDown}
+                      pattern=".*\S.*"
+                      title="请输入有效的内容"
                       placeholder="sk-your-api-key-here"
                       required
                       className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
@@ -393,11 +405,8 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
                     <input
                       type="url"
                       value={templateBaseUrl}
-                      onChange={(e) => {
-                        setTemplateBaseUrl(e.target.value);
-
-                        setTemplateError("");
-                      }}
+                      ref={baseUrlInputRef}
+                      onChange={(e) => setTemplateBaseUrl(e.target.value)}
                       onKeyDown={handleTemplateInputKeyDown}
                       placeholder="https://your-api-endpoint.com/v1"
                       required
@@ -432,12 +441,11 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
                     <input
                       type="text"
                       value={templateModelName}
-                      onChange={(e) => {
-                        setTemplateModelName(e.target.value);
-
-                        setTemplateError("");
-                      }}
+                      ref={modelNameInputRef}
+                      onChange={(e) => setTemplateModelName(e.target.value)}
                       onKeyDown={handleTemplateInputKeyDown}
+                      pattern=".*\S.*"
+                      title="请输入有效的内容"
                       placeholder="gpt-5-codex"
                       required
                       className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
@@ -489,17 +497,12 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
                   </div>
                 )}
 
-                {templateError && (
-                  <p className="text-sm text-red-500 dark:text-red-400">
-                    {templateError}
-                  </p>
-                )}
               </div>
 
               <div className="flex items-center justify-end gap-3 border-t border-gray-200 bg-gray-100 p-6 dark:border-gray-800 dark:bg-gray-800">
                 <button
                   type="button"
-                  onClick={() => setIsTemplateModalOpen(false)}
+                  onClick={closeTemplateModal}
                   className="rounded-lg px-4 py-2 text-sm font-medium text-gray-500 transition-colors hover:bg-white hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100"
                 >
                   取消
