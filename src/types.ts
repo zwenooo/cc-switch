@@ -24,4 +24,8 @@ export interface AppConfig {
 export interface Settings {
   // 是否在系统托盘（macOS 菜单栏）显示图标
   showInTray: boolean;
+  // 覆盖 Claude Code 配置目录（可选）
+  claudeConfigDir?: string;
+  // 覆盖 Codex 配置目录（可选）
+  codexConfigDir?: string;
 }
