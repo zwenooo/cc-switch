@@ -101,6 +101,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
   const baseUrlInputRef = useRef<HTMLInputElement>(null);
 
   const modelNameInputRef = useRef<HTMLInputElement>(null);
+  const displayNameInputRef = useRef<HTMLInputElement>(null);
 
   // 移除自动填充逻辑，因为现在在点击自定义按钮时就已经填充
 
@@ -140,6 +141,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
 
   const applyTemplate = () => {
     const requiredInputs = [
+      displayNameInputRef.current,
       apiKeyInputRef.current,
       baseUrlInputRef.current,
       modelNameInputRef.current,
@@ -389,12 +391,13 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
 
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">
-                      供应商名称
+                      供应商名称 *
                     </label>
 
                     <input
                       type="text"
                       value={templateDisplayName}
+                      ref={displayNameInputRef}
                       onChange={(e) => {
                         setTemplateDisplayName(e.target.value);
                         if (onNameChange) {
@@ -402,7 +405,10 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
                         }
                       }}
                       onKeyDown={handleTemplateInputKeyDown}
-                      placeholder="例如：Codex 官方（可选）"
+                      placeholder="例如：Codex 官方"
+                      required
+                      pattern=".*\\S.*"
+                      title="请输入有效的内容"
                       className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                     />
 

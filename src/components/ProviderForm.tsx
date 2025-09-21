@@ -847,7 +847,12 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   // 获取当前供应商的网址
   const getCurrentWebsiteUrl = () => {
     if (selectedPreset !== null && selectedPreset >= 0) {
-      return providerPresets[selectedPreset]?.websiteUrl || "";
+      const preset = providerPresets[selectedPreset];
+      if (!preset) return "";
+      // 仅第三方供应商使用专用 apiKeyUrl，其余使用官网地址
+      return preset.category === "third_party"
+        ? preset.apiKeyUrl || preset.websiteUrl || ""
+        : preset.websiteUrl || "";
     }
     return formData.websiteUrl || "";
   };
@@ -855,7 +860,12 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   // 获取 Codex 当前供应商的网址
   const getCurrentCodexWebsiteUrl = () => {
     if (selectedCodexPreset !== null && selectedCodexPreset >= 0) {
-      return codexProviderPresets[selectedCodexPreset]?.websiteUrl || "";
+      const preset = codexProviderPresets[selectedCodexPreset];
+      if (!preset) return "";
+      // 仅第三方供应商使用专用 apiKeyUrl，其余使用官网地址
+      return preset.category === "third_party"
+        ? preset.apiKeyUrl || preset.websiteUrl || ""
+        : preset.websiteUrl || "";
     }
     return formData.websiteUrl || "";
   };
@@ -884,7 +894,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
         codexProviderPresets[selectedCodexPreset]?.category === "official")) ||
     category === "official";
 
-  // 判断是否显示 Codex 的"获取 API Key"链接
+  // 判断是否显示 Codex 的"获取 API Key"链接（国产官方、聚合站和第三方显示）
   const shouldShowCodexApiKeyLink =
     isCodex &&
     !isCodexOfficialPreset &&

@@ -6,6 +6,8 @@ import { ProviderCategory } from "../types";
 export interface ProviderPreset {
   name: string;
   websiteUrl: string;
+  // 新增：第三方/聚合等可单独配置获取 API Key 的链接
+  apiKeyUrl?: string;
   settingsConfig: object;
   isOfficial?: boolean; // 标识是否为官方预设
   category?: ProviderCategory; // 新增：分类
@@ -90,6 +92,7 @@ export const providerPresets: ProviderPreset[] = [
   {
     name: "PackyCode",
     websiteUrl: "https://www.packycode.com",
+    apiKeyUrl: "https://www.packycode.com/?aff=rlo54mgz",
     settingsConfig: {
       env: {
         ANTHROPIC_BASE_URL: "https://api.packycode.com",
