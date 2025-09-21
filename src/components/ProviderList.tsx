@@ -22,7 +22,7 @@ interface ProviderListProps {
   onNotify?: (
     message: string,
     type: "success" | "error",
-    duration?: number,
+    duration?: number
   ) => void;
 }
 
@@ -109,7 +109,7 @@ const ProviderList: React.FC<ProviderListProps> = ({
         onNotify?.(
           "未找到 VS Code 用户设置文件 (settings.json)",
           "error",
-          3000,
+          3000
         );
         return;
       }
@@ -157,7 +157,7 @@ const ProviderList: React.FC<ProviderListProps> = ({
         onNotify?.(
           "未找到 VS Code 用户设置文件 (settings.json)",
           "error",
-          3000,
+          3000
         );
         return;
       }
@@ -230,7 +230,7 @@ const ProviderList: React.FC<ProviderListProps> = ({
               <div
                 key={provider.id}
                 className={cn(
-                  isCurrent ? cardStyles.selected : cardStyles.interactive,
+                  isCurrent ? cardStyles.selected : cardStyles.interactive
                 )}
               >
                 <div className="flex items-start justify-between">
@@ -243,7 +243,7 @@ const ProviderList: React.FC<ProviderListProps> = ({
                       <div
                         className={cn(
                           badgeStyles.success,
-                          !isCurrent && "invisible",
+                          !isCurrent && "invisible"
                         )}
                       >
                         <CheckCircle2 size={12} />
@@ -284,11 +284,11 @@ const ProviderList: React.FC<ProviderListProps> = ({
                               : handleApplyToVSCode(provider)
                           }
                           className={cn(
-                            "inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors w-[130px] justify-center",
+                            "inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors w-[130px] whitespace-nowrap justify-center",
                             !isCurrent && "invisible",
                             vscodeAppliedFor === provider.id
                               ? "bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                              : "bg-emerald-500 text-white hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-700",
+                              : "bg-emerald-500 text-white hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-700"
                           )}
                           title={
                             vscodeAppliedFor === provider.id
@@ -308,7 +308,7 @@ const ProviderList: React.FC<ProviderListProps> = ({
                         "inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
                         isCurrent
                           ? "bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500 cursor-not-allowed"
-                          : "bg-blue-500 text-white hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700",
+                          : "bg-blue-500 text-white hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700"
                       )}
                     >
                       <Play size={14} />
@@ -330,7 +330,7 @@ const ProviderList: React.FC<ProviderListProps> = ({
                         buttonStyles.icon,
                         isCurrent
                           ? "text-gray-400 cursor-not-allowed"
-                          : "text-gray-500 hover:text-red-500 hover:bg-red-100 dark:text-gray-400 dark:hover:text-red-400 dark:hover:bg-red-500/10",
+                          : "text-gray-500 hover:text-red-500 hover:bg-red-100 dark:text-gray-400 dark:hover:text-red-400 dark:hover:bg-red-500/10"
                       )}
                       title="删除供应商"
                     >
