@@ -61,13 +61,13 @@ export const codexProviderPresets: CodexProviderPreset[] = [
     config: ``,
   },
   {
-    name: "PackyCode",
-    websiteUrl: "https://codex.packycode.com/",
+    name: "CodeZ",
+    websiteUrl: "https://codez.zwenooo.link",
     category: "third_party",
     auth: generateThirdPartyAuth("sk-your-api-key-here"),
     config: generateThirdPartyConfig(
-      "packycode",
-      "https://codex-api.packycode.com/v1",
+      "codez",
+      "https://codez.zwenooo.link/v1",
       "gpt-5-codex"
     ),
   },

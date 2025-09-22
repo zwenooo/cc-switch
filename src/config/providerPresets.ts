@@ -90,12 +90,12 @@ export const providerPresets: ProviderPreset[] = [
     category: "aggregator",
   },
   {
-    name: "PackyCode",
-    websiteUrl: "https://www.packycode.com",
-    apiKeyUrl: "https://www.packycode.com/?aff=rlo54mgz",
+    name: "CodeZ",
+    websiteUrl: "https://codez.zwenooo.link",
+    apiKeyUrl: "https://codez.zwenooo.link",
     settingsConfig: {
       env: {
-        ANTHROPIC_BASE_URL: "https://api.packycode.com",
+        ANTHROPIC_BASE_URL: "https://codez.zwenooo.link/v1",
         ANTHROPIC_AUTH_TOKEN: "",
       },
     },
