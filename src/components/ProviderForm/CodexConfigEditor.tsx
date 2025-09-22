@@ -407,7 +407,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
                       onKeyDown={handleTemplateInputKeyDown}
                       placeholder="例如：Codex 官方"
                       required
-                      pattern=".*\\S.*"
+                      pattern=".*\S.*"
                       title="请输入有效的内容"
                       className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                     />
