@@ -580,7 +580,7 @@ dependencies = [
 
 [[package]]
 name = "cc-switch"
-version = "3.2.0"
+version = "3.3.0"
 dependencies = [
  "dirs 5.0.1",
  "log",
