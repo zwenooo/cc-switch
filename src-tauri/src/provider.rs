@@ -16,6 +16,9 @@ pub struct Provider {
     pub website_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub category: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "createdAt")]
+    pub created_at: Option<i64>,
 }
 
 impl Provider {
@@ -32,6 +35,7 @@ impl Provider {
             settings_config,
             website_url,
             category: None,
+            created_at: None,
         }
     }
 }
