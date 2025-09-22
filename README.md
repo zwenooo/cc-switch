@@ -1,3 +1,6 @@
+原项目
+https://github.com/farion1231/cc-switch
+
 # Claude Code & Codex 供应商切换器
 
 [![Version](https://img.shields.io/badge/version-3.3.0-blue.svg)](https://github.com/farion1231/cc-switch/releases)
