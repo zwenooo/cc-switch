@@ -305,13 +305,13 @@ const ProviderList: React.FC<ProviderListProps> = ({
                       onClick={() => onSwitch(provider.id)}
                       disabled={isCurrent}
                       className={cn(
-                        "inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
+                        "inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors w-[76px] justify-center whitespace-nowrap",
                         isCurrent
                           ? "bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500 cursor-not-allowed"
                           : "bg-blue-500 text-white hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700"
                       )}
                     >
-                      <Play size={14} />
+                      {!isCurrent && <Play size={14} />}
                       {isCurrent ? "使用中" : "启用"}
                     </button>
 
