@@ -287,8 +287,8 @@ const ProviderList: React.FC<ProviderListProps> = ({
                             "inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors w-[130px] whitespace-nowrap justify-center",
                             !isCurrent && "invisible",
                             vscodeAppliedFor === provider.id
-                              ? "bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                              : "bg-emerald-500 text-white hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-700"
+                              ? "border border-gray-300 text-gray-600 hover:border-red-300 hover:text-red-600 hover:bg-red-50 dark:border-gray-600 dark:text-gray-400 dark:hover:border-red-800 dark:hover:text-red-400 dark:hover:bg-red-900/20"
+                              : "border border-gray-300 text-gray-700 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 dark:border-gray-600 dark:text-gray-300 dark:hover:border-blue-700 dark:hover:text-blue-400 dark:hover:bg-blue-900/20"
                           )}
                           title={
                             vscodeAppliedFor === provider.id
