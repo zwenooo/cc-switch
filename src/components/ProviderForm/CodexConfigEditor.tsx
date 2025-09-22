@@ -438,7 +438,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
 
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">
-                      API 基础地址 *
+                      API 请求地址 *
                     </label>
 
                     <input
@@ -455,7 +455,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
 
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">
-                      供应商官网
+                      官网地址
                     </label>
 
                     <input
@@ -468,7 +468,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
                     />
 
                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      供应商的官方网站地址（可选）
+                      官方网站地址（可选）
                     </p>
                   </div>
 

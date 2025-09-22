@@ -419,10 +419,10 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       // 不再从 JSON 自动提取或覆盖官网地址，只更新配置内容
       updateSettingsConfigValue(value);
     } else {
-      setFormData({
-        ...formData,
+      setFormData((prev) => ({
+        ...prev,
         [name]: value,
-      });
+      }));
     }
   };
 
@@ -1232,16 +1232,16 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                 authError={codexAuthError}
                 isCustomMode={selectedCodexPreset === -1}
                 onWebsiteUrlChange={(url) => {
-                  setFormData({
-                    ...formData,
+                  setFormData((prev) => ({
+                    ...prev,
                     websiteUrl: url,
-                  });
+                  }));
                 }}
                 onNameChange={(name) => {
-                  setFormData({
-                    ...formData,
+                  setFormData((prev) => ({
+                    ...prev,
                     name,
-                  });
+                  }));
                 }}
                 isTemplateModalOpen={isCodexTemplateModalOpen}
                 setIsTemplateModalOpen={setIsCodexTemplateModalOpen}

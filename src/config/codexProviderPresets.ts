@@ -40,13 +40,13 @@ export function generateThirdPartyConfig(
 model = "${modelName}"
 model_reasoning_effort = "high"
 disable_response_storage = true
-requires_openai_auth = true
 
 [model_providers.${cleanProviderName}]
 name = "${cleanProviderName}"
 base_url = "${baseUrl}"
 wire_api = "responses"
-env_key = "${cleanProviderName}"`;
+env_key = "${cleanProviderName}"
+requires_openai_auth = true`;
 }
 
 export const codexProviderPresets: CodexProviderPreset[] = [
