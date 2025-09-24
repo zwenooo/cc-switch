@@ -35,6 +35,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const [showUpToDate, setShowUpToDate] = useState(false);
   const [resolvedClaudeDir, setResolvedClaudeDir] = useState<string>("");
   const [resolvedCodexDir, setResolvedCodexDir] = useState<string>("");
+  const [isPortable, setIsPortable] = useState(false);
   const { hasUpdate, updateInfo, updateHandle, checkUpdate, resetDismiss } =
     useUpdate();
 
@@ -43,6 +44,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     loadConfigPath();
     loadVersion();
     loadResolvedDirs();
+    loadPortableFlag();
   }, []);
 
   const loadVersion = async () => {
@@ -103,6 +105,15 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     }
   };
 
+  const loadPortableFlag = async () => {
+    try {
+      const portable = await window.api.isPortable();
+      setIsPortable(portable);
+    } catch (error) {
+      console.error("检测便携模式失败:", error);
+    }
+  };
+
   const saveSettings = async () => {
     try {
       const payload: Settings = {
@@ -126,6 +137,10 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
 
   const handleCheckUpdate = async () => {
     if (hasUpdate && updateHandle) {
+      if (isPortable) {
+        await window.api.checkForUpdates();
+        return;
+      }
       // 已检测到更新：直接复用 updateHandle 下载并安装，避免重复检查
       setIsDownloading(true);
       try {

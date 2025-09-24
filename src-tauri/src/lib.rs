@@ -377,6 +377,7 @@ pub fn run() {
             commands::get_settings,
             commands::save_settings,
             commands::check_for_updates,
+            commands::is_portable_mode,
             commands::get_vscode_settings_status,
             commands::read_vscode_settings,
             commands::write_vscode_settings,

@@ -39,6 +39,7 @@ declare global {
       getSettings: () => Promise<Settings>;
       saveSettings: (settings: Settings) => Promise<boolean>;
       checkForUpdates: () => Promise<void>;
+      isPortable: () => Promise<boolean>;
       getAppConfigPath: () => Promise<string>;
       openAppConfigFolder: () => Promise<void>;
       // VS Code settings.json 能力

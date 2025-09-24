@@ -246,6 +246,16 @@ export const tauriAPI = {
     }
   },
 
+  // 判断是否为便携模式
+  isPortable: async (): Promise<boolean> => {
+    try {
+      return await invoke<boolean>("is_portable_mode");
+    } catch (error) {
+      console.error("检测便携模式失败:", error);
+      return false;
+    }
+  },
+
   // 获取应用配置文件路径
   getAppConfigPath: async (): Promise<string> => {
     try {
