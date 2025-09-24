@@ -57,8 +57,8 @@ export const providerPresets: ProviderPreset[] = [
         ANTHROPIC_BASE_URL:
           "https://dashscope.aliyuncs.com/api/v2/apps/claude-code-proxy",
         ANTHROPIC_AUTH_TOKEN: "",
-        ANTHROPIC_MODEL: "qwen3-coder-plus",
-        ANTHROPIC_SMALL_FAST_MODEL: "qwen3-coder-plus",
+        ANTHROPIC_MODEL: "qwen3-max",
+        ANTHROPIC_SMALL_FAST_MODEL: "qwen3-max",
       },
     },
     category: "cn_official",
