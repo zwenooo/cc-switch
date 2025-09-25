@@ -1,0 +1,7 @@
+- 自动升级自定义路径 ✅
+- win 绿色版报毒问题 ✅
+- mcp 管理器
+- i18n
+- gemini cli
+- homebrew 支持
+- 自定义 vscode 路径
