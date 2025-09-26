@@ -68,16 +68,26 @@ export function removeManagedKeys(content: string): string {
     // 忽略删除失败
   }
 
-  // 若 chatgpt.config 变为空对象，顺便移除（不影响其他 chatgpt* 键）
+  // 清理 chatgpt.config 的异常情况：
+  // 1. 早期遗留的标量值（字符串/数字/null等）
+  // 2. 空对象
+  // 3. 数组类型
   try {
     const data = parse(out) as any;
     const cfg = data?.["chatgpt.config"];
-    if (
-      cfg &&
-      typeof cfg === "object" &&
-      !Array.isArray(cfg) &&
-      Object.keys(cfg).length === 0
-    ) {
+
+    // 需要清理的情况：
+    // - 标量值（null、字符串、数字等）
+    // - 数组
+    // - 空对象
+    const shouldRemove = cfg !== undefined && (
+      cfg === null ||
+      typeof cfg !== "object" ||
+      Array.isArray(cfg) ||
+      (typeof cfg === "object" && Object.keys(cfg).length === 0)
+    );
+
+    if (shouldRemove) {
       out = applyEdits(
         out,
         modify(out, ["chatgpt.config"], undefined, { formattingOptions: fmt }),
