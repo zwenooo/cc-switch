@@ -1,5 +1,6 @@
 - 自动升级自定义路径 ✅
 - win 绿色版报毒问题 ✅
+- codex 更多预设供应商
 - mcp 管理器
 - i18n
 - gemini cli
