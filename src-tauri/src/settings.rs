@@ -9,6 +9,8 @@ use std::sync::{OnceLock, RwLock};
 pub struct AppSettings {
     #[serde(default = "default_show_in_tray")]
     pub show_in_tray: bool,
+    #[serde(default = "default_minimize_to_tray_on_close")]
+    pub minimize_to_tray_on_close: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub claude_config_dir: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -19,10 +21,15 @@ fn default_show_in_tray() -> bool {
     true
 }
 
+fn default_minimize_to_tray_on_close() -> bool {
+    true
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
             show_in_tray: true,
+            minimize_to_tray_on_close: true,
             claude_config_dir: None,
             codex_config_dir: None,
         }
@@ -78,8 +85,7 @@ impl AppSettings {
         let path = Self::settings_path();
 
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| format!("创建设置目录失败: {}", e))?;
+            fs::create_dir_all(parent).map_err(|e| format!("创建设置目录失败: {}", e))?;
         }
 
         let json = serde_json::to_string_pretty(&normalized)
@@ -113,19 +119,14 @@ fn resolve_override_path(raw: &str) -> PathBuf {
 }
 
 pub fn get_settings() -> AppSettings {
-    settings_store()
-        .read()
-        .expect("读取设置锁失败")
-        .clone()
+    settings_store().read().expect("读取设置锁失败").clone()
 }
 
 pub fn update_settings(mut new_settings: AppSettings) -> Result<(), String> {
     new_settings.normalize_paths();
     new_settings.save()?;
 
-    let mut guard = settings_store()
-        .write()
-        .expect("写入设置锁失败");
+    let mut guard = settings_store().write().expect("写入设置锁失败");
     *guard = new_settings;
     Ok(())
 }

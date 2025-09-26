@@ -223,7 +223,7 @@ export const tauriAPI = {
       return await invoke("get_settings");
     } catch (error) {
       console.error("获取设置失败:", error);
-      return { showInTray: true };
+      return { showInTray: true, minimizeToTrayOnClose: true };
     }
   },
 

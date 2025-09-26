@@ -1,12 +1,12 @@
-use std::path::{PathBuf};
+use std::path::PathBuf;
 
 /// 枚举可能的 VS Code 发行版配置目录名称
 fn vscode_product_dirs() -> Vec<&'static str> {
     vec![
-        "Code",           // VS Code Stable
+        "Code",            // VS Code Stable
         "Code - Insiders", // VS Code Insiders
-        "VSCodium",      // VSCodium
-        "Code - OSS",     // OSS 发行版
+        "VSCodium",        // VSCodium
+        "Code - OSS",      // OSS 发行版
     ]
 }
 
@@ -19,7 +19,11 @@ pub fn candidate_settings_paths() -> Vec<PathBuf> {
         if let Some(home) = dirs::home_dir() {
             for prod in vscode_product_dirs() {
                 paths.push(
-                    home.join("Library").join("Application Support").join(prod).join("User").join("settings.json")
+                    home.join("Library")
+                        .join("Application Support")
+                        .join(prod)
+                        .join("User")
+                        .join("settings.json"),
                 );
             }
         }

@@ -25,6 +25,7 @@ interface SettingsModalProps {
 export default function SettingsModal({ onClose }: SettingsModalProps) {
   const [settings, setSettings] = useState<Settings>({
     showInTray: true,
+    minimizeToTrayOnClose: true,
     claudeConfigDir: undefined,
     codexConfigDir: undefined,
   });
@@ -65,8 +66,13 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         (loadedSettings as any)?.showInTray ??
         (loadedSettings as any)?.showInDock ??
         true;
+      const minimizeToTrayOnClose =
+        (loadedSettings as any)?.minimizeToTrayOnClose ??
+        (loadedSettings as any)?.minimize_to_tray_on_close ??
+        true;
       setSettings({
         showInTray,
+        minimizeToTrayOnClose,
         claudeConfigDir:
           typeof (loadedSettings as any)?.claudeConfigDir === "string"
             ? (loadedSettings as any).claudeConfigDir
@@ -305,26 +311,35 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
 
         {/* 设置内容 */}
         <div className="px-6 py-4 space-y-6">
-          {/* 系统托盘设置（未实现）
-              说明：此开关用于控制是否在系统托盘/菜单栏显示应用图标。 */}
-          {/* <div>
+          {/* 窗口行为设置 */}
+          <div>
             <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
-              显示设置（系统托盘）
+              窗口行为
             </h3>
-            <label className="flex items-center justify-between">
-              <span className="text-sm text-gray-500">
-                在菜单栏显示图标（系统托盘）
-              </span>
-              <input
-                type="checkbox"
-                checked={settings.showInTray}
-                onChange={(e) =>
-                  setSettings({ ...settings, showInTray: e.target.checked })
-                }
-                className="w-4 h-4 text-blue-500 rounded focus:ring-blue-500/20"
-              />
-            </label>
-          </div> */}
+            <div className="space-y-3">
+              <label className="flex items-center justify-between">
+                <div>
+                  <span className="text-sm text-gray-900 dark:text-gray-100">
+                    关闭时最小化到托盘
+                  </span>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    勾选后点击关闭按钮会隐藏到系统托盘，取消则直接退出应用。
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={settings.minimizeToTrayOnClose}
+                  onChange={(e) =>
+                    setSettings((prev) => ({
+                      ...prev,
+                      minimizeToTrayOnClose: e.target.checked,
+                    }))
+                  }
+                  className="w-4 h-4 text-blue-500 rounded focus:ring-blue-500/20"
+                />
+              </label>
+            </div>
+          </div>
 
           {/* VS Code 自动同步设置已移除 */}
 
