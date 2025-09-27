@@ -8,6 +8,7 @@ import {
   Check,
   Undo2,
   FolderSearch,
+  Save,
 } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import { homeDir, join } from "@tauri-apps/api/path";
@@ -295,7 +296,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
           isLinux() ? "" : " backdrop-blur-sm"
         }`}
       />
-      <div className="relative bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-[500px] overflow-hidden">
+      <div className="relative bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-[500px] max-h-[90vh] flex flex-col overflow-hidden">
         {/* 标题栏 */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-800">
           <h2 className="text-lg font-semibold text-blue-500 dark:text-blue-400">
@@ -310,7 +311,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         </div>
 
         {/* 设置内容 */}
-        <div className="px-6 py-4 space-y-6">
+        <div className="px-6 py-4 space-y-6 overflow-y-auto flex-1">
           {/* 窗口行为设置 */}
           <div>
             <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
@@ -534,8 +535,9 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
           </button>
           <button
             onClick={saveSettings}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700 rounded-lg transition-colors"
+            className="px-4 py-2 text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700 rounded-lg transition-colors flex items-center gap-2"
           >
+            <Save size={16} />
             保存
           </button>
         </div>
