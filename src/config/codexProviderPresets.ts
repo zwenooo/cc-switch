@@ -18,7 +18,7 @@ export interface CodexProviderPreset {
  */
 export function generateThirdPartyAuth(apiKey: string): Record<string, any> {
   return {
-    OPENAI_API_KEY: apiKey || "sk-your-api-key-here"
+    OPENAI_API_KEY: apiKey || "sk-your-api-key-here",
   };
 }
 
@@ -31,11 +31,12 @@ export function generateThirdPartyConfig(
   modelName = "gpt-5-codex"
 ): string {
   // 清理供应商名称，确保符合TOML键名规范
-  const cleanProviderName = providerName
-    .toLowerCase()
-    .replace(/[^a-z0-9_]/g, '_')
-    .replace(/^_+|_+$/g, '') || 'custom';
-  
+  const cleanProviderName =
+    providerName
+      .toLowerCase()
+      .replace(/[^a-z0-9_]/g, "_")
+      .replace(/^_+|_+$/g, "") || "custom";
+
   return `model_provider = "${cleanProviderName}"
 model = "${modelName}"
 model_reasoning_effort = "high"
@@ -44,9 +45,7 @@ disable_response_storage = true
 [model_providers.${cleanProviderName}]
 name = "${cleanProviderName}"
 base_url = "${baseUrl}"
-wire_api = "responses"
-env_key = "${cleanProviderName}"
-requires_openai_auth = true`;
+wire_api = "responses"`;
 }
 
 export const codexProviderPresets: CodexProviderPreset[] = [
