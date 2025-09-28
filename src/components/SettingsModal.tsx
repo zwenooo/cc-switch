@@ -374,44 +374,34 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
 
         {/* 设置内容 */}
         <div className="px-6 py-4 space-y-6 overflow-y-auto flex-1">
-          {/* 通用设置 */}
+          {/* 语言设置 */}
           <div>
             <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
-              {t("settings.general")}
+              {t("settings.language")}
             </h3>
-            <div className="space-y-3">
-              <div>
-                <p className="text-sm text-gray-900 dark:text-gray-100">
-                  {t("settings.language")}
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  {t("settings.languageDescription")}
-                </p>
-                <div className="mt-3 inline-flex p-0.5 bg-gray-100 dark:bg-gray-800 rounded-lg">
-                  <button
-                    type="button"
-                    onClick={() => handleLanguageChange("zh")}
-                    className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all min-w-[80px] ${
-                      (settings.language ?? "zh") === "zh"
-                        ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm"
-                        : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
-                    }`}
-                  >
-                    {t("settings.languageOptionChinese")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleLanguageChange("en")}
-                    className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all min-w-[80px] ${
-                      settings.language === "en"
-                        ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm"
-                        : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
-                    }`}
-                  >
-                    {t("settings.languageOptionEnglish")}
-                  </button>
-                </div>
-              </div>
+            <div className="inline-flex p-0.5 bg-gray-100 dark:bg-gray-800 rounded-lg">
+              <button
+                type="button"
+                onClick={() => handleLanguageChange("zh")}
+                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all min-w-[80px] ${
+                  (settings.language ?? "zh") === "zh"
+                    ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm"
+                    : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+                }`}
+              >
+                {t("settings.languageOptionChinese")}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleLanguageChange("en")}
+                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all min-w-[80px] ${
+                  settings.language === "en"
+                    ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm"
+                    : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+                }`}
+              >
+                {t("settings.languageOptionEnglish")}
+              </button>
             </div>
           </div>
 

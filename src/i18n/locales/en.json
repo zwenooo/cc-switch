@@ -64,7 +64,6 @@
     "title": "Settings",
     "general": "General",
     "language": "Language",
-    "languageDescription": "Choose the display language for CC Switch. This preference will be remembered next time you open the app.",
     "languageOptionChinese": "中文",
     "languageOptionEnglish": "English",
     "windowBehavior": "Window Behavior",

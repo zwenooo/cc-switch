@@ -64,7 +64,6 @@
     "title": "设置",
     "general": "通用",
     "language": "界面语言",
-    "languageDescription": "选择 CC Switch 的显示语言，下次启动会自动记住你的偏好。",
     "languageOptionChinese": "中文",
     "languageOptionEnglish": "English",
     "windowBehavior": "窗口行为",
