@@ -15,8 +15,8 @@ const resources = {
 
 i18n.use(initReactI18next).init({
   resources,
-  lng: "en", // 默认语言设置为英文
-  fallbackLng: "en", // 回退语言也设置为英文
+  lng: "zh", // 默认语言调整为中文
+  fallbackLng: "en", // 如果缺少中文翻译则退回英文
 
   interpolation: {
     escapeValue: false, // React 已经默认转义
