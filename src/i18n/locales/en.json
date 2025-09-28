@@ -62,6 +62,11 @@
   },
   "settings": {
     "title": "Settings",
+    "general": "General",
+    "language": "Language",
+    "languageDescription": "Choose the display language for CC Switch. This preference will be remembered next time you open the app.",
+    "languageOptionChinese": "中文",
+    "languageOptionEnglish": "English",
     "windowBehavior": "Window Behavior",
     "minimizeToTray": "Minimize to tray on close",
     "minimizeToTrayDescription": "When checked, clicking the close button will hide to system tray, otherwise the app will exit directly.",

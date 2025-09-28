@@ -9,7 +9,6 @@ import { ConfirmDialog } from "./components/ConfirmDialog";
 import { AppSwitcher } from "./components/AppSwitcher";
 import SettingsModal from "./components/SettingsModal";
 import { UpdateBadge } from "./components/UpdateBadge";
-import LanguageSwitcher from "./components/LanguageSwitcher";
 import { Plus, Settings, Moon, Sun } from "lucide-react";
 import { buttonStyles } from "./lib/styles";
 import { useDarkMode } from "./hooks/useDarkMode";
@@ -308,7 +307,6 @@ function App() {
             >
               {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
             </button>
-            <LanguageSwitcher />
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setIsSettingsOpen(true)}

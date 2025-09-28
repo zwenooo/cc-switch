@@ -25,13 +25,33 @@ interface SettingsModalProps {
 }
 
 export default function SettingsModal({ onClose }: SettingsModalProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+
+  const normalizeLanguage = (lang?: string | null): "zh" | "en" =>
+    lang === "en" ? "en" : "zh";
+
+  const readPersistedLanguage = (): "zh" | "en" => {
+    if (typeof window !== "undefined") {
+      const stored = window.localStorage.getItem("language");
+      if (stored === "en" || stored === "zh") {
+        return stored;
+      }
+    }
+    return normalizeLanguage(i18n.language);
+  };
+
+  const persistedLanguage = readPersistedLanguage();
+
   const [settings, setSettings] = useState<Settings>({
     showInTray: true,
     minimizeToTrayOnClose: true,
     claudeConfigDir: undefined,
     codexConfigDir: undefined,
+    language: persistedLanguage,
   });
+  const [initialLanguage, setInitialLanguage] = useState<"zh" | "en">(
+    persistedLanguage,
+  );
   const [configPath, setConfigPath] = useState<string>("");
   const [version, setVersion] = useState<string>("");
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
@@ -73,6 +93,12 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         (loadedSettings as any)?.minimizeToTrayOnClose ??
         (loadedSettings as any)?.minimize_to_tray_on_close ??
         true;
+      const storedLanguage = normalizeLanguage(
+        typeof (loadedSettings as any)?.language === "string"
+          ? (loadedSettings as any).language
+          : persistedLanguage,
+      );
+
       setSettings({
         showInTray,
         minimizeToTrayOnClose,
@@ -84,7 +110,12 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
           typeof (loadedSettings as any)?.codexConfigDir === "string"
             ? (loadedSettings as any).codexConfigDir
             : undefined,
+        language: storedLanguage,
       });
+      setInitialLanguage(storedLanguage);
+      if (i18n.language !== storedLanguage) {
+        void i18n.changeLanguage(storedLanguage);
+      }
     } catch (error) {
       console.error(t("console.loadSettingsFailed"), error);
     }
@@ -125,6 +156,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
 
   const saveSettings = async () => {
     try {
+      const selectedLanguage = settings.language === "en" ? "en" : "zh";
       const payload: Settings = {
         ...settings,
         claudeConfigDir:
@@ -135,13 +167,40 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
           settings.codexConfigDir && settings.codexConfigDir.trim() !== ""
             ? settings.codexConfigDir.trim()
             : undefined,
+        language: selectedLanguage,
       };
       await window.api.saveSettings(payload);
       setSettings(payload);
+      try {
+        window.localStorage.setItem("language", selectedLanguage);
+      } catch (error) {
+        console.warn("[Settings] Failed to persist language preference", error);
+      }
+      setInitialLanguage(selectedLanguage);
+      if (i18n.language !== selectedLanguage) {
+        void i18n.changeLanguage(selectedLanguage);
+      }
       onClose();
     } catch (error) {
       console.error(t("console.saveSettingsFailed"), error);
     }
+  };
+
+  const handleLanguageChange = (lang: "zh" | "en") => {
+    setSettings((prev) => ({ ...prev, language: lang }));
+    if (i18n.language !== lang) {
+      void i18n.changeLanguage(lang);
+    }
+  };
+
+  const handleCancel = () => {
+    if (settings.language !== initialLanguage) {
+      setSettings((prev) => ({ ...prev, language: initialLanguage }));
+      if (i18n.language !== initialLanguage) {
+        void i18n.changeLanguage(initialLanguage);
+      }
+    }
+    onClose();
   };
 
   const handleCheckUpdate = async () => {
@@ -291,7 +350,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     <div
       className="fixed inset-0 z-50 flex items-center justify-center"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) handleCancel();
       }}
     >
       <div
@@ -306,7 +365,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
             {t("settings.title")}
           </h2>
           <button
-            onClick={onClose}
+            onClick={handleCancel}
             className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors"
           >
             <X size={20} className="text-gray-500 dark:text-gray-400" />
@@ -315,6 +374,47 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
 
         {/* 设置内容 */}
         <div className="px-6 py-4 space-y-6 overflow-y-auto flex-1">
+          {/* 通用设置 */}
+          <div>
+            <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
+              {t("settings.general")}
+            </h3>
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm text-gray-900 dark:text-gray-100">
+                  {t("settings.language")}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  {t("settings.languageDescription")}
+                </p>
+                <div className="mt-3 inline-flex p-0.5 bg-gray-100 dark:bg-gray-800 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => handleLanguageChange("zh")}
+                    className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all min-w-[80px] ${
+                      (settings.language ?? "zh") === "zh"
+                        ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm"
+                        : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+                    }`}
+                  >
+                    {t("settings.languageOptionChinese")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleLanguageChange("en")}
+                    className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all min-w-[80px] ${
+                      settings.language === "en"
+                        ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm"
+                        : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+                    }`}
+                  >
+                    {t("settings.languageOptionEnglish")}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* 窗口行为设置 */}
           <div>
             <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
@@ -534,7 +634,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         {/* 底部按钮 */}
         <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-800">
           <button
-            onClick={onClose}
+            onClick={handleCancel}
             className="px-4 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
           >
             {t("common.cancel")}

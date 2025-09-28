@@ -62,6 +62,11 @@
   },
   "settings": {
     "title": "设置",
+    "general": "通用",
+    "language": "界面语言",
+    "languageDescription": "选择 CC Switch 的显示语言，下次启动会自动记住你的偏好。",
+    "languageOptionChinese": "中文",
+    "languageOptionEnglish": "English",
     "windowBehavior": "窗口行为",
     "minimizeToTray": "关闭时最小化到托盘",
     "minimizeToTrayDescription": "勾选后点击关闭按钮会隐藏到系统托盘，取消则直接退出应用。",

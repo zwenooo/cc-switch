@@ -4,6 +4,36 @@ import { initReactI18next } from "react-i18next";
 import en from "./locales/en.json";
 import zh from "./locales/zh.json";
 
+const DEFAULT_LANGUAGE: "zh" | "en" = "zh";
+
+const getInitialLanguage = (): "zh" | "en" => {
+  if (typeof window !== "undefined") {
+    try {
+      const stored = window.localStorage.getItem("language");
+      if (stored === "zh" || stored === "en") {
+        return stored;
+      }
+    } catch (error) {
+      console.warn("[i18n] Failed to read stored language preference", error);
+    }
+  }
+
+  const navigatorLang =
+    typeof navigator !== "undefined"
+      ? navigator.language?.toLowerCase() ?? navigator.languages?.[0]?.toLowerCase()
+      : undefined;
+
+  if (navigatorLang?.startsWith("zh")) {
+    return "zh";
+  }
+
+  if (navigatorLang?.startsWith("en")) {
+    return "en";
+  }
+
+  return DEFAULT_LANGUAGE;
+};
+
 const resources = {
   en: {
     translation: en,
@@ -15,7 +45,7 @@ const resources = {
 
 i18n.use(initReactI18next).init({
   resources,
-  lng: "zh", // 默认语言调整为中文
+  lng: getInitialLanguage(), // 根据本地存储或系统语言选择默认语言
   fallbackLng: "en", // 如果缺少中文翻译则退回英文
 
   interpolation: {
