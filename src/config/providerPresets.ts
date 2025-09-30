@@ -30,8 +30,8 @@ export const providerPresets: ProviderPreset[] = [
       env: {
         ANTHROPIC_BASE_URL: "https://api.deepseek.com/anthropic",
         ANTHROPIC_AUTH_TOKEN: "",
-        ANTHROPIC_MODEL: "DeepSeek-V3.1-Terminus",
-        ANTHROPIC_SMALL_FAST_MODEL: "DeepSeek-V3.1-Terminus",
+        ANTHROPIC_MODEL: "DeepSeek-V3.2-Exp",
+        ANTHROPIC_SMALL_FAST_MODEL: "DeepSeek-V3.2-Exp",
       },
     },
     category: "cn_official",
@@ -83,8 +83,8 @@ export const providerPresets: ProviderPreset[] = [
       env: {
         ANTHROPIC_BASE_URL: "https://api-inference.modelscope.cn",
         ANTHROPIC_AUTH_TOKEN: "",
-        ANTHROPIC_MODEL: "ZhipuAI/GLM-4.5",
-        ANTHROPIC_SMALL_FAST_MODEL: "ZhipuAI/GLM-4.5",
+        ANTHROPIC_MODEL: "ZhipuAI/GLM-4.6",
+        ANTHROPIC_SMALL_FAST_MODEL: "ZhipuAI/GLM-4.6",
       },
     },
     category: "aggregator",
