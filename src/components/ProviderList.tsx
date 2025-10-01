@@ -320,11 +320,10 @@ const ProviderList: React.FC<ProviderListProps> = ({
                   </div>
 
                   <div className="flex items-center gap-2 ml-4">
-                    {/* VS Code 按钮占位容器 - 始终保持空间，避免布局跳动 */}
-                    <div className="w-[130px]">
-                      {appType === "codex" &&
-                        provider.category !== "official" &&
-                        isCurrent && (
+                    {/* 同步按钮占位容器 - 只在对应模式下渲染，避免布局跳动 */}
+                    {appType === "codex" ? (
+                      <div className="w-[130px]">
+                        {provider.category !== "official" && isCurrent && (
                           <button
                             onClick={() =>
                               vscodeAppliedFor === provider.id
@@ -348,10 +347,12 @@ const ProviderList: React.FC<ProviderListProps> = ({
                               : t("provider.applyToVSCode")}
                           </button>
                         )}
+                      </div>
+                    ) : null}
 
-                      {appType === "claude" &&
-                        provider.category !== "official" &&
-                        isCurrent && (
+                    {appType === "claude" ? (
+                      <div className="w-[130px]">
+                        {provider.category !== "official" && isCurrent && (
                           <button
                             onClick={() =>
                               claudeApplied
@@ -375,7 +376,8 @@ const ProviderList: React.FC<ProviderListProps> = ({
                               : t("provider.applyToClaudePlugin")}
                           </button>
                         )}
-                    </div>
+                      </div>
+                    ) : null}
                     <button
                       onClick={() => onSwitch(provider.id)}
                       disabled={isCurrent}
