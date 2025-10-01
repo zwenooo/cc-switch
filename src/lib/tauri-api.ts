@@ -306,6 +306,46 @@ export const tauriAPI = {
       throw new Error(`写入 VS Code 设置失败: ${String(error)}`);
     }
   },
+
+  // Claude 插件：获取 ~/.claude/config.json 状态
+  getClaudePluginStatus: async (): Promise<ConfigStatus> => {
+    try {
+      return await invoke<ConfigStatus>("get_claude_plugin_status");
+    } catch (error) {
+      console.error("获取 Claude 插件状态失败:", error);
+      return { exists: false, path: "", error: String(error) };
+    }
+  },
+
+  // Claude 插件：读取配置内容
+  readClaudePluginConfig: async (): Promise<string | null> => {
+    try {
+      return await invoke<string | null>("read_claude_plugin_config");
+    } catch (error) {
+      throw new Error(`读取 Claude 插件配置失败: ${String(error)}`);
+    }
+  },
+
+  // Claude 插件：应用或移除固定配置
+  applyClaudePluginConfig: async (options: {
+    official: boolean;
+  }): Promise<boolean> => {
+    const { official } = options;
+    try {
+      return await invoke<boolean>("apply_claude_plugin_config", { official });
+    } catch (error) {
+      throw new Error(`写入 Claude 插件配置失败: ${String(error)}`);
+    }
+  },
+
+  // Claude 插件：检测是否已应用目标配置
+  isClaudePluginApplied: async (): Promise<boolean> => {
+    try {
+      return await invoke<boolean>("is_claude_plugin_applied");
+    } catch (error) {
+      throw new Error(`检测 Claude 插件配置失败: ${String(error)}`);
+    }
+  },
 };
 
 // 创建全局 API 对象，兼容现有代码

@@ -1,4 +1,5 @@
 mod app_config;
+mod claude_plugin;
 mod codex_config;
 mod commands;
 mod config;
@@ -418,6 +419,10 @@ pub fn run() {
             commands::get_vscode_settings_status,
             commands::read_vscode_settings,
             commands::write_vscode_settings,
+            commands::get_claude_plugin_status,
+            commands::read_claude_plugin_config,
+            commands::apply_claude_plugin_config,
+            commands::is_claude_plugin_applied,
             update_tray_menu,
         ]);
 

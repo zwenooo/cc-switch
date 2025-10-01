@@ -70,6 +70,7 @@ const ProviderList: React.FC<ProviderListProps> = ({
   // VS Code 按钮：仅在 Codex + 当前供应商显示；按钮文案根据是否"已应用"变化
   const [vscodeAppliedFor, setVscodeAppliedFor] = useState<string | null>(null);
   const { enableAutoSync, disableAutoSync } = useVSCodeAutoSync();
+  const [claudeApplied, setClaudeApplied] = useState<boolean>(false);
 
   // 当当前供应商或 appType 变化时，尝试读取 VS Code settings 并检测状态
   useEffect(() => {
@@ -102,6 +103,24 @@ const ProviderList: React.FC<ProviderListProps> = ({
       }
     };
     check();
+  }, [appType, currentProviderId, providers]);
+
+  // 检查 Claude 插件配置是否已应用
+  useEffect(() => {
+    const checkClaude = async () => {
+      if (appType !== "claude" || !currentProviderId) {
+        setClaudeApplied(false);
+        return;
+      }
+      try {
+        const applied = await window.api.isClaudePluginApplied();
+        setClaudeApplied(applied);
+      } catch (error) {
+        console.error("检测 Claude 插件配置失败:", error);
+        setClaudeApplied(false);
+      }
+    };
+    checkClaude();
   }, [appType, currentProviderId, providers]);
 
   const handleApplyToVSCode = async (provider: Provider) => {
@@ -177,6 +196,36 @@ const ProviderList: React.FC<ProviderListProps> = ({
       console.error(e);
       const msg =
         e && e.message ? e.message : t("notifications.syncVSCodeFailed");
+      onNotify?.(msg, "error", 5000);
+    }
+  };
+
+  const handleApplyToClaudePlugin = async () => {
+    try {
+      await window.api.applyClaudePluginConfig({ official: false });
+      onNotify?.(t("notifications.appliedToClaudePlugin"), "success", 3000);
+      setClaudeApplied(true);
+    } catch (error: any) {
+      console.error(error);
+      const msg =
+        error && error.message
+          ? error.message
+          : t("notifications.syncClaudePluginFailed");
+      onNotify?.(msg, "error", 5000);
+    }
+  };
+
+  const handleRemoveFromClaudePlugin = async () => {
+    try {
+      await window.api.applyClaudePluginConfig({ official: true });
+      onNotify?.(t("notifications.removedFromClaudePlugin"), "success", 3000);
+      setClaudeApplied(false);
+    } catch (error: any) {
+      console.error(error);
+      const msg =
+        error && error.message
+          ? error.message
+          : t("notifications.syncClaudePluginFailed");
       onNotify?.(msg, "error", 5000);
     }
   };
@@ -272,9 +321,10 @@ const ProviderList: React.FC<ProviderListProps> = ({
 
                   <div className="flex items-center gap-2 ml-4">
                     {/* VS Code 按钮占位容器 - 始终保持空间，避免布局跳动 */}
-                    {appType === "codex" ? (
-                      <div className="w-[130px]">
-                        {provider.category !== "official" && isCurrent && (
+                    <div className="w-[130px]">
+                      {appType === "codex" &&
+                        provider.category !== "official" &&
+                        isCurrent && (
                           <button
                             onClick={() =>
                               vscodeAppliedFor === provider.id
@@ -298,8 +348,34 @@ const ProviderList: React.FC<ProviderListProps> = ({
                               : t("provider.applyToVSCode")}
                           </button>
                         )}
-                      </div>
-                    ) : null}
+
+                      {appType === "claude" &&
+                        provider.category !== "official" &&
+                        isCurrent && (
+                          <button
+                            onClick={() =>
+                              claudeApplied
+                                ? handleRemoveFromClaudePlugin()
+                                : handleApplyToClaudePlugin()
+                            }
+                            className={cn(
+                              "inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors w-full whitespace-nowrap justify-center",
+                              claudeApplied
+                                ? "border border-gray-300 text-gray-600 hover:border-red-300 hover:text-red-600 hover:bg-red-50 dark:border-gray-600 dark:text-gray-400 dark:hover:border-red-800 dark:hover:text-red-400 dark:hover:bg-red-900/20"
+                                : "border border-gray-300 text-gray-700 hover:border-green-300 hover:text-green-600 hover:bg-green-50 dark:border-gray-600 dark:text-gray-300 dark:hover:border-green-700 dark:hover:text-green-400 dark:hover:bg-green-900/20"
+                            )}
+                            title={
+                              claudeApplied
+                                ? t("provider.removeFromClaudePlugin")
+                                : t("provider.applyToClaudePlugin")
+                            }
+                          >
+                            {claudeApplied
+                              ? t("provider.removeFromClaudePlugin")
+                              : t("provider.applyToClaudePlugin")}
+                          </button>
+                        )}
+                    </div>
                     <button
                       onClick={() => onSwitch(provider.id)}
                       disabled={isCurrent}

@@ -102,6 +102,10 @@ function App() {
           if (data.appType === "codex" && isAutoSyncEnabled) {
             await syncCodexToVSCode(data.providerId, true);
           }
+
+          if (data.appType === "claude") {
+            await syncClaudePlugin(data.providerId, true);
+          }
         });
       } catch (error) {
         console.error(t("console.setupListenerFailed"), error);
@@ -240,6 +244,32 @@ function App() {
     }
   };
 
+  // 同步 Claude 插件配置（写入/移除固定 JSON）
+  const syncClaudePlugin = async (providerId: string, silent = false) => {
+    try {
+      const provider = providers[providerId];
+      if (!provider) return;
+      const isOfficial = provider.category === "official";
+      await window.api.applyClaudePluginConfig({ official: isOfficial });
+      if (!silent) {
+        showNotification(
+          isOfficial
+            ? t("notifications.removedFromClaudePlugin")
+            : t("notifications.appliedToClaudePlugin"),
+          "success",
+          2000,
+        );
+      }
+    } catch (error: any) {
+      console.error("同步 Claude 插件失败:", error);
+      if (!silent) {
+        const message =
+          error?.message || t("notifications.syncClaudePluginFailed");
+        showNotification(message, "error", 5000);
+      }
+    }
+  };
+
   const handleSwitchProvider = async (id: string) => {
     const success = await window.api.switchProvider(id, activeApp);
     if (success) {
@@ -257,6 +287,10 @@ function App() {
       // Codex: 切换供应商后，只在自动同步启用时同步到 VS Code
       if (activeApp === "codex" && isAutoSyncEnabled) {
         await syncCodexToVSCode(id, true); // silent模式，不显示通知
+      }
+
+      if (activeApp === "claude") {
+        await syncClaudePlugin(id, true);
       }
     } else {
       showNotification(t("notifications.switchFailed"), "error");
