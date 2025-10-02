@@ -5,6 +5,25 @@ All notable changes to CC Switch will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.0] - 2025-10-01
+
+### ✨ Features
+- Enable internationalization via i18next with a Chinese default and English fallback, plus an in-app language switcher
+- Add Claude plugin sync alongside the existing VS Code integration controls
+- Extend provider presets with optional API key URLs and updated models, including DeepSeek-V3.1-Terminus and Qwen3-Max
+- Support portable mode launches and enforce a single running instance to avoid conflicts
+
+### 🔧 Improvements
+- Allow minimizing the window to the system tray and add macOS Dock visibility management for tray workflows
+- Refresh the Settings modal with a scrollable layout, save icon, and cleaner language section
+- Smooth provider toggle states with consistent button widths/icons and prevent layout shifts when switching between Claude and Codex
+- Adjust the Windows MSI installer to target per-user LocalAppData and improve component tracking reliability
+
+### 🐛 Fixes
+- Remove the unnecessary OpenAI auth requirement from third-party provider configurations
+- Fix layout shifts while switching app types with Claude plugin sync enabled
+- Align Enable/In Use button states to avoid visual jank across VS Code and Codex views
+
 ## [3.3.0] - 2025-09-22
 
 ### ✨ Features
