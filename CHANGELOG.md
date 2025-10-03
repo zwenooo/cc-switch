@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ✨ Features
 - Enable internationalization via i18next with a Chinese default and English fallback, plus an in-app language switcher
-- Add Claude plugin sync alongside the existing VS Code integration controls
+- Add Claude plugin sync while retiring the legacy VS Code integration controls (Codex no longer requires settings.json edits)
 - Extend provider presets with optional API key URLs and updated models, including DeepSeek-V3.1-Terminus and Qwen3-Max
 - Support portable mode launches and enforce a single running instance to avoid conflicts
 
@@ -22,13 +22,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### 🐛 Fixes
 - Remove the unnecessary OpenAI auth requirement from third-party provider configurations
 - Fix layout shifts while switching app types with Claude plugin sync enabled
-- Align Enable/In Use button states to avoid visual jank across VS Code and Codex views
+- Align Enable/In Use button states to avoid visual jank across app views
 
 ## [3.3.0] - 2025-09-22
 
 ### ✨ Features
-- Add “Apply to VS Code / Remove from VS Code” actions on provider cards, writing settings for Code/Insiders/VSCodium variants
-- Enable VS Code auto-sync by default with window broadcast and tray hooks so Codex switches sync silently
+- Add “Apply to VS Code / Remove from VS Code” actions on provider cards, writing settings for Code/Insiders/VSCodium variants *(Removed in 3.4.x)*
+- Enable VS Code auto-sync by default with window broadcast and tray hooks so Codex switches sync silently *(Removed in 3.4.x)*
 - Extend the Codex provider wizard with display name, dedicated API key URL, and clearer guidance
 - Introduce shared common config snippets with JSON/TOML reuse, validation, and consistent error surfaces
 

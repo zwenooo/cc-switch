@@ -435,8 +435,6 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
             </div>
           </div>
 
-          {/* VS Code 自动同步设置已移除 */}
-
           {/* 配置文件位置 */}
           <div>
             <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">

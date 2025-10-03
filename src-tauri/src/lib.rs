@@ -7,7 +7,6 @@ mod migration;
 mod provider;
 mod settings;
 mod store;
-mod vscode;
 
 use store::AppState;
 use tauri::{
@@ -416,9 +415,6 @@ pub fn run() {
             commands::save_settings,
             commands::check_for_updates,
             commands::is_portable_mode,
-            commands::get_vscode_settings_status,
-            commands::read_vscode_settings,
-            commands::write_vscode_settings,
             commands::get_claude_plugin_status,
             commands::read_claude_plugin_config,
             commands::apply_claude_plugin_config,

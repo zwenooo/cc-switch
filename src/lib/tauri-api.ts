@@ -197,8 +197,6 @@ export const tauriAPI = {
     });
   },
 
-  // （保留空位，取消迁移提示）
-
   // 选择配置目录
   selectConfigDirectory: async (
     defaultPath?: string,
@@ -272,38 +270,6 @@ export const tauriAPI = {
       await invoke("open_app_config_folder");
     } catch (error) {
       console.error("打开应用配置文件夹失败:", error);
-    }
-  },
-
-  // VS Code: 获取 settings.json 状态
-  getVSCodeSettingsStatus: async (): Promise<{
-    exists: boolean;
-    path: string;
-    error?: string;
-  }> => {
-    try {
-      return await invoke("get_vscode_settings_status");
-    } catch (error) {
-      console.error("获取 VS Code 设置状态失败:", error);
-      return { exists: false, path: "", error: String(error) };
-    }
-  },
-
-  // VS Code: 读取 settings.json 文本
-  readVSCodeSettings: async (): Promise<string> => {
-    try {
-      return await invoke("read_vscode_settings");
-    } catch (error) {
-      throw new Error(`读取 VS Code 设置失败: ${String(error)}`);
-    }
-  },
-
-  // VS Code: 写回 settings.json 文本（不自动创建）
-  writeVSCodeSettings: async (content: string): Promise<boolean> => {
-    try {
-      return await invoke("write_vscode_settings", { content });
-    } catch (error) {
-      throw new Error(`写入 VS Code 设置失败: ${String(error)}`);
     }
   },
 
