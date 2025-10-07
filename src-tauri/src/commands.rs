@@ -9,7 +9,8 @@ use crate::app_config::AppType;
 use crate::claude_plugin;
 use crate::codex_config;
 use crate::config::{self, get_claude_settings_path, ConfigStatus};
-use crate::provider::Provider;
+use crate::provider::{Provider, ProviderMeta};
+use crate::speedtest;
 use crate::store::AppState;
 
 fn validate_provider_settings(app_type: &AppType, provider: &Provider) -> Result<(), String> {
@@ -724,4 +725,192 @@ pub async fn apply_claude_plugin_config(official: bool) -> Result<bool, String> 
 #[tauri::command]
 pub async fn is_claude_plugin_applied() -> Result<bool, String> {
     claude_plugin::is_claude_config_applied()
+}
+
+/// 测试第三方/自定义供应商端点的网络延迟
+#[tauri::command]
+pub async fn test_api_endpoints(
+    urls: Vec<String>,
+    timeout_secs: Option<u64>,
+) -> Result<Vec<speedtest::EndpointLatency>, String> {
+    let filtered: Vec<String> = urls
+        .into_iter()
+        .filter(|url| !url.trim().is_empty())
+        .collect();
+    speedtest::test_endpoints(filtered, timeout_secs).await
+}
+
+/// 获取自定义端点列表
+#[tauri::command]
+pub async fn get_custom_endpoints(
+    state: State<'_, crate::store::AppState>,
+    app_type: Option<AppType>,
+    app: Option<String>,
+    appType: Option<String>,
+    provider_id: Option<String>,
+    providerId: Option<String>,
+) -> Result<Vec<crate::settings::CustomEndpoint>, String> {
+    let app_type = app_type
+        .or_else(|| app.as_deref().map(|s| s.into()))
+        .or_else(|| appType.as_deref().map(|s| s.into()))
+        .unwrap_or(AppType::Claude);
+    let provider_id = provider_id
+        .or(providerId)
+        .ok_or_else(|| "缺少 providerId".to_string())?;
+    let mut cfg_guard = state
+        .config
+        .lock()
+        .map_err(|e| format!("获取锁失败: {}", e))?;
+
+    let manager = cfg_guard
+        .get_manager_mut(&app_type)
+        .ok_or_else(|| format!("应用类型不存在: {:?}", app_type))?;
+
+    let Some(provider) = manager.providers.get_mut(&provider_id) else {
+        return Ok(vec![]);
+    };
+
+    // 首选从 provider.meta 读取
+    let meta = provider.meta.get_or_insert_with(ProviderMeta::default);
+    if !meta.custom_endpoints.is_empty() {
+        let mut result: Vec<_> = meta.custom_endpoints.values().cloned().collect();
+        result.sort_by(|a, b| b.added_at.cmp(&a.added_at));
+        return Ok(result);
+    }
+
+    Ok(vec![])
+}
+
+/// 添加自定义端点
+#[tauri::command]
+pub async fn add_custom_endpoint(
+    state: State<'_, crate::store::AppState>,
+    app_type: Option<AppType>,
+    app: Option<String>,
+    appType: Option<String>,
+    provider_id: Option<String>,
+    providerId: Option<String>,
+    url: String,
+) -> Result<(), String> {
+    let app_type = app_type
+        .or_else(|| app.as_deref().map(|s| s.into()))
+        .or_else(|| appType.as_deref().map(|s| s.into()))
+        .unwrap_or(AppType::Claude);
+    let provider_id = provider_id
+        .or(providerId)
+        .ok_or_else(|| "缺少 providerId".to_string())?;
+    let normalized = url.trim().trim_end_matches('/').to_string();
+    if normalized.is_empty() {
+        return Err("URL 不能为空".to_string());
+    }
+
+    let mut cfg_guard = state
+        .config
+        .lock()
+        .map_err(|e| format!("获取锁失败: {}", e))?;
+    let manager = cfg_guard
+        .get_manager_mut(&app_type)
+        .ok_or_else(|| format!("应用类型不存在: {:?}", app_type))?;
+
+    let Some(provider) = manager.providers.get_mut(&provider_id) else {
+        return Err("供应商不存在或未选择".to_string());
+    };
+    let meta = provider.meta.get_or_insert_with(ProviderMeta::default);
+
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as i64;
+
+    let endpoint = crate::settings::CustomEndpoint {
+        url: normalized.clone(),
+        added_at: timestamp,
+        last_used: None,
+    };
+    meta.custom_endpoints.insert(normalized, endpoint);
+    drop(cfg_guard);
+    state.save()?;
+    Ok(())
+}
+
+/// 删除自定义端点
+#[tauri::command]
+pub async fn remove_custom_endpoint(
+    state: State<'_, crate::store::AppState>,
+    app_type: Option<AppType>,
+    app: Option<String>,
+    appType: Option<String>,
+    provider_id: Option<String>,
+    providerId: Option<String>,
+    url: String,
+) -> Result<(), String> {
+    let app_type = app_type
+        .or_else(|| app.as_deref().map(|s| s.into()))
+        .or_else(|| appType.as_deref().map(|s| s.into()))
+        .unwrap_or(AppType::Claude);
+    let provider_id = provider_id
+        .or(providerId)
+        .ok_or_else(|| "缺少 providerId".to_string())?;
+    let normalized = url.trim().trim_end_matches('/').to_string();
+
+    let mut cfg_guard = state
+        .config
+        .lock()
+        .map_err(|e| format!("获取锁失败: {}", e))?;
+    let manager = cfg_guard
+        .get_manager_mut(&app_type)
+        .ok_or_else(|| format!("应用类型不存在: {:?}", app_type))?;
+
+    if let Some(provider) = manager.providers.get_mut(&provider_id) {
+        if let Some(meta) = provider.meta.as_mut() {
+            meta.custom_endpoints.remove(&normalized);
+        }
+    }
+    drop(cfg_guard);
+    state.save()?;
+    Ok(())
+}
+
+/// 更新端点最后使用时间
+#[tauri::command]
+pub async fn update_endpoint_last_used(
+    state: State<'_, crate::store::AppState>,
+    app_type: Option<AppType>,
+    app: Option<String>,
+    appType: Option<String>,
+    provider_id: Option<String>,
+    providerId: Option<String>,
+    url: String,
+) -> Result<(), String> {
+    let app_type = app_type
+        .or_else(|| app.as_deref().map(|s| s.into()))
+        .or_else(|| appType.as_deref().map(|s| s.into()))
+        .unwrap_or(AppType::Claude);
+    let provider_id = provider_id
+        .or(providerId)
+        .ok_or_else(|| "缺少 providerId".to_string())?;
+    let normalized = url.trim().trim_end_matches('/').to_string();
+
+    let mut cfg_guard = state
+        .config
+        .lock()
+        .map_err(|e| format!("获取锁失败: {}", e))?;
+    let manager = cfg_guard
+        .get_manager_mut(&app_type)
+        .ok_or_else(|| format!("应用类型不存在: {:?}", app_type))?;
+
+    if let Some(provider) = manager.providers.get_mut(&provider_id) {
+        if let Some(meta) = provider.meta.as_mut() {
+            if let Some(endpoint) = meta.custom_endpoints.get_mut(&normalized) {
+                let timestamp = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis() as i64;
+                endpoint.last_used = Some(timestamp);
+            }
+        }
+    }
+    drop(cfg_guard);
+    state.save()?;
+    Ok(())
 }

@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from "react";
-import { Provider, ProviderCategory } from "../types";
+import React, { useState, useEffect, useRef, useMemo } from "react";
+import { Provider, ProviderCategory, CustomEndpoint } from "../types";
 import { AppType } from "../lib/tauri-api";
 import {
   updateCommonConfigSnippet,
@@ -11,6 +11,8 @@ import {
   hasTomlCommonConfigSnippet,
   validateJsonConfig,
   applyTemplateValues,
+  extractCodexBaseUrl,
+  setCodexBaseUrl as setCodexBaseUrlInConfig,
 } from "../utils/providerConfigUtils";
 import { providerPresets } from "../config/providerPresets";
 import type { TemplateValueConfig } from "../config/providerPresets";
@@ -24,8 +26,11 @@ import ApiKeyInput from "./ProviderForm/ApiKeyInput";
 import ClaudeConfigEditor from "./ProviderForm/ClaudeConfigEditor";
 import CodexConfigEditor from "./ProviderForm/CodexConfigEditor";
 import KimiModelSelector from "./ProviderForm/KimiModelSelector";
-import { X, AlertCircle, Save } from "lucide-react";
+import { X, AlertCircle, Save, Zap } from "lucide-react";
 import { isLinux } from "../lib/platform";
+import EndpointSpeedTest, {
+  EndpointCandidate,
+} from "./ProviderForm/EndpointSpeedTest";
 // 分类仅用于控制少量交互（如官方禁用 API Key），不显示介绍组件
 
 type TemplateValueMap = Record<string, TemplateValueConfig>;
@@ -36,11 +41,11 @@ const collectTemplatePaths = (
   source: unknown,
   templateKeys: string[],
   currentPath: TemplatePath = [],
-  acc: TemplatePath[] = [],
+  acc: TemplatePath[] = []
 ): TemplatePath[] => {
   if (typeof source === "string") {
     const hasPlaceholder = templateKeys.some((key) =>
-      source.includes(`\${${key}}`),
+      source.includes(`\${${key}}`)
     );
     if (hasPlaceholder) {
       acc.push([...currentPath]);
@@ -50,14 +55,14 @@ const collectTemplatePaths = (
 
   if (Array.isArray(source)) {
     source.forEach((item, index) =>
-      collectTemplatePaths(item, templateKeys, [...currentPath, index], acc),
+      collectTemplatePaths(item, templateKeys, [...currentPath, index], acc)
     );
     return acc;
   }
 
   if (source && typeof source === "object") {
     Object.entries(source).forEach(([key, value]) =>
-      collectTemplatePaths(value, templateKeys, [...currentPath, key], acc),
+      collectTemplatePaths(value, templateKeys, [...currentPath, key], acc)
     );
   }
 
@@ -76,7 +81,7 @@ const getValueAtPath = (source: any, path: TemplatePath) => {
 const setValueAtPath = (
   target: any,
   path: TemplatePath,
-  value: unknown,
+  value: unknown
 ): any => {
   if (path.length === 0) {
     return value;
@@ -114,7 +119,7 @@ const setValueAtPath = (
 const applyTemplateValuesToConfigString = (
   presetConfig: any,
   currentConfigString: string,
-  values: TemplateValueMap,
+  values: TemplateValueMap
 ) => {
   const replacedConfig = applyTemplateValues(presetConfig, values);
   const templateKeys = Object.keys(values);
@@ -204,14 +209,24 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   const [claudeSmallFastModel, setClaudeSmallFastModel] = useState("");
   const [baseUrl, setBaseUrl] = useState(""); // 新增：基础 URL 状态
   // 模板变量状态
-  const [templateValues, setTemplateValues] =
-    useState<Record<string, TemplateValueConfig>>({});
+  const [templateValues, setTemplateValues] = useState<
+    Record<string, TemplateValueConfig>
+  >({});
 
   // Codex 特有的状态
   const [codexAuth, setCodexAuthState] = useState("");
   const [codexConfig, setCodexConfigState] = useState("");
   const [codexApiKey, setCodexApiKey] = useState("");
+  const [codexBaseUrl, setCodexBaseUrl] = useState("");
   const [isCodexTemplateModalOpen, setIsCodexTemplateModalOpen] =
+    useState(false);
+  // 新建供应商：收集端点测速弹窗中的“自定义端点”，提交时一次性落盘到 meta.custom_endpoints
+  const [draftCustomEndpoints, setDraftCustomEndpoints] = useState<string[]>(
+    []
+  );
+  // 端点测速弹窗状态
+  const [isEndpointModalOpen, setIsEndpointModalOpen] = useState(false);
+  const [isCodexEndpointModalOpen, setIsCodexEndpointModalOpen] =
     useState(false);
   // -1 表示自定义，null 表示未选择，>= 0 表示预设索引
   const [selectedCodexPreset, setSelectedCodexPreset] = useState<number | null>(
@@ -223,8 +238,12 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     setCodexAuthError(validateCodexAuth(value));
   };
 
-  const setCodexConfig = (value: string) => {
-    setCodexConfigState(value);
+  const setCodexConfig = (value: string | ((prev: string) => string)) => {
+    setCodexConfigState((prev) =>
+      typeof value === "function"
+        ? (value as (input: string) => string)(prev)
+        : value
+    );
   };
 
   const setCodexCommonConfigSnippet = (value: string) => {
@@ -238,6 +257,10 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       if (typeof config === "object" && config !== null) {
         setCodexAuth(JSON.stringify(config.auth || {}, null, 2));
         setCodexConfig(config.config || "");
+        const initialBaseUrl = extractCodexBaseUrl(config.config);
+        if (initialBaseUrl) {
+          setCodexBaseUrl(initialBaseUrl);
+        }
         try {
           const auth = config.auth || {};
           if (auth && typeof auth.OPENAI_API_KEY === "string") {
@@ -292,6 +315,8 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     });
   const [codexCommonConfigError, setCodexCommonConfigError] = useState("");
   const isUpdatingFromCodexCommonConfig = useRef(false);
+  const isUpdatingBaseUrlRef = useRef(false);
+  const isUpdatingCodexBaseUrlRef = useRef(false);
 
   // -1 表示自定义，null 表示未选择，>= 0 表示预设索引
   const [selectedPreset, setSelectedPreset] = useState<number | null>(
@@ -436,6 +461,43 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     }
   }, [showPresets, isCodex, selectedPreset, selectedCodexPreset]);
 
+  // 与 JSON 配置保持基础 URL 同步（Claude 第三方/自定义）
+  useEffect(() => {
+    if (isCodex) return;
+    const currentCategory = category ?? initialData?.category;
+    if (currentCategory !== "third_party" && currentCategory !== "custom") {
+      return;
+    }
+    if (isUpdatingBaseUrlRef.current) {
+      return;
+    }
+    try {
+      const config = JSON.parse(formData.settingsConfig || "{}");
+      const envUrl: unknown = config?.env?.ANTHROPIC_BASE_URL;
+      if (typeof envUrl === "string" && envUrl && envUrl !== baseUrl) {
+        setBaseUrl(envUrl.trim());
+      }
+    } catch {
+      // ignore JSON parse errors
+    }
+  }, [isCodex, category, initialData, formData.settingsConfig, baseUrl]);
+
+  // 与 TOML 配置保持基础 URL 同步（Codex 第三方/自定义）
+  useEffect(() => {
+    if (!isCodex) return;
+    const currentCategory = category ?? initialData?.category;
+    if (currentCategory !== "third_party" && currentCategory !== "custom") {
+      return;
+    }
+    if (isUpdatingCodexBaseUrlRef.current) {
+      return;
+    }
+    const extracted = extractCodexBaseUrl(codexConfig) || "";
+    if (extracted !== codexBaseUrl) {
+      setCodexBaseUrl(extracted);
+    }
+  }, [isCodex, category, initialData, codexConfig, codexBaseUrl]);
+
   // 同步本地存储的通用配置片段
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -543,13 +605,31 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       }
     }
 
-    onSubmit({
+    // 构造基础提交数据
+    const basePayload: Omit<Provider, "id"> = {
       name: formData.name,
       websiteUrl: formData.websiteUrl,
       settingsConfig,
       // 仅在用户选择了预设或手动选择“自定义”时持久化分类
       ...(category ? { category } : {}),
-    });
+    };
+
+    // 若为“新建供应商”，且已在弹窗中添加了自定义端点，则随提交一并落盘
+    if (!initialData && draftCustomEndpoints.length > 0) {
+      const now = Date.now();
+      const customMap: Record<string, CustomEndpoint> = {};
+      for (const raw of draftCustomEndpoints) {
+        const url = raw.trim().replace(/\/+$/, "");
+        if (!url) continue;
+        if (!customMap[url]) {
+          customMap[url] = { url, addedAt: now };
+        }
+      }
+      onSubmit({ ...basePayload, meta: { custom_endpoints: customMap } });
+      return;
+    }
+
+    onSubmit(basePayload);
   };
 
   const handleChange = (
@@ -692,7 +772,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
             ...config,
             editorValue: config.editorValue
               ? config.editorValue
-              : config.defaultValue ?? "",
+              : (config.defaultValue ?? ""),
           },
         ])
       );
@@ -721,7 +801,6 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
 
     // 清空 API Key 输入框，让用户重新输入
     setApiKey("");
-    setBaseUrl(""); // 清空基础 URL
 
     // 同步通用配置状态
     const hasCommon = hasCommonConfigSnippet(configString, commonConfigSnippet);
@@ -734,6 +813,11 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       if (config.env) {
         setClaudeModel(config.env.ANTHROPIC_MODEL || "");
         setClaudeSmallFastModel(config.env.ANTHROPIC_SMALL_FAST_MODEL || "");
+        const presetBaseUrl =
+          typeof config.env.ANTHROPIC_BASE_URL === "string"
+            ? config.env.ANTHROPIC_BASE_URL
+            : "";
+        setBaseUrl(presetBaseUrl);
 
         // 如果是 Kimi 预设，同步 Kimi 模型选择
         if (preset.name?.includes("Kimi")) {
@@ -745,6 +829,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       } else {
         setClaudeModel("");
         setClaudeSmallFastModel("");
+        setBaseUrl("");
       }
     }
   };
@@ -791,6 +876,10 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     const authString = JSON.stringify(preset.auth || {}, null, 2);
     setCodexAuth(authString);
     setCodexConfig(preset.config || "");
+    const presetBaseUrl = extractCodexBaseUrl(preset.config);
+    if (presetBaseUrl) {
+      setCodexBaseUrl(presetBaseUrl);
+    }
 
     setFormData((prev) => ({
       ...prev,
@@ -828,6 +917,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     setCodexAuth(JSON.stringify(customAuth, null, 2));
     setCodexConfig(customConfig);
     setCodexApiKey("");
+    setCodexBaseUrl("https://your-api-endpoint.com/v1");
     setCategory("custom");
   };
 
@@ -851,19 +941,40 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
 
   // 处理基础 URL 变化
   const handleBaseUrlChange = (url: string) => {
-    setBaseUrl(url);
+    const sanitized = url.trim().replace(/\/+$/, "");
+    setBaseUrl(sanitized);
+    isUpdatingBaseUrlRef.current = true;
 
     try {
       const config = JSON.parse(formData.settingsConfig || "{}");
       if (!config.env) {
         config.env = {};
       }
-      config.env.ANTHROPIC_BASE_URL = url.trim();
+      config.env.ANTHROPIC_BASE_URL = sanitized;
 
       updateSettingsConfigValue(JSON.stringify(config, null, 2));
     } catch {
       // ignore
+    } finally {
+      setTimeout(() => {
+        isUpdatingBaseUrlRef.current = false;
+      }, 0);
     }
+  };
+
+  const handleCodexBaseUrlChange = (url: string) => {
+    const sanitized = url.trim().replace(/\/+$/, "");
+    setCodexBaseUrl(sanitized);
+
+    if (!sanitized) {
+      return;
+    }
+
+    isUpdatingCodexBaseUrlRef.current = true;
+    setCodexConfig((prev) => setCodexBaseUrlInConfig(prev, sanitized));
+    setTimeout(() => {
+      isUpdatingCodexBaseUrlRef.current = false;
+    }, 0);
   };
 
   // Codex: 处理 API Key 输入并写回 auth.json
@@ -971,6 +1082,12 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       setUseCodexCommonConfig(hasCommon);
     }
     setCodexConfig(value);
+    if (!isUpdatingCodexBaseUrlRef.current) {
+      const extracted = extractCodexBaseUrl(value) || "";
+      if (extracted !== codexBaseUrl) {
+        setCodexBaseUrl(extracted);
+      }
+    }
   };
 
   // 根据当前配置决定是否展示 API Key 输入框
@@ -978,6 +1095,10 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   const showApiKey =
     selectedPreset !== null ||
     (!showPresets && hasApiKeyField(formData.settingsConfig));
+
+  const normalizedCategory = category ?? initialData?.category;
+  const shouldShowSpeedTest =
+    normalizedCategory === "third_party" || normalizedCategory === "custom";
 
   const selectedTemplatePreset =
     !isCodex &&
@@ -989,9 +1110,9 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
 
   const templateValueEntries: Array<[string, TemplateValueConfig]> =
     selectedTemplatePreset?.templateValues
-      ? (Object.entries(
-          selectedTemplatePreset.templateValues
-        ) as Array<[string, TemplateValueConfig]>)
+      ? (Object.entries(selectedTemplatePreset.templateValues) as Array<
+          [string, TemplateValueConfig]
+        >)
       : [];
 
   // 判断当前选中的预设是否是官方
@@ -1019,8 +1140,88 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   // 综合判断是否应该显示 Kimi 模型选择器
   const shouldShowKimiSelector = isKimiPreset || isEditingKimi;
 
-  // 判断是否显示基础 URL 输入框（仅自定义模式显示）
-  const showBaseUrlInput = selectedPreset === -1 && !isCodex;
+  const claudeSpeedTestEndpoints = useMemo<EndpointCandidate[]>(() => {
+    if (isCodex) return [];
+    const map = new Map<string, EndpointCandidate>();
+    const add = (url?: string) => {
+      if (!url) return;
+      const sanitized = url.trim().replace(/\/+$/, "");
+      if (!sanitized || map.has(sanitized)) return;
+      map.set(sanitized, { url: sanitized });
+    };
+
+    if (baseUrl) {
+      add(baseUrl);
+    }
+
+    if (initialData && typeof initialData.settingsConfig === "object") {
+      const envUrl = (initialData.settingsConfig as any)?.env
+        ?.ANTHROPIC_BASE_URL;
+      if (typeof envUrl === "string") {
+        add(envUrl);
+      }
+    }
+
+    if (
+      selectedPreset !== null &&
+      selectedPreset >= 0 &&
+      selectedPreset < providerPresets.length
+    ) {
+      const preset = providerPresets[selectedPreset];
+      const presetEnv = (preset.settingsConfig as any)?.env?.ANTHROPIC_BASE_URL;
+      if (typeof presetEnv === "string") {
+        add(presetEnv);
+      }
+      // 合并预设内置的请求地址候选
+      if (Array.isArray((preset as any).endpointCandidates)) {
+        ((preset as any).endpointCandidates as string[]).forEach((u) => add(u));
+      }
+    }
+
+    return Array.from(map.values());
+  }, [isCodex, baseUrl, initialData, selectedPreset]);
+
+  const codexSpeedTestEndpoints = useMemo<EndpointCandidate[]>(() => {
+    if (!isCodex) return [];
+    const map = new Map<string, EndpointCandidate>();
+    const add = (url?: string) => {
+      if (!url) return;
+      const sanitized = url.trim().replace(/\/+$/, "");
+      if (!sanitized || map.has(sanitized)) return;
+      map.set(sanitized, { url: sanitized });
+    };
+
+    if (codexBaseUrl) {
+      add(codexBaseUrl);
+    }
+
+    const initialCodexConfig =
+      initialData && typeof initialData.settingsConfig?.config === "string"
+        ? (initialData.settingsConfig as any).config
+        : "";
+    const existing = extractCodexBaseUrl(initialCodexConfig);
+    if (existing) {
+      add(existing);
+    }
+
+    if (
+      selectedCodexPreset !== null &&
+      selectedCodexPreset >= 0 &&
+      selectedCodexPreset < codexProviderPresets.length
+    ) {
+      const preset = codexProviderPresets[selectedCodexPreset];
+      const presetBase = extractCodexBaseUrl(preset?.config || "");
+      if (presetBase) {
+        add(presetBase);
+      }
+      // 合并预设内置的请求地址候选
+      if (Array.isArray((preset as any)?.endpointCandidates)) {
+        ((preset as any).endpointCandidates as string[]).forEach((u) => add(u));
+      }
+    }
+
+    return Array.from(map.values());
+  }, [isCodex, codexBaseUrl, initialData, selectedCodexPreset]);
 
   // 判断是否显示"获取 API Key"链接（国产官方、聚合站和第三方显示）
   const shouldShowApiKeyLink =
@@ -1168,13 +1369,26 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        // 若有子弹窗（端点测速/模板向导）处于打开状态，则交由子弹窗自身处理，避免级联关闭
+        if (
+          isEndpointModalOpen ||
+          isCodexEndpointModalOpen ||
+          isCodexTemplateModalOpen
+        ) {
+          return;
+        }
         e.preventDefault();
         onClose();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  }, [
+    onClose,
+    isEndpointModalOpen,
+    isCodexEndpointModalOpen,
+    isCodexTemplateModalOpen,
+  ]);
 
   return (
     <div
@@ -1324,83 +1538,95 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
               </div>
             )}
 
-            {!isCodex && selectedTemplatePreset && templateValueEntries.length > 0 && (
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                  参数配置 - {selectedTemplatePreset.name.trim()} *
-                </h3>
-                <div className="space-y-4">
-                  {templateValueEntries.map(([key, config]) => (
-                    <div key={key} className="space-y-2">
-                      <label className="sr-only" htmlFor={`template-${key}`}>
-                        {config.label}
-                      </label>
-                      <input
-                        id={`template-${key}`}
-                        type="text"
-                        required
-                        placeholder={`${config.label} *`}
-                        value={
-                          templateValues[key]?.editorValue ??
-                          config.editorValue ??
-                          config.defaultValue ??
-                          ""
-                        }
-                        onChange={(e) => {
-                          const newValue = e.target.value;
-                          setTemplateValues((prev) => {
-                            const prevEntry = prev[key];
-                            const nextEntry: TemplateValueConfig = {
-                              ...config,
-                              ...(prevEntry ?? {}),
-                              editorValue: newValue,
-                            };
-                            const nextValues: TemplateValueMap = {
-                              ...prev,
-                              [key]: nextEntry,
-                            };
+            {!isCodex &&
+              selectedTemplatePreset &&
+              templateValueEntries.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    参数配置 - {selectedTemplatePreset.name.trim()} *
+                  </h3>
+                  <div className="space-y-4">
+                    {templateValueEntries.map(([key, config]) => (
+                      <div key={key} className="space-y-2">
+                        <label className="sr-only" htmlFor={`template-${key}`}>
+                          {config.label}
+                        </label>
+                        <input
+                          id={`template-${key}`}
+                          type="text"
+                          required
+                          placeholder={`${config.label} *`}
+                          value={
+                            templateValues[key]?.editorValue ??
+                            config.editorValue ??
+                            config.defaultValue ??
+                            ""
+                          }
+                          onChange={(e) => {
+                            const newValue = e.target.value;
+                            setTemplateValues((prev) => {
+                              const prevEntry = prev[key];
+                              const nextEntry: TemplateValueConfig = {
+                                ...config,
+                                ...(prevEntry ?? {}),
+                                editorValue: newValue,
+                              };
+                              const nextValues: TemplateValueMap = {
+                                ...prev,
+                                [key]: nextEntry,
+                              };
 
-                            if (selectedTemplatePreset) {
-                              try {
-                                const configString = applyTemplateValuesToConfigString(
-                                  selectedTemplatePreset.settingsConfig,
-                                  formData.settingsConfig,
-                                  nextValues
-                                );
-                                setFormData((prevForm) => ({
-                                  ...prevForm,
-                                  settingsConfig: configString,
-                                }));
-                                setSettingsConfigError(
-                                  validateSettingsConfig(configString)
-                                );
-                              } catch (err) {
-                                console.error("更新模板值失败:", err);
+                              if (selectedTemplatePreset) {
+                                try {
+                                  const configString =
+                                    applyTemplateValuesToConfigString(
+                                      selectedTemplatePreset.settingsConfig,
+                                      formData.settingsConfig,
+                                      nextValues
+                                    );
+                                  setFormData((prevForm) => ({
+                                    ...prevForm,
+                                    settingsConfig: configString,
+                                  }));
+                                  setSettingsConfigError(
+                                    validateSettingsConfig(configString)
+                                  );
+                                } catch (err) {
+                                  console.error("更新模板值失败:", err);
+                                }
                               }
-                            }
 
-                            return nextValues;
-                          });
-                        }}
-                        aria-label={config.label}
-                        autoComplete="off"
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                  ))}
+                              return nextValues;
+                            });
+                          }}
+                          aria-label={config.label}
+                          autoComplete="off"
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* 基础 URL 输入框 - 仅在自定义模式下显示 */}
-            {!isCodex && showBaseUrlInput && (
+            {!isCodex && shouldShowSpeedTest && (
               <div className="space-y-2">
-                <label
-                  htmlFor="baseUrl"
-                  className="block text-sm font-medium text-gray-900 dark:text-gray-100"
-                >
-                  请求地址
-                </label>
+                <div className="flex items-center justify-between">
+                  <label
+                    htmlFor="baseUrl"
+                    className="block text-sm font-medium text-gray-900 dark:text-gray-100"
+                  >
+                    请求地址
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsEndpointModalOpen(true)}
+                    className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+                  >
+                    <Zap className="h-3.5 w-3.5" />
+                    管理与测速
+                  </button>
+                </div>
                 <input
                   type="url"
                   id="baseUrl"
@@ -1416,6 +1642,20 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                   </p>
                 </div>
               </div>
+            )}
+
+            {/* 端点测速弹窗 - Claude */}
+            {!isCodex && shouldShowSpeedTest && isEndpointModalOpen && (
+              <EndpointSpeedTest
+                appType={appType}
+                providerId={initialData?.id}
+                value={baseUrl}
+                onChange={handleBaseUrlChange}
+                initialEndpoints={claudeSpeedTestEndpoints}
+                visible={isEndpointModalOpen}
+                onClose={() => setIsEndpointModalOpen(false)}
+                onCustomEndpointsChange={setDraftCustomEndpoints}
+              />
             )}
 
             {!isCodex && shouldShowKimiSelector && (
@@ -1460,6 +1700,50 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                   </div>
                 )}
               </div>
+            )}
+
+            {isCodex && shouldShowSpeedTest && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label
+                    htmlFor="codexBaseUrl"
+                    className="block text-sm font-medium text-gray-900 dark:text-gray-100"
+                  >
+                    请求地址
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsCodexEndpointModalOpen(true)}
+                    className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+                  >
+                    <Zap className="h-3.5 w-3.5" />
+                    管理与测速
+                  </button>
+                </div>
+                <input
+                  type="url"
+                  id="codexBaseUrl"
+                  value={codexBaseUrl}
+                  onChange={(e) => handleCodexBaseUrlChange(e.target.value)}
+                  placeholder="https://your-api-endpoint.com/v1"
+                  autoComplete="off"
+                  className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:focus:ring-blue-400/20 focus:border-blue-500 dark:focus:border-blue-400 transition-colors"
+                />
+              </div>
+            )}
+
+            {/* 端点测速弹窗 - Codex */}
+            {isCodex && shouldShowSpeedTest && isCodexEndpointModalOpen && (
+              <EndpointSpeedTest
+                appType={appType}
+                providerId={initialData?.id}
+                value={codexBaseUrl}
+                onChange={handleCodexBaseUrlChange}
+                initialEndpoints={codexSpeedTestEndpoints}
+                visible={isCodexEndpointModalOpen}
+                onClose={() => setIsCodexEndpointModalOpen(false)}
+                onCustomEndpointsChange={setDraftCustomEndpoints}
+              />
             )}
 
             {/* Claude 或 Codex 的配置部分 */}

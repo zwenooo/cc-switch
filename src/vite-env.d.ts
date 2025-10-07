@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import { Provider, Settings } from "./types";
+import { Provider, Settings, CustomEndpoint } from "./types";
 import { AppType } from "./lib/tauri-api";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 
@@ -61,6 +61,35 @@ declare global {
         official: boolean;
       }) => Promise<boolean>;
       isClaudePluginApplied: () => Promise<boolean>;
+      testApiEndpoints: (
+        urls: string[],
+        options?: { timeoutSecs?: number },
+      ) => Promise<Array<{
+        url: string;
+        latency: number | null;
+        status?: number;
+        error?: string;
+      }>>;
+      // 自定义端点管理
+      getCustomEndpoints: (
+        appType: AppType,
+        providerId: string
+      ) => Promise<CustomEndpoint[]>;
+      addCustomEndpoint: (
+        appType: AppType,
+        providerId: string,
+        url: string
+      ) => Promise<void>;
+      removeCustomEndpoint: (
+        appType: AppType,
+        providerId: string,
+        url: string
+      ) => Promise<void>;
+      updateEndpointLastUsed: (
+        appType: AppType,
+        providerId: string,
+        url: string
+      ) => Promise<void>;
     };
     platform: {
       isMac: boolean;

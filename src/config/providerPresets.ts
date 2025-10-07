@@ -20,6 +20,8 @@ export interface ProviderPreset {
   category?: ProviderCategory; // 新增：分类
   // 新增：模板变量定义，用于动态替换配置中的值
   templateValues?: Record<string, TemplateValueConfig>; // editorValue 存储编辑器中的实时输入值
+  // 新增：请求地址候选列表（用于地址管理/测速）
+  endpointCandidates?: string[];
 }
 
 export const providerPresets: ProviderPreset[] = [
@@ -52,6 +54,9 @@ export const providerPresets: ProviderPreset[] = [
       env: {
         ANTHROPIC_BASE_URL: "https://open.bigmodel.cn/api/anthropic",
         ANTHROPIC_AUTH_TOKEN: "",
+        // 兼容旧键名，保持前端读取一致
+        ANTHROPIC_MODEL: "GLM-4.6",
+        ANTHROPIC_SMALL_FAST_MODEL: "glm-4.5-air",
         ANTHROPIC_DEFAULT_HAIKU_MODEL: "glm-4.5-air",
         ANTHROPIC_DEFAULT_SONNET_MODEL: "glm-4.6",
         ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-4.6",
@@ -109,6 +114,14 @@ export const providerPresets: ProviderPreset[] = [
         ANTHROPIC_AUTH_TOKEN: "",
       },
     },
+    // 请求地址候选（用于地址管理/测速）
+    endpointCandidates: [
+      "https://api.packycode.com",
+      "https://api-hk-cn2.packycode.com",
+      "https://api-hk-g.packycode.com",
+      "https://api-us-cn2.packycode.com",
+      "https://api-cf-pro.packycode.com",
+    ],
     category: "third_party",
   },
   {

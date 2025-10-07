@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
-import { Provider, Settings } from "../types";
+import { Provider, Settings, CustomEndpoint } from "../types";
 
 // 应用类型
 export type AppType = "claude" | "codex";
@@ -16,6 +16,13 @@ interface ConfigStatus {
 interface ImportResult {
   success: boolean;
   message?: string;
+}
+
+export interface EndpointLatencyResult {
+  url: string;
+  latency: number | null;
+  status?: number;
+  error?: string;
 }
 
 // Tauri API 封装，提供统一的全局 API 接口
@@ -132,40 +139,22 @@ export const tauriAPI = {
     }
   },
 
-  // 获取 Claude Code 配置状态
-  getClaudeConfigStatus: async (): Promise<ConfigStatus> => {
-    try {
-      return await invoke("get_claude_config_status");
-    } catch (error) {
-      console.error("获取配置状态失败:", error);
-      return {
-        exists: false,
-        path: "",
-        error: String(error),
-      };
-    }
-  },
-
-  // 获取应用配置状态（通用）
-  getConfigStatus: async (app?: AppType): Promise<ConfigStatus> => {
-    try {
-      return await invoke("get_config_status", { app_type: app, app });
-    } catch (error) {
-      console.error("获取配置状态失败:", error);
-      return {
-        exists: false,
-        path: "",
-        error: String(error),
-      };
-    }
-  },
-
-  // 打开配置文件夹
+  // 打开配置目录（按应用类型）
   openConfigFolder: async (app?: AppType): Promise<void> => {
     try {
       await invoke("open_config_folder", { app_type: app, app });
     } catch (error) {
-      console.error("打开配置文件夹失败:", error);
+      console.error("打开配置目录失败:", error);
+    }
+  },
+
+  // 选择配置目录（可选默认路径）
+  selectConfigDirectory: async (defaultPath?: string): Promise<string | null> => {
+    try {
+      return await invoke("pick_directory", { defaultPath });
+    } catch (error) {
+      console.error("选择配置目录失败:", error);
+      return null;
     }
   },
 
@@ -181,47 +170,20 @@ export const tauriAPI = {
   // 更新托盘菜单
   updateTrayMenu: async (): Promise<boolean> => {
     try {
-      return await invoke("update_tray_menu");
+      return await invoke<boolean>("update_tray_menu");
     } catch (error) {
       console.error("更新托盘菜单失败:", error);
       return false;
     }
   },
 
-  // 监听供应商切换事件
-  onProviderSwitched: async (
-    callback: (data: { appType: string; providerId: string }) => void,
-  ): Promise<UnlistenFn> => {
-    return await listen("provider-switched", (event) => {
-      callback(event.payload as { appType: string; providerId: string });
-    });
-  },
-
-  // 选择配置目录
-  selectConfigDirectory: async (
-    defaultPath?: string,
-  ): Promise<string | null> => {
-    try {
-      const sanitized =
-        defaultPath && defaultPath.trim() !== ""
-          ? defaultPath
-          : undefined;
-      return await invoke<string | null>("pick_directory", {
-        defaultPath: sanitized,
-      });
-    } catch (error) {
-      console.error("选择配置目录失败:", error);
-      return null;
-    }
-  },
-
-  // 获取设置
+  // 获取应用设置
   getSettings: async (): Promise<Settings> => {
     try {
       return await invoke("get_settings");
     } catch (error) {
       console.error("获取设置失败:", error);
-      return { showInTray: true, minimizeToTrayOnClose: true };
+      throw error;
     }
   },
 
@@ -313,6 +275,112 @@ export const tauriAPI = {
     }
   },
 
+  // ours: 第三方/自定义供应商——测速与端点管理
+  // 第三方/自定义供应商：批量测试端点延迟
+  testApiEndpoints: async (
+    urls: string[],
+    options?: { timeoutSecs?: number },
+  ): Promise<EndpointLatencyResult[]> => {
+    try {
+      return await invoke<EndpointLatencyResult[]>("test_api_endpoints", {
+        urls,
+        timeout_secs: options?.timeoutSecs,
+      });
+    } catch (error) {
+      console.error("测速调用失败:", error);
+      throw error;
+    }
+  },
+
+  // 获取自定义端点列表
+  getCustomEndpoints: async (
+    appType: AppType,
+    providerId: string,
+  ): Promise<CustomEndpoint[]> => {
+    try {
+      return await invoke<CustomEndpoint[]>("get_custom_endpoints", {
+        // 兼容不同后端参数命名
+        app_type: appType,
+        app: appType,
+        appType: appType,
+        provider_id: providerId,
+        providerId: providerId,
+      });
+    } catch (error) {
+      console.error("获取自定义端点列表失败:", error);
+      return [];
+    }
+  },
+
+  // 添加自定义端点
+  addCustomEndpoint: async (
+    appType: AppType,
+    providerId: string,
+    url: string,
+  ): Promise<void> => {
+    try {
+      await invoke("add_custom_endpoint", {
+        app_type: appType,
+        app: appType,
+        appType: appType,
+        provider_id: providerId,
+        providerId: providerId,
+        url,
+      });
+    } catch (error) {
+      console.error("添加自定义端点失败:", error);
+      // 尽量抛出可读信息
+      if (error instanceof Error) {
+        throw error;
+      } else {
+        throw new Error(String(error));
+      }
+    }
+  },
+
+  // 删除自定义端点
+  removeCustomEndpoint: async (
+    appType: AppType,
+    providerId: string,
+    url: string,
+  ): Promise<void> => {
+    try {
+      await invoke("remove_custom_endpoint", {
+        app_type: appType,
+        app: appType,
+        appType: appType,
+        provider_id: providerId,
+        providerId: providerId,
+        url,
+      });
+    } catch (error) {
+      console.error("删除自定义端点失败:", error);
+      throw error;
+    }
+  },
+
+  // 更新端点最后使用时间
+  updateEndpointLastUsed: async (
+    appType: AppType,
+    providerId: string,
+    url: string,
+  ): Promise<void> => {
+    try {
+      await invoke("update_endpoint_last_used", {
+        app_type: appType,
+        app: appType,
+        appType: appType,
+        provider_id: providerId,
+        providerId: providerId,
+        url,
+      });
+    } catch (error) {
+      console.error("更新端点最后使用时间失败:", error);
+      // 不抛出错误，因为这不是关键操作
+    }
+  },
+
+  // theirs: 导入导出与文件对话框
   // 导出配置到文件
   exportConfigToFile: async (filePath: string): Promise<{
     success: boolean;
@@ -359,6 +427,21 @@ export const tauriAPI = {
       console.error("打开文件对话框失败:", error);
       return null;
     }
+  },
+
+  // 监听供应商切换事件
+  onProviderSwitched: async (
+    callback: (data: { appType: string; providerId: string }) => void,
+  ): Promise<UnlistenFn> => {
+    const unlisten = await listen("provider-switched", (event) => {
+      try {
+        // 事件 payload 形如 { appType: string, providerId: string }
+        callback(event.payload as any);
+      } catch (e) {
+        console.error("处理 provider-switched 事件失败: ", e);
+      }
+    });
+    return unlisten;
   },
 };
 
