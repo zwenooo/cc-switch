@@ -369,7 +369,7 @@ export default function SettingsModal({ onClose, onImportSuccess }: SettingsModa
         alert(`${t("settings.configExported")}\n${result.filePath}`);
       }
     } catch (error) {
-      console.error("导出配置失败:", error);
+      console.error(t("settings.exportFailedError"), error);
       alert(`${t("settings.exportFailed")}: ${error}`);
     }
   };
@@ -384,7 +384,7 @@ export default function SettingsModal({ onClose, onImportSuccess }: SettingsModa
         setImportError('');
       }
     } catch (error) {
-      console.error('选择文件失败:', error);
+      console.error(t("settings.selectFileFailed") + ":", error);
       alert(`${t("settings.selectFileFailed")}: ${error}`);
     }
   };

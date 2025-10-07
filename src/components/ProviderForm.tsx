@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { Provider, ProviderCategory, CustomEndpoint } from "../types";
 import { AppType } from "../lib/tauri-api";
 import {
@@ -190,6 +191,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
   onSubmit,
   onClose,
 }) => {
+  const { t } = useTranslation();
   // 对于 Codex，需要分离 auth 和 config
   const isCodex = appType === "codex";
 
@@ -331,21 +333,20 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     useState("");
 
   const validateSettingsConfig = (value: string): string => {
-    return validateJsonConfig(value, "配置内容");
+    const err = validateJsonConfig(value, "配置内容");
+    return err ? t("providerForm.configJsonError") : "";
   };
 
   const validateCodexAuth = (value: string): string => {
-    if (!value.trim()) {
-      return "";
-    }
+    if (!value.trim()) return "";
     try {
       const parsed = JSON.parse(value);
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-        return "auth.json 必须是 JSON 对象";
+        return t("providerForm.authJsonRequired");
       }
       return "";
     } catch {
-      return "auth.json 格式错误，请检查JSON语法";
+      return t("providerForm.authJsonError");
     }
   };
 
@@ -520,7 +521,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     setError("");
 
     if (!formData.name) {
-      setError("请填写供应商名称");
+      setError(t("providerForm.fillSupplierName"));
       return;
     }
 
@@ -535,7 +536,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       }
       // Codex: 仅要求 auth.json 必填；config.toml 可为空
       if (!codexAuth.trim()) {
-        setError("请填写 auth.json 配置");
+        setError(t("providerForm.fillAuthJson"));
         return;
       }
 
@@ -552,7 +553,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                 ? authJson.OPENAI_API_KEY.trim()
                 : "";
             if (!key) {
-              setError("请填写 OPENAI_API_KEY");
+              setError(t("providerForm.fillApiKey"));
               return;
             }
           }
@@ -563,7 +564,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
           config: codexConfig ?? "",
         };
       } catch (err) {
-        setError("auth.json 格式错误，请检查JSON语法");
+        setError(t("providerForm.authJsonError"));
         return;
       }
     } else {
@@ -572,7 +573,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       );
       setSettingsConfigError(currentSettingsError);
       if (currentSettingsError) {
-        setError(currentSettingsError);
+        setError(t("providerForm.configJsonError"));
         return;
       }
 
@@ -586,21 +587,21 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
             ""
           ).trim();
           if (!resolvedValue) {
-            setError(`请填写 ${config.label}`);
+            setError(t("providerForm.fillParameter", { label: config.label }));
             return;
           }
         }
       }
       // Claude: 原有逻辑
       if (!formData.settingsConfig.trim()) {
-        setError("请填写配置内容");
+        setError(t("providerForm.fillConfigContent"));
         return;
       }
 
       try {
         settingsConfig = JSON.parse(formData.settingsConfig);
       } catch (err) {
-        setError("配置JSON格式错误，请检查语法");
+        setError(t("providerForm.configJsonError"));
         return;
       }
     }
@@ -669,7 +670,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
     if (snippetError) {
       setCommonConfigError(snippetError);
       if (snippetError.includes("配置 JSON 解析失败")) {
-        setSettingsConfigError("配置JSON格式错误，请检查语法");
+        setSettingsConfigError(t("providerForm.configJsonError"));
       }
       setUseCommonConfig(false);
       return;
@@ -723,7 +724,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       if (removeResult.error) {
         setCommonConfigError(removeResult.error);
         if (removeResult.error.includes("配置 JSON 解析失败")) {
-          setSettingsConfigError("配置JSON格式错误，请检查语法");
+          setSettingsConfigError(t("providerForm.configJsonError"));
         }
         return;
       }
@@ -736,7 +737,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       if (addResult.error) {
         setCommonConfigError(addResult.error);
         if (addResult.error.includes("配置 JSON 解析失败")) {
-          setSettingsConfigError("配置JSON格式错误，请检查语法");
+          setSettingsConfigError(t("providerForm.configJsonError"));
         }
         return;
       }
@@ -1456,13 +1457,13 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                 onCustomClick={handleCodexCustomClick}
                 renderCustomDescription={() => (
                   <>
-                    手动配置供应商，需要填写完整的配置信息，或者
+                    {t("providerForm.manualConfig")}
                     <button
                       type="button"
                       onClick={() => setIsCodexTemplateModalOpen(true)}
                       className="text-blue-400 dark:text-blue-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors ml-1"
                     >
-                      使用配置向导
+                      {t("providerForm.useConfigWizard")}
                     </button>
                   </>
                 )}
@@ -1474,7 +1475,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                 htmlFor="name"
                 className="block text-sm font-medium text-gray-900 dark:text-gray-100"
               >
-                供应商名称 *
+                {t("providerForm.supplierNameRequired")}
               </label>
               <input
                 type="text"
@@ -1482,7 +1483,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                 name="name"
                 value={formData.name}
                 onChange={handleChange}
-                placeholder="例如：Anthropic 官方"
+                placeholder={t("providerForm.supplierNamePlaceholder")}
                 required
                 autoComplete="off"
                 className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:focus:ring-blue-400/20 focus:border-blue-500 dark:focus:border-blue-400 transition-colors"
@@ -1494,7 +1495,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                 htmlFor="websiteUrl"
                 className="block text-sm font-medium text-gray-900 dark:text-gray-100"
               >
-                官网地址
+                {t("providerForm.websiteLabel")}
               </label>
               <input
                 type="url"
@@ -1502,7 +1503,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                 name="websiteUrl"
                 value={formData.websiteUrl}
                 onChange={handleChange}
-                placeholder="https://example.com（可选）"
+                placeholder={t("providerForm.websiteUrlPlaceholder")}
                 autoComplete="off"
                 className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:focus:ring-blue-400/20 focus:border-blue-500 dark:focus:border-blue-400 transition-colors"
               />
@@ -1516,10 +1517,10 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                   required={!isOfficialPreset}
                   placeholder={
                     isOfficialPreset
-                      ? "官方登录无需填写 API Key，直接保存即可"
+                      ? t("providerForm.officialNoApiKey")
                       : shouldShowKimiSelector
-                        ? "填写后可获取模型列表"
-                        : "只需要填这里，下方配置会自动填充"
+                        ? t("providerForm.kimiApiKeyHint")
+                        : t("providerForm.apiKeyAutoFill")
                   }
                   disabled={isOfficialPreset}
                 />
@@ -1531,7 +1532,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                       rel="noopener noreferrer"
                       className="text-xs text-blue-400 dark:text-blue-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
                     >
-                      获取 API Key
+                      {t("providerForm.getApiKey")}
                     </a>
                   </div>
                 )}
@@ -1543,7 +1544,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
               templateValueEntries.length > 0 && (
                 <div className="space-y-3">
                   <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                    参数配置 - {selectedTemplatePreset.name.trim()} *
+                    {t("providerForm.parameterConfig", { name: selectedTemplatePreset.name.trim() })}
                   </h3>
                   <div className="space-y-4">
                     {templateValueEntries.map(([key, config]) => (
@@ -1616,7 +1617,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                     htmlFor="baseUrl"
                     className="block text-sm font-medium text-gray-900 dark:text-gray-100"
                   >
-                    请求地址
+                    {t("providerForm.apiEndpoint")}
                   </label>
                   <button
                     type="button"
@@ -1624,7 +1625,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                     className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
                   >
                     <Zap className="h-3.5 w-3.5" />
-                    管理与测速
+                    {t("providerForm.manageAndTest")}
                   </button>
                 </div>
                 <input
@@ -1632,13 +1633,13 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                   id="baseUrl"
                   value={baseUrl}
                   onChange={(e) => handleBaseUrlChange(e.target.value)}
-                  placeholder="https://your-api-endpoint.com"
+                  placeholder={t("providerForm.apiEndpointPlaceholder")}
                   autoComplete="off"
                   className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:focus:ring-blue-400/20 focus:border-blue-500 dark:focus:border-blue-400 transition-colors"
                 />
                 <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg">
                   <p className="text-xs text-amber-600 dark:text-amber-400">
-                    💡 填写兼容 Claude API 的服务端点地址
+                    {t("providerForm.apiHint")}
                   </p>
                 </div>
               </div>
@@ -1677,8 +1678,8 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                   onChange={handleCodexApiKeyChange}
                   placeholder={
                     isCodexOfficialPreset
-                      ? "官方无需填写 API Key，直接保存即可"
-                      : "只需要填这里，下方 auth.json 会自动填充"
+                      ? t("codexConfig.codexOfficialNoApiKey")
+                      : t("codexConfig.codexApiKeyAutoFill")
                   }
                   disabled={isCodexOfficialPreset}
                   required={
@@ -1695,7 +1696,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                       rel="noopener noreferrer"
                       className="text-xs text-blue-400 dark:text-blue-500 hover:text-blue-500 dark:hover:text-blue-400 transition-colors"
                     >
-                      获取 API Key
+                      {t("providerForm.getApiKey")}
                     </a>
                   </div>
                 )}
@@ -1709,7 +1710,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                     htmlFor="codexBaseUrl"
                     className="block text-sm font-medium text-gray-900 dark:text-gray-100"
                   >
-                    请求地址
+                    {t("codexConfig.apiUrlLabel")}
                   </label>
                   <button
                     type="button"
@@ -1717,7 +1718,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                     className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
                   >
                     <Zap className="h-3.5 w-3.5" />
-                    管理与测速
+                    {t("providerForm.manageAndTest")}
                   </button>
                 </div>
                 <input
@@ -1725,7 +1726,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                   id="codexBaseUrl"
                   value={codexBaseUrl}
                   onChange={(e) => handleCodexBaseUrlChange(e.target.value)}
-                  placeholder="https://your-api-endpoint.com/v1"
+                  placeholder={t("providerForm.codexApiEndpointPlaceholder")}
                   autoComplete="off"
                   className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:focus:ring-blue-400/20 focus:border-blue-500 dark:focus:border-blue-400 transition-colors"
                 />
@@ -1800,7 +1801,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                           htmlFor="anthropicModel"
                           className="block text-sm font-medium text-gray-900 dark:text-gray-100"
                         >
-                          主模型 (可选)
+                          {t("providerForm.mainModel")}
                         </label>
                         <input
                           type="text"
@@ -1809,7 +1810,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                           onChange={(e) =>
                             handleModelChange("ANTHROPIC_MODEL", e.target.value)
                           }
-                          placeholder="例如: GLM-4.5"
+                          placeholder={t("providerForm.mainModelPlaceholder")}
                           autoComplete="off"
                           className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:focus:ring-blue-400/20 focus:border-blue-500 dark:focus:border-blue-400 transition-colors"
                         />
@@ -1820,7 +1821,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                           htmlFor="anthropicSmallFastModel"
                           className="block text-sm font-medium text-gray-900 dark:text-gray-100"
                         >
-                          快速模型 (可选)
+                          {t("providerForm.fastModel")}
                         </label>
                         <input
                           type="text"
@@ -1832,7 +1833,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                               e.target.value
                             )
                           }
-                          placeholder="例如: GLM-4.5-Air"
+                          placeholder={t("providerForm.fastModelPlaceholder")}
                           autoComplete="off"
                           className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:focus:ring-blue-400/20 focus:border-blue-500 dark:focus:border-blue-400 transition-colors"
                         />
@@ -1841,7 +1842,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
 
                     <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg">
                       <p className="text-xs text-amber-600 dark:text-amber-400">
-                        💡 留空将使用供应商的默认模型
+                        {t("providerForm.modelHint")}
                       </p>
                     </div>
                   </div>
@@ -1872,7 +1873,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
               onClick={onClose}
               className="px-4 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-white dark:hover:bg-gray-700 rounded-lg transition-colors"
             >
-              取消
+              {t("common.cancel")}
             </button>
             <button
               type="submit"

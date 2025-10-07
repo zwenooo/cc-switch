@@ -1,5 +1,6 @@
 import { X, Download } from "lucide-react";
 import { useUpdate } from "../contexts/UpdateContext";
+import { useTranslation } from "react-i18next";
 
 interface UpdateBadgeProps {
   className?: string;
@@ -8,6 +9,7 @@ interface UpdateBadgeProps {
 
 export function UpdateBadge({ className = "", onClick }: UpdateBadgeProps) {
   const { hasUpdate, updateInfo, isDismissed, dismissUpdate } = useUpdate();
+  const { t } = useTranslation();
 
   // 如果没有更新或已关闭，不显示
   if (!hasUpdate || isDismissed || !updateInfo) {
@@ -52,7 +54,7 @@ export function UpdateBadge({ className = "", onClick }: UpdateBadgeProps) {
           transition-colors
           focus:outline-none focus:ring-2 focus:ring-blue-500/20
         "
-        aria-label="关闭更新提醒"
+        aria-label={t("common.close")}
       >
         <X className="w-3 h-3 text-gray-400 dark:text-gray-500" />
       </button>

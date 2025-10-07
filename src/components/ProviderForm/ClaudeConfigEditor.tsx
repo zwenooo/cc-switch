@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import JsonEditor from "../JsonEditor";
 import { X, Save } from "lucide-react";
 import { isLinux } from "../../lib/platform";
+import { useTranslation } from "react-i18next";
 
 interface ClaudeConfigEditorProps {
   value: string;
@@ -24,6 +25,7 @@ const ClaudeConfigEditor: React.FC<ClaudeConfigEditorProps> = ({
   commonConfigError,
   configError,
 }) => {
+  const { t } = useTranslation();
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isCommonConfigModalOpen, setIsCommonConfigModalOpen] = useState(false);
 
@@ -82,7 +84,7 @@ const ClaudeConfigEditor: React.FC<ClaudeConfigEditorProps> = ({
           htmlFor="settingsConfig"
           className="block text-sm font-medium text-gray-900 dark:text-gray-100"
         >
-          Claude Code 配置 (JSON) *
+          {t("claudeConfig.configLabel")}
         </label>
         <label className="inline-flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 cursor-pointer">
           <input
@@ -91,7 +93,7 @@ const ClaudeConfigEditor: React.FC<ClaudeConfigEditorProps> = ({
             onChange={(e) => onCommonConfigToggle(e.target.checked)}
             className="w-4 h-4 text-blue-500 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 rounded focus:ring-blue-500 dark:focus:ring-blue-400 focus:ring-2"
           />
-          写入通用配置
+          {t("claudeConfig.writeCommonConfig")}
         </label>
       </div>
       <div className="flex items-center justify-end">
@@ -100,7 +102,7 @@ const ClaudeConfigEditor: React.FC<ClaudeConfigEditorProps> = ({
           onClick={() => setIsCommonConfigModalOpen(true)}
           className="text-xs text-blue-500 dark:text-blue-400 hover:underline"
         >
-          编辑通用配置
+          {t("claudeConfig.editCommonConfig")}
         </button>
       </div>
       {commonConfigError && !isCommonConfigModalOpen && (
@@ -124,7 +126,7 @@ const ClaudeConfigEditor: React.FC<ClaudeConfigEditorProps> = ({
         <p className="text-xs text-red-500 dark:text-red-400">{configError}</p>
       )}
       <p className="text-xs text-gray-500 dark:text-gray-400">
-        完整的 Claude Code settings.json 配置内容
+        {t("claudeConfig.fullSettingsHint")}
       </p>
       {isCommonConfigModalOpen && (
         <div
@@ -145,13 +147,13 @@ const ClaudeConfigEditor: React.FC<ClaudeConfigEditorProps> = ({
             {/* Header - 统一标题栏样式 */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-800">
               <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                编辑通用配置片段
+                {t("claudeConfig.editCommonConfigTitle")}
               </h2>
               <button
                 type="button"
                 onClick={closeModal}
                 className="p-1 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors"
-                aria-label="关闭"
+                aria-label={t("common.close")}
               >
                 <X size={18} />
               </button>
@@ -160,7 +162,7 @@ const ClaudeConfigEditor: React.FC<ClaudeConfigEditorProps> = ({
             {/* Content - 统一内容区域样式 */}
             <div className="flex-1 overflow-auto p-6 space-y-4">
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                该片段会在勾选"写入通用配置"时合并到 settings.json 中
+                {t("claudeConfig.commonConfigHint")}
               </p>
               <JsonEditor
                 value={commonConfigSnippet}
@@ -182,7 +184,7 @@ const ClaudeConfigEditor: React.FC<ClaudeConfigEditorProps> = ({
                 onClick={closeModal}
                 className="px-4 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-white dark:hover:bg-gray-700 rounded-lg transition-colors"
               >
-                取消
+                {t("common.cancel")}
               </button>
               <button
                 type="button"
@@ -190,7 +192,7 @@ const ClaudeConfigEditor: React.FC<ClaudeConfigEditorProps> = ({
                 className="px-4 py-2 bg-blue-500 dark:bg-blue-600 text-white rounded-lg hover:bg-blue-600 dark:hover:bg-blue-700 transition-colors text-sm font-medium flex items-center gap-2"
               >
                 <Save className="w-4 h-4" />
-                保存
+                {t("common.save")}
               </button>
             </div>
           </div>

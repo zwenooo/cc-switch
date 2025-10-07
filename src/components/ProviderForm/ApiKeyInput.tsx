@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 interface ApiKeyInputProps {
   value: string;
@@ -14,12 +15,13 @@ interface ApiKeyInputProps {
 const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
   value,
   onChange,
-  placeholder = "请输入API Key",
+  placeholder,
   disabled = false,
   required = false,
   label = "API Key",
   id = "apiKey",
 }) => {
+  const { t } = useTranslation();
   const [showKey, setShowKey] = useState(false);
 
   const toggleShowKey = () => {
@@ -46,7 +48,7 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
           id={id}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
+          placeholder={placeholder ?? t("apiKeyInput.placeholder")}
           disabled={disabled}
           required={required}
           autoComplete="off"
@@ -57,7 +59,7 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
             type="button"
             onClick={toggleShowKey}
             className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
-            aria-label={showKey ? "隐藏API Key" : "显示API Key"}
+            aria-label={showKey ? t("apiKeyInput.hide") : t("apiKeyInput.show")}
           >
             {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
           </button>

@@ -71,12 +71,12 @@ const ProviderList: React.FC<ProviderListProps> = ({
         const applied = await window.api.isClaudePluginApplied();
         setClaudeApplied(applied);
       } catch (error) {
-        console.error("检测 Claude 插件配置失败:", error);
+        console.error(t("console.setupListenerFailed"), error);
         setClaudeApplied(false);
       }
     };
     checkClaude();
-  }, [appType, currentProviderId, providers]);
+  }, [appType, currentProviderId, providers, t]);
 
   const handleApplyToClaudePlugin = async () => {
     try {
@@ -182,7 +182,7 @@ const ProviderList: React.FC<ProviderListProps> = ({
                             handleUrlClick(provider.websiteUrl!);
                           }}
                           className="inline-flex items-center gap-1 text-blue-500 dark:text-blue-400 hover:opacity-90 transition-colors"
-                          title={`访问 ${provider.websiteUrl}`}
+                          title={t("providerForm.visitWebsite", { url: provider.websiteUrl })}
                         >
                           {provider.websiteUrl}
                         </button>
