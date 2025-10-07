@@ -65,6 +65,10 @@ pub async fn test_endpoints(
                 }
             };
 
+            // 先进行一次“热身”请求，忽略其结果，仅用于复用连接/绕过首包惩罚
+            let _ = client.get(parsed_url.clone()).send().await;
+
+            // 第二次请求开始计时，并将其作为结果返回
             let start = Instant::now();
             match client.get(parsed_url).send().await {
                 Ok(resp) => {

@@ -324,6 +324,16 @@ const EndpointSpeedTest: React.FC<EndpointSpeedTestProps> = ({
     setIsTesting(true);
     setLastError(null);
 
+    // 清空所有延迟数据，显示 loading 状态
+    setEntries((prev) =>
+      prev.map((entry) => ({
+        ...entry,
+        latency: null,
+        status: undefined,
+        error: null,
+      })),
+    );
+
     try {
       const results = await window.api.testApiEndpoints(urls, {
         timeoutSecs: appType === "codex" ? 12 : 8,
@@ -454,7 +464,7 @@ const EndpointSpeedTest: React.FC<EndpointSpeedTestProps> = ({
                 type="button"
                 onClick={runSpeedTest}
                 disabled={isTesting || !hasEndpoints}
-                className="flex h-7 items-center gap-1.5 rounded-md bg-blue-500 px-2.5 text-xs font-medium text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-blue-600 dark:hover:bg-blue-700"
+                className="flex h-7 w-20 items-center justify-center gap-1.5 rounded-md bg-blue-500 px-2.5 text-xs font-medium text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-blue-600 dark:hover:bg-blue-700"
               >
                 {isTesting ? (
                   <>
@@ -542,7 +552,15 @@ const EndpointSpeedTest: React.FC<EndpointSpeedTestProps> = ({
                     <div className="flex items-center gap-2">
                       {latency !== null ? (
                         <div className="text-right">
-                          <div className="font-mono text-sm font-medium text-gray-900 dark:text-gray-100">
+                          <div className={`font-mono text-sm font-medium ${
+                            latency < 300
+                              ? "text-green-600 dark:text-green-400"
+                              : latency < 500
+                              ? "text-yellow-600 dark:text-yellow-400"
+                              : latency < 800
+                              ? "text-orange-600 dark:text-orange-400"
+                              : "text-red-600 dark:text-red-400"
+                          }`}>
                             {latency}ms
                           </div>
                         </div>
