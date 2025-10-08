@@ -615,7 +615,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
       ...(category ? { category } : {}),
     };
 
-    // 若为“新建供应商”，且已在弹窗中添加了自定义端点，则随提交一并落盘
+    // 若为"新建供应商"，且已在弹窗中添加了自定义端点，则随提交一并落盘
     if (!initialData && draftCustomEndpoints.length > 0) {
       const now = Date.now();
       const customMap: Record<string, CustomEndpoint> = {};
@@ -623,7 +623,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
         const url = raw.trim().replace(/\/+$/, "");
         if (!url) continue;
         if (!customMap[url]) {
-          customMap[url] = { url, addedAt: now };
+          customMap[url] = { url, addedAt: now, lastUsed: undefined };
         }
       }
       onSubmit({ ...basePayload, meta: { custom_endpoints: customMap } });
