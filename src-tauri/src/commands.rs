@@ -7,6 +7,7 @@ use tauri_plugin_opener::OpenerExt;
 
 use crate::app_config::AppType;
 use crate::claude_plugin;
+use crate::claude_mcp;
 use crate::codex_config;
 use crate::config::{self, get_claude_settings_path, ConfigStatus};
 use crate::provider::{Provider, ProviderMeta};
@@ -657,6 +658,46 @@ pub async fn open_app_config_folder(handle: tauri::AppHandle) -> Result<bool, St
         .map_err(|e| format!("打开文件夹失败: {}", e))?;
 
     Ok(true)
+}
+
+// =====================
+// Claude MCP 管理命令
+// =====================
+
+/// 获取 Claude MCP 状态（settings.local.json 与 mcp.json）
+#[tauri::command]
+pub async fn get_claude_mcp_status() -> Result<crate::claude_mcp::McpStatus, String> {
+    claude_mcp::get_mcp_status()
+}
+
+/// 读取 mcp.json 文本内容（不存在则返回 Ok(None)）
+#[tauri::command]
+pub async fn read_claude_mcp_config() -> Result<Option<String>, String> {
+    claude_mcp::read_mcp_json()
+}
+
+/// 设置 enableAllProjectMcpServers 开关
+#[tauri::command]
+pub async fn set_claude_mcp_enable_all_projects(enable: bool) -> Result<bool, String> {
+    claude_mcp::set_enable_all_projects(enable)
+}
+
+/// 新增或更新一个 MCP 服务器条目
+#[tauri::command]
+pub async fn upsert_claude_mcp_server(id: String, spec: serde_json::Value) -> Result<bool, String> {
+    claude_mcp::upsert_mcp_server(&id, spec)
+}
+
+/// 删除一个 MCP 服务器条目
+#[tauri::command]
+pub async fn delete_claude_mcp_server(id: String) -> Result<bool, String> {
+    claude_mcp::delete_mcp_server(&id)
+}
+
+/// 校验命令是否在 PATH 中可用（不执行）
+#[tauri::command]
+pub async fn validate_mcp_command(cmd: String) -> Result<bool, String> {
+    claude_mcp::validate_command_in_path(&cmd)
 }
 
 /// 获取设置

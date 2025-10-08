@@ -1,5 +1,6 @@
 mod app_config;
 mod claude_plugin;
+mod claude_mcp;
 mod codex_config;
 mod commands;
 mod config;
@@ -421,6 +422,13 @@ pub fn run() {
             commands::read_claude_plugin_config,
             commands::apply_claude_plugin_config,
             commands::is_claude_plugin_applied,
+            // Claude MCP management
+            commands::get_claude_mcp_status,
+            commands::read_claude_mcp_config,
+            commands::set_claude_mcp_enable_all_projects,
+            commands::upsert_claude_mcp_server,
+            commands::delete_claude_mcp_server,
+            commands::validate_mcp_command,
             // ours: endpoint speed test + custom endpoint management
             commands::test_api_endpoints,
             commands::get_custom_endpoints,
