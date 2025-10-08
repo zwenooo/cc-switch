@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import { Provider, Settings, CustomEndpoint } from "./types";
+import { Provider, Settings, CustomEndpoint, McpStatus } from "./types";
 import { AppType } from "./lib/tauri-api";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 
@@ -61,6 +61,16 @@ declare global {
         official: boolean;
       }) => Promise<boolean>;
       isClaudePluginApplied: () => Promise<boolean>;
+      // Claude MCP
+      getClaudeMcpStatus: () => Promise<McpStatus>;
+      readClaudeMcpConfig: () => Promise<string | null>;
+      setClaudeMcpEnableAllProjects: (enable: boolean) => Promise<boolean>;
+      upsertClaudeMcpServer: (
+        id: string,
+        spec: Record<string, any>,
+      ) => Promise<boolean>;
+      deleteClaudeMcpServer: (id: string) => Promise<boolean>;
+      validateMcpCommand: (cmd: string) => Promise<boolean>;
       testApiEndpoints: (
         urls: string[],
         options?: { timeoutSecs?: number },

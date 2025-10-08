@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
-import { Provider, Settings, CustomEndpoint } from "../types";
+import { Provider, Settings, CustomEndpoint, McpStatus, McpServer } from "../types";
 
 // 应用类型
 export type AppType = "claude" | "codex";
@@ -276,6 +276,69 @@ export const tauriAPI = {
       return await invoke<boolean>("is_claude_plugin_applied");
     } catch (error) {
       throw new Error(`检测 Claude 插件配置失败: ${String(error)}`);
+    }
+  },
+
+  // Claude MCP：获取状态（settings.local.json + mcp.json）
+  getClaudeMcpStatus: async (): Promise<McpStatus> => {
+    try {
+      return await invoke<McpStatus>("get_claude_mcp_status");
+    } catch (error) {
+      console.error("获取 MCP 状态失败:", error);
+      throw error;
+    }
+  },
+
+  // Claude MCP：读取 mcp.json 文本
+  readClaudeMcpConfig: async (): Promise<string | null> => {
+    try {
+      return await invoke<string | null>("read_claude_mcp_config");
+    } catch (error) {
+      console.error("读取 mcp.json 失败:", error);
+      throw error;
+    }
+  },
+
+  // Claude MCP：设置项目级启用开关
+  setClaudeMcpEnableAllProjects: async (enable: boolean): Promise<boolean> => {
+    try {
+      return await invoke<boolean>("set_claude_mcp_enable_all_projects", { enable });
+    } catch (error) {
+      console.error("写入 settings.local.json 失败:", error);
+      throw error;
+    }
+  },
+
+  // Claude MCP：新增/更新服务器定义
+  upsertClaudeMcpServer: async (
+    id: string,
+    spec: McpServer | Record<string, any>,
+  ): Promise<boolean> => {
+    try {
+      return await invoke<boolean>("upsert_claude_mcp_server", { id, spec });
+    } catch (error) {
+      console.error("保存 MCP 服务器失败:", error);
+      throw error;
+    }
+  },
+
+  // Claude MCP：删除服务器定义
+  deleteClaudeMcpServer: async (id: string): Promise<boolean> => {
+    try {
+      return await invoke<boolean>("delete_claude_mcp_server", { id });
+    } catch (error) {
+      console.error("删除 MCP 服务器失败:", error);
+      throw error;
+    }
+  },
+
+  // Claude MCP：校验命令是否在 PATH 中
+  validateMcpCommand: async (cmd: string): Promise<boolean> => {
+    try {
+      return await invoke<boolean>("validate_mcp_command", { cmd });
+    } catch (error) {
+      console.error("校验 MCP 命令失败:", error);
+      return false;
     }
   },
 

@@ -52,3 +52,23 @@ export interface Settings {
   // Codex 自定义端点列表
   customEndpointsCodex?: Record<string, CustomEndpoint>;
 }
+
+// MCP 服务器定义（宽松：允许扩展字段）
+export interface McpServer {
+  type: "stdio" | "sse";
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+  cwd?: string;
+  [key: string]: any;
+}
+
+// MCP 配置状态
+export interface McpStatus {
+  settingsLocalPath: string;
+  settingsLocalExists: boolean;
+  enableAllProjectMcpServers: boolean;
+  mcpJsonPath: string;
+  mcpJsonExists: boolean;
+  serverCount: number;
+}
