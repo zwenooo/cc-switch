@@ -54,7 +54,7 @@ wire_api = "responses"`;
 
 export const codexProviderPresets: CodexProviderPreset[] = [
   {
-    name: "Codex官方",
+    name: "Codex Official",
     websiteUrl: "https://chatgpt.com/codex",
     isOfficial: true,
     category: "official",

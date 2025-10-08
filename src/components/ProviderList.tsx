@@ -29,7 +29,7 @@ const ProviderList: React.FC<ProviderListProps> = ({
   appType,
   onNotify,
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   // 提取API地址（兼容不同供应商配置：Claude env / Codex TOML）
   const getApiUrl = (provider: Provider): string => {
     try {
@@ -118,7 +118,8 @@ const ProviderList: React.FC<ProviderListProps> = ({
 
     // 如果都没有时间戳，按名称排序
     if (timeA === 0 && timeB === 0) {
-      return a.name.localeCompare(b.name, "zh-CN");
+      const locale = i18n.language === "zh" ? "zh-CN" : "en-US";
+      return a.name.localeCompare(b.name, locale);
     }
 
     // 如果只有一个没有时间戳，没有时间戳的排在前面
