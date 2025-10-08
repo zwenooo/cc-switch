@@ -170,7 +170,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
 
       trimmedBaseUrl,
 
-      trimmedModel
+      trimmedModel,
     );
 
     onAuthChange(JSON.stringify(auth, null, 2));
@@ -208,7 +208,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
   };
 
   const handleTemplateInputKeyDown = (
-    e: React.KeyboardEvent<HTMLInputElement>
+    e: React.KeyboardEvent<HTMLInputElement>,
   ) => {
     if (e.key === "Enter") {
       e.preventDefault();
@@ -509,7 +509,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
                           {JSON.stringify(
                             generateThirdPartyAuth(templateApiKey),
                             null,
-                            2
+                            2,
                           )}
                         </pre>
                       </div>
@@ -526,7 +526,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
 
                                 templateBaseUrl,
 
-                                templateModelName
+                                templateModelName,
                               )
                             : ""}
                         </pre>

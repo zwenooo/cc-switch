@@ -110,7 +110,8 @@ export const providerPresets: ProviderPreset[] = [
     apiKeyUrl: "https://console.streamlake.ai/console/wanqing/api-key",
     settingsConfig: {
       env: {
-        ANTHROPIC_BASE_URL: "https://vanchin.streamlake.ai/api/gateway/v1/endpoints/${ENDPOINT_ID}/claude-code-proxy",
+        ANTHROPIC_BASE_URL:
+          "https://vanchin.streamlake.ai/api/gateway/v1/endpoints/${ENDPOINT_ID}/claude-code-proxy",
         ANTHROPIC_AUTH_TOKEN: "",
         ANTHROPIC_MODEL: "KAT-Coder",
         ANTHROPIC_SMALL_FAST_MODEL: "KAT-Coder",
@@ -146,5 +147,4 @@ export const providerPresets: ProviderPreset[] = [
     ],
     category: "third_party",
   },
-
 ];

@@ -150,7 +150,9 @@ export const tauriAPI = {
   },
 
   // 选择配置目录（可选默认路径）
-  selectConfigDirectory: async (defaultPath?: string): Promise<string | null> => {
+  selectConfigDirectory: async (
+    defaultPath?: string,
+  ): Promise<string | null> => {
     try {
       // 后端参数为 snake_case：default_path
       return await invoke("pick_directory", { default_path: defaultPath });
@@ -384,7 +386,9 @@ export const tauriAPI = {
 
   // theirs: 导入导出与文件对话框
   // 导出配置到文件
-  exportConfigToFile: async (filePath: string): Promise<{
+  exportConfigToFile: async (
+    filePath: string,
+  ): Promise<{
     success: boolean;
     message: string;
     filePath: string;
@@ -398,7 +402,9 @@ export const tauriAPI = {
   },
 
   // 从文件导入配置
-  importConfigFromFile: async (filePath: string): Promise<{
+  importConfigFromFile: async (
+    filePath: string,
+  ): Promise<{
     success: boolean;
     message: string;
     backupId?: string;
@@ -415,7 +421,9 @@ export const tauriAPI = {
   saveFileDialog: async (defaultName: string): Promise<string | null> => {
     try {
       // 后端参数为 snake_case：default_name
-      const result = await invoke<string | null>("save_file_dialog", { default_name: defaultName });
+      const result = await invoke<string | null>("save_file_dialog", {
+        default_name: defaultName,
+      });
       return result;
     } catch (error) {
       console.error("打开保存对话框失败:", error);

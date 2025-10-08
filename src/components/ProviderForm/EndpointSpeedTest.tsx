@@ -210,81 +210,85 @@ const EndpointSpeedTest: React.FC<EndpointSpeedTestProps> = ({
     });
   }, [entries]);
 
-  const handleAddEndpoint = useCallback(
-    async () => {
-      const candidate = customUrl.trim();
-      let errorMsg: string | null = null;
+  const handleAddEndpoint = useCallback(async () => {
+    const candidate = customUrl.trim();
+    let errorMsg: string | null = null;
 
-      if (!candidate) {
-        errorMsg = t("endpointTest.enterValidUrl");
-      }
+    if (!candidate) {
+      errorMsg = t("endpointTest.enterValidUrl");
+    }
 
-      let parsed: URL | null = null;
-      if (!errorMsg) {
-        try {
-          parsed = new URL(candidate);
-        } catch {
-          errorMsg = t("endpointTest.invalidUrlFormat");
-        }
-      }
-
-      if (!errorMsg && parsed && !parsed.protocol.startsWith("http")) {
-        errorMsg = t("endpointTest.onlyHttps");
-      }
-
-      let sanitized = "";
-      if (!errorMsg && parsed) {
-        sanitized = normalizeEndpointUrl(parsed.toString());
-        // 使用当前 entries 做去重校验，避免依赖可能过期的 addError
-        const isDuplicate = entries.some((entry) => entry.url === sanitized);
-        if (isDuplicate) {
-          errorMsg = t("endpointTest.urlExists");
-        }
-      }
-
-      if (errorMsg) {
-        setAddError(errorMsg);
-        return;
-      }
-
-      setAddError(null);
-
-      // 保存到后端
+    let parsed: URL | null = null;
+    if (!errorMsg) {
       try {
-        if (providerId) {
-          await window.api.addCustomEndpoint(appType, providerId, sanitized);
-        }
-
-        // 更新本地状态
-        setEntries((prev) => {
-          if (prev.some((e) => e.url === sanitized)) return prev;
-          return [
-            ...prev,
-            {
-              id: randomId(),
-              url: sanitized,
-              isCustom: true,
-              latency: null,
-              status: undefined,
-              error: null,
-            },
-          ];
-        });
-
-        if (!normalizedSelected) {
-          onChange(sanitized);
-        }
-
-        setCustomUrl("");
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : String(error);
-        setAddError(message || t("endpointTest.saveFailed"));
-        console.error(t("endpointTest.addEndpointFailed"), error);
+        parsed = new URL(candidate);
+      } catch {
+        errorMsg = t("endpointTest.invalidUrlFormat");
       }
-    },
-    [customUrl, entries, normalizedSelected, onChange, appType, providerId, t],
-  );
+    }
+
+    if (!errorMsg && parsed && !parsed.protocol.startsWith("http")) {
+      errorMsg = t("endpointTest.onlyHttps");
+    }
+
+    let sanitized = "";
+    if (!errorMsg && parsed) {
+      sanitized = normalizeEndpointUrl(parsed.toString());
+      // 使用当前 entries 做去重校验，避免依赖可能过期的 addError
+      const isDuplicate = entries.some((entry) => entry.url === sanitized);
+      if (isDuplicate) {
+        errorMsg = t("endpointTest.urlExists");
+      }
+    }
+
+    if (errorMsg) {
+      setAddError(errorMsg);
+      return;
+    }
+
+    setAddError(null);
+
+    // 保存到后端
+    try {
+      if (providerId) {
+        await window.api.addCustomEndpoint(appType, providerId, sanitized);
+      }
+
+      // 更新本地状态
+      setEntries((prev) => {
+        if (prev.some((e) => e.url === sanitized)) return prev;
+        return [
+          ...prev,
+          {
+            id: randomId(),
+            url: sanitized,
+            isCustom: true,
+            latency: null,
+            status: undefined,
+            error: null,
+          },
+        ];
+      });
+
+      if (!normalizedSelected) {
+        onChange(sanitized);
+      }
+
+      setCustomUrl("");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setAddError(message || t("endpointTest.saveFailed"));
+      console.error(t("endpointTest.addEndpointFailed"), error);
+    }
+  }, [
+    customUrl,
+    entries,
+    normalizedSelected,
+    onChange,
+    appType,
+    providerId,
+    t,
+  ]);
 
   const handleRemoveEndpoint = useCallback(
     async (entry: EndpointEntry) => {
@@ -358,7 +362,9 @@ const EndpointSpeedTest: React.FC<EndpointSpeedTestProps> = ({
           return {
             ...entry,
             latency:
-              typeof match.latency === "number" ? Math.round(match.latency) : null,
+              typeof match.latency === "number"
+                ? Math.round(match.latency)
+                : null,
             status: match.status,
             error: match.error ?? null,
           };
@@ -367,7 +373,9 @@ const EndpointSpeedTest: React.FC<EndpointSpeedTestProps> = ({
 
       if (autoSelect) {
         const successful = results
-          .filter((item) => typeof item.latency === "number" && item.latency !== null)
+          .filter(
+            (item) => typeof item.latency === "number" && item.latency !== null,
+          )
           .sort((a, b) => (a.latency! || 0) - (b.latency! || 0));
         const best = successful[0];
         if (best && best.url && best.url !== normalizedSelected) {
@@ -376,7 +384,9 @@ const EndpointSpeedTest: React.FC<EndpointSpeedTestProps> = ({
       }
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : `${t("endpointTest.testFailed", { error: String(error) })}`;
+        error instanceof Error
+          ? error.message
+          : `${t("endpointTest.testFailed", { error: String(error) })}`;
       setLastError(message);
     } finally {
       setIsTesting(false);
@@ -554,22 +564,26 @@ const EndpointSpeedTest: React.FC<EndpointSpeedTestProps> = ({
                     <div className="flex items-center gap-2">
                       {latency !== null ? (
                         <div className="text-right">
-                          <div className={`font-mono text-sm font-medium ${
-                            latency < 300
-                              ? "text-green-600 dark:text-green-400"
-                              : latency < 500
-                              ? "text-yellow-600 dark:text-yellow-400"
-                              : latency < 800
-                              ? "text-orange-600 dark:text-orange-400"
-                              : "text-red-600 dark:text-red-400"
-                          }`}>
+                          <div
+                            className={`font-mono text-sm font-medium ${
+                              latency < 300
+                                ? "text-green-600 dark:text-green-400"
+                                : latency < 500
+                                  ? "text-yellow-600 dark:text-yellow-400"
+                                  : latency < 800
+                                    ? "text-orange-600 dark:text-orange-400"
+                                    : "text-red-600 dark:text-red-400"
+                            }`}
+                          >
                             {latency}ms
                           </div>
                         </div>
                       ) : isTesting ? (
                         <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
                       ) : entry.error ? (
-                        <div className="text-xs text-gray-400">{t("endpointTest.failed")}</div>
+                        <div className="text-xs text-gray-400">
+                          {t("endpointTest.failed")}
+                        </div>
                       ) : (
                         <div className="text-xs text-gray-400">—</div>
                       )}

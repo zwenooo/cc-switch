@@ -26,7 +26,10 @@ interface SettingsModalProps {
   onImportSuccess?: () => void | Promise<void>;
 }
 
-export default function SettingsModal({ onClose, onImportSuccess }: SettingsModalProps) {
+export default function SettingsModal({
+  onClose,
+  onImportSuccess,
+}: SettingsModalProps) {
   const { t, i18n } = useTranslation();
 
   const normalizeLanguage = (lang?: string | null): "zh" | "en" =>
@@ -67,10 +70,12 @@ export default function SettingsModal({ onClose, onImportSuccess }: SettingsModa
 
   // 导入/导出相关状态
   const [isImporting, setIsImporting] = useState(false);
-  const [importStatus, setImportStatus] = useState<'idle' | 'importing' | 'success' | 'error'>('idle');
+  const [importStatus, setImportStatus] = useState<
+    "idle" | "importing" | "success" | "error"
+  >("idle");
   const [importError, setImportError] = useState<string>("");
   const [importBackupId, setImportBackupId] = useState<string>("");
-  const [selectedImportFile, setSelectedImportFile] = useState<string>('');
+  const [selectedImportFile, setSelectedImportFile] = useState<string>("");
 
   useEffect(() => {
     loadSettings();
@@ -340,7 +345,7 @@ export default function SettingsModal({ onClose, onImportSuccess }: SettingsModa
       // 如果未知或为空，回退到 releases 首页
       if (!targetVersion || targetVersion === unknownLabel) {
         await window.api.openExternal(
-          "https://github.com/farion1231/cc-switch/releases"
+          "https://github.com/farion1231/cc-switch/releases",
         );
         return;
       }
@@ -348,7 +353,7 @@ export default function SettingsModal({ onClose, onImportSuccess }: SettingsModa
         ? targetVersion
         : `v${targetVersion}`;
       await window.api.openExternal(
-        `https://github.com/farion1231/cc-switch/releases/tag/${tag}`
+        `https://github.com/farion1231/cc-switch/releases/tag/${tag}`,
       );
     } catch (error) {
       console.error(t("console.openReleaseNotesFailed"), error);
@@ -358,7 +363,7 @@ export default function SettingsModal({ onClose, onImportSuccess }: SettingsModa
   // 导出配置处理函数
   const handleExportConfig = async () => {
     try {
-      const defaultName = `cc-switch-config-${new Date().toISOString().split('T')[0]}.json`;
+      const defaultName = `cc-switch-config-${new Date().toISOString().split("T")[0]}.json`;
       const filePath = await window.api.saveFileDialog(defaultName);
 
       if (!filePath) return; // 用户取消了
@@ -380,8 +385,8 @@ export default function SettingsModal({ onClose, onImportSuccess }: SettingsModa
       const filePath = await window.api.openFileDialog();
       if (filePath) {
         setSelectedImportFile(filePath);
-        setImportStatus('idle'); // 重置状态
-        setImportError('');
+        setImportStatus("idle"); // 重置状态
+        setImportError("");
       }
     } catch (error) {
       console.error(t("settings.selectFileFailed") + ":", error);
@@ -394,22 +399,22 @@ export default function SettingsModal({ onClose, onImportSuccess }: SettingsModa
     if (!selectedImportFile || isImporting) return;
 
     setIsImporting(true);
-    setImportStatus('importing');
+    setImportStatus("importing");
 
     try {
       const result = await window.api.importConfigFromFile(selectedImportFile);
 
       if (result.success) {
-        setImportBackupId(result.backupId || '');
-        setImportStatus('success');
+        setImportBackupId(result.backupId || "");
+        setImportStatus("success");
         // ImportProgressModal 会在2秒后触发数据刷新回调
       } else {
         setImportError(result.message || t("settings.configCorrupted"));
-        setImportStatus('error');
+        setImportStatus("error");
       }
     } catch (error) {
       setImportError(String(error));
-      setImportStatus('error');
+      setImportStatus("error");
     } finally {
       setIsImporting(false);
     }
@@ -642,18 +647,22 @@ export default function SettingsModal({ onClose, onImportSuccess }: SettingsModa
                       disabled={!selectedImportFile || isImporting}
                       className={`px-3 py-2 text-xs font-medium rounded-lg transition-colors text-white ${
                         !selectedImportFile || isImporting
-                          ? 'bg-gray-400 cursor-not-allowed'
-                          : 'bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700'
+                          ? "bg-gray-400 cursor-not-allowed"
+                          : "bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700"
                       }`}
                     >
-                      {isImporting ? t("settings.importing") : t("settings.import")}
+                      {isImporting
+                        ? t("settings.importing")
+                        : t("settings.import")}
                     </button>
                   </div>
 
                   {/* 显示选择的文件 */}
                   {selectedImportFile && (
                     <div className="text-xs text-gray-600 dark:text-gray-400 px-2 py-1 bg-gray-50 dark:bg-gray-900 rounded break-all">
-                      {selectedImportFile.split('/').pop() || selectedImportFile.split('\\').pop() || selectedImportFile}
+                      {selectedImportFile.split("/").pop() ||
+                        selectedImportFile.split("\\").pop() ||
+                        selectedImportFile}
                     </div>
                   )}
                 </div>
@@ -757,15 +766,15 @@ export default function SettingsModal({ onClose, onImportSuccess }: SettingsModa
       </div>
 
       {/* Import Progress Modal */}
-      {importStatus !== 'idle' && (
+      {importStatus !== "idle" && (
         <ImportProgressModal
           status={importStatus}
           message={importError}
           backupId={importBackupId}
           onComplete={() => {
-            setImportStatus('idle');
-            setImportError('');
-            setSelectedImportFile('');
+            setImportStatus("idle");
+            setImportError("");
+            setSelectedImportFile("");
           }}
           onSuccess={() => {
             if (onImportSuccess) {
@@ -773,7 +782,12 @@ export default function SettingsModal({ onClose, onImportSuccess }: SettingsModa
             }
             void window.api
               .updateTrayMenu()
-              .catch((error) => console.error("[SettingsModal] Failed to refresh tray menu", error));
+              .catch((error) =>
+                console.error(
+                  "[SettingsModal] Failed to refresh tray menu",
+                  error,
+                ),
+              );
           }}
         />
       )}

@@ -64,31 +64,33 @@ declare global {
       testApiEndpoints: (
         urls: string[],
         options?: { timeoutSecs?: number },
-      ) => Promise<Array<{
-        url: string;
-        latency: number | null;
-        status?: number;
-        error?: string;
-      }>>;
+      ) => Promise<
+        Array<{
+          url: string;
+          latency: number | null;
+          status?: number;
+          error?: string;
+        }>
+      >;
       // 自定义端点管理
       getCustomEndpoints: (
         appType: AppType,
-        providerId: string
+        providerId: string,
       ) => Promise<CustomEndpoint[]>;
       addCustomEndpoint: (
         appType: AppType,
         providerId: string,
-        url: string
+        url: string,
       ) => Promise<void>;
       removeCustomEndpoint: (
         appType: AppType,
         providerId: string,
-        url: string
+        url: string,
       ) => Promise<void>;
       updateEndpointLastUsed: (
         appType: AppType,
         providerId: string,
-        url: string
+        url: string,
       ) => Promise<void>;
     };
     platform: {

@@ -22,7 +22,7 @@ function App() {
   const [currentProviderId, setCurrentProviderId] = useState<string>("");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingProviderId, setEditingProviderId] = useState<string | null>(
-    null
+    null,
   );
   const [notification, setNotification] = useState<{
     message: string;
@@ -42,7 +42,7 @@ function App() {
   const showNotification = (
     message: string,
     type: "success" | "error",
-    duration = 3000
+    duration = 3000,
   ) => {
     // 清除之前的定时器
     if (timeoutRef.current) {
@@ -208,24 +208,33 @@ function App() {
   };
 
   const handleSwitchProvider = async (id: string) => {
-    const success = await window.api.switchProvider(id, activeApp);
-    if (success) {
-      setCurrentProviderId(id);
-      // 显示重启提示
-      const appName = t(`apps.${activeApp}`);
-      showNotification(
-        t("notifications.switchSuccess", { appName }),
-        "success",
-        2000
-      );
-      // 更新托盘菜单
-      await window.api.updateTrayMenu();
+    try {
+      const success = await window.api.switchProvider(id, activeApp);
+      if (success) {
+        setCurrentProviderId(id);
+        // 显示重启提示
+        const appName = t(`apps.${activeApp}`);
+        showNotification(
+          t("notifications.switchSuccess", { appName }),
+          "success",
+          2000,
+        );
+        // 更新托盘菜单
+        await window.api.updateTrayMenu();
 
-      if (activeApp === "claude") {
-        await syncClaudePlugin(id, true);
+        if (activeApp === "claude") {
+          await syncClaudePlugin(id, true);
+        }
+      } else {
+        showNotification(t("notifications.switchFailed"), "error");
       }
-    } else {
-      showNotification(t("notifications.switchFailed"), "error");
+    } catch (error) {
+      const detail = extractErrorMessage(error);
+      const msg = detail
+        ? `${t("notifications.switchFailed")}: ${detail}`
+        : t("notifications.switchFailed");
+      // 详细错误展示稍长时间，便于用户阅读
+      showNotification(msg, "error", detail ? 6000 : 3000);
     }
   };
 
@@ -296,6 +305,15 @@ function App() {
 
           <div className="flex items-center gap-4">
             <AppSwitcher activeApp={activeApp} onSwitch={setActiveApp} />
+
+            <button
+              onClick={() => {
+                /* TODO: MCP 功能待实现 */
+              }}
+              className="inline-flex items-center gap-2 px-6 py-2 text-sm font-medium rounded-md transition-colors bg-emerald-500 text-white hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-700"
+            >
+              MCP
+            </button>
 
             <button
               onClick={() => setIsAddModalOpen(true)}

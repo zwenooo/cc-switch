@@ -336,8 +336,13 @@ pub async fn switch_provider(
                 if auth_path.exists() {
                     let auth: Value = crate::config::read_json_file(&auth_path)?;
                     let config_str = if config_path.exists() {
-                        std::fs::read_to_string(&config_path)
-                            .map_err(|e| format!("读取 config.toml 失败: {}", e))?
+                        std::fs::read_to_string(&config_path).map_err(|e| {
+                            format!(
+                                "读取 config.toml 失败: {}: {}",
+                                config_path.display(),
+                                e
+                            )
+                        })?
                     } else {
                         String::new()
                     };

@@ -60,17 +60,20 @@ pub fn write_codex_live_atomic(auth: &Value, config_text_opt: Option<&str>) -> R
     let config_path = get_codex_config_path();
 
     if let Some(parent) = auth_path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("创建 Codex 目录失败: {}", e))?;
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("创建 Codex 目录失败: {}: {}", parent.display(), e))?;
     }
 
     // 读取旧内容用于回滚
     let old_auth = if auth_path.exists() {
-        Some(fs::read(&auth_path).map_err(|e| format!("读取旧 auth.json 失败: {}", e))?)
+        Some(fs::read(&auth_path)
+            .map_err(|e| format!("读取旧 auth.json 失败: {}: {}", auth_path.display(), e))?)
     } else {
         None
     };
     let _old_config = if config_path.exists() {
-        Some(fs::read(&config_path).map_err(|e| format!("读取旧 config.toml 失败: {}", e))?)
+        Some(fs::read(&config_path)
+            .map_err(|e| format!("读取旧 config.toml 失败: {}: {}", config_path.display(), e))?)
     } else {
         None
     };
@@ -81,8 +84,13 @@ pub fn write_codex_live_atomic(auth: &Value, config_text_opt: Option<&str>) -> R
         None => String::new(),
     };
     if !cfg_text.trim().is_empty() {
-        toml::from_str::<toml::Table>(&cfg_text)
-            .map_err(|e| format!("config.toml 格式错误: {}", e))?;
+        toml::from_str::<toml::Table>(&cfg_text).map_err(|e| {
+            format!(
+                "config.toml 语法错误: {} (路径: {})",
+                e,
+                config_path.display()
+            )
+        })?;
     }
 
     // 第一步：写 auth.json

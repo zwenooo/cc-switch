@@ -53,7 +53,8 @@ const JsonEditor: React.FC<JsonEditorProps> = ({
           }
         } catch (e) {
           // 简单处理JSON解析错误
-          const message = e instanceof SyntaxError ? e.message : t("jsonEditor.invalidJson");
+          const message =
+            e instanceof SyntaxError ? e.message : t("jsonEditor.invalidJson");
           diagnostics.push({
             from: 0,
             to: doc.length,

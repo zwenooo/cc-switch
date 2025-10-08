@@ -178,16 +178,16 @@ export const getApiKeyFromConfig = (jsonString: string): string => {
 // 模板变量替换
 export const applyTemplateValues = (
   config: any,
-  templateValues: Record<string, TemplateValueConfig> | undefined
+  templateValues: Record<string, TemplateValueConfig> | undefined,
 ): any => {
   const resolvedValues = Object.fromEntries(
     Object.entries(templateValues ?? {}).map(([key, value]) => {
       const resolvedValue =
         value.editorValue !== undefined
           ? value.editorValue
-          : value.defaultValue ?? "";
+          : (value.defaultValue ?? "");
       return [key, resolvedValue];
-    })
+    }),
   );
 
   const replaceInString = (str: string): string => {
@@ -384,6 +384,7 @@ export const setCodexBaseUrl = (
     return configText.replace(pattern, replacementLine);
   }
 
-  const prefix = configText && !configText.endsWith("\n") ? `${configText}\n` : configText;
+  const prefix =
+    configText && !configText.endsWith("\n") ? `${configText}\n` : configText;
   return `${prefix}${replacementLine}\n`;
 };

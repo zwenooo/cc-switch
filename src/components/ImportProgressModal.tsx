@@ -3,7 +3,7 @@ import { CheckCircle, Loader2, AlertCircle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 interface ImportProgressModalProps {
-  status: 'importing' | 'success' | 'error';
+  status: "importing" | "success" | "error";
   message?: string;
   backupId?: string;
   onComplete?: () => void;
@@ -15,16 +15,20 @@ export function ImportProgressModal({
   message,
   backupId,
   onComplete,
-  onSuccess
+  onSuccess,
 }: ImportProgressModalProps) {
   const { t } = useTranslation();
 
   useEffect(() => {
-    if (status === 'success') {
-      console.log('[ImportProgressModal] Success detected, starting 2 second countdown');
+    if (status === "success") {
+      console.log(
+        "[ImportProgressModal] Success detected, starting 2 second countdown",
+      );
       // 成功后等待2秒自动关闭并刷新数据
       const timer = setTimeout(() => {
-        console.log('[ImportProgressModal] 2 seconds elapsed, calling callbacks...');
+        console.log(
+          "[ImportProgressModal] 2 seconds elapsed, calling callbacks...",
+        );
         if (onSuccess) {
           onSuccess();
         }
@@ -34,7 +38,7 @@ export function ImportProgressModal({
       }, 2000);
 
       return () => {
-        console.log('[ImportProgressModal] Cleanup timer');
+        console.log("[ImportProgressModal] Cleanup timer");
         clearTimeout(timer);
       };
     }
@@ -46,7 +50,7 @@ export function ImportProgressModal({
 
       <div className="relative bg-white dark:bg-gray-900 rounded-xl shadow-2xl p-8 max-w-md w-full mx-4">
         <div className="flex flex-col items-center text-center">
-          {status === 'importing' && (
+          {status === "importing" && (
             <>
               <Loader2 className="w-12 h-12 text-blue-500 animate-spin mb-4" />
               <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
@@ -58,7 +62,7 @@ export function ImportProgressModal({
             </>
           )}
 
-          {status === 'success' && (
+          {status === "success" && (
             <>
               <CheckCircle className="w-12 h-12 text-green-500 mb-4" />
               <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
@@ -75,7 +79,7 @@ export function ImportProgressModal({
             </>
           )}
 
-          {status === 'error' && (
+          {status === "error" && (
             <>
               <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
               <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">

@@ -118,16 +118,19 @@ pub fn read_json_file<T: for<'a> Deserialize<'a>>(path: &Path) -> Result<T, Stri
         return Err(format!("文件不存在: {}", path.display()));
     }
 
-    let content = fs::read_to_string(path).map_err(|e| format!("读取文件失败: {}", e))?;
+    let content = fs::read_to_string(path)
+        .map_err(|e| format!("读取文件失败: {}: {}", path.display(), e))?;
 
-    serde_json::from_str(&content).map_err(|e| format!("解析 JSON 失败: {}", e))
+    serde_json::from_str(&content)
+        .map_err(|e| format!("解析 JSON 失败: {}: {}", path.display(), e))
 }
 
 /// 写入 JSON 配置文件
 pub fn write_json_file<T: Serialize>(path: &Path, data: &T) -> Result<(), String> {
     // 确保目录存在
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {}", e))?;
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("创建目录失败: {}: {}", parent.display(), e))?;
     }
 
     let json =
@@ -139,7 +142,8 @@ pub fn write_json_file<T: Serialize>(path: &Path, data: &T) -> Result<(), String
 /// 原子写入文本文件（用于 TOML/纯文本）
 pub fn write_text_file(path: &Path, data: &str) -> Result<(), String> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {}", e))?;
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("创建目录失败: {}: {}", parent.display(), e))?;
     }
     atomic_write(path, data.as_bytes())
 }
@@ -147,7 +151,8 @@ pub fn write_text_file(path: &Path, data: &str) -> Result<(), String> {
 /// 原子写入：写入临时文件后 rename 替换，避免半写状态
 pub fn atomic_write(path: &Path, data: &[u8]) -> Result<(), String> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("创建目录失败: {}", e))?;
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("创建目录失败: {}: {}", parent.display(), e))?;
     }
 
     let parent = path.parent().ok_or_else(|| "无效的路径".to_string())?;
@@ -164,10 +169,12 @@ pub fn atomic_write(path: &Path, data: &[u8]) -> Result<(), String> {
     tmp.push(format!("{}.tmp.{}", file_name, ts));
 
     {
-        let mut f = fs::File::create(&tmp).map_err(|e| format!("创建临时文件失败: {}", e))?;
+        let mut f = fs::File::create(&tmp)
+            .map_err(|e| format!("创建临时文件失败: {}: {}", tmp.display(), e))?;
         f.write_all(data)
-            .map_err(|e| format!("写入临时文件失败: {}", e))?;
-        f.flush().map_err(|e| format!("刷新临时文件失败: {}", e))?;
+            .map_err(|e| format!("写入临时文件失败: {}: {}", tmp.display(), e))?;
+        f.flush()
+            .map_err(|e| format!("刷新临时文件失败: {}: {}", tmp.display(), e))?;
     }
 
     #[cfg(unix)]
@@ -185,12 +192,14 @@ pub fn atomic_write(path: &Path, data: &[u8]) -> Result<(), String> {
         if path.exists() {
             let _ = fs::remove_file(path);
         }
-        fs::rename(&tmp, path).map_err(|e| format!("原子替换失败: {}", e))?;
+        fs::rename(&tmp, path)
+            .map_err(|e| format!("原子替换失败: {} -> {}: {}", tmp.display(), path.display(), e))?;
     }
 
     #[cfg(not(windows))]
     {
-        fs::rename(&tmp, path).map_err(|e| format!("原子替换失败: {}", e))?;
+        fs::rename(&tmp, path)
+            .map_err(|e| format!("原子替换失败: {} -> {}: {}", tmp.display(), path.display(), e))?;
     }
     Ok(())
 }

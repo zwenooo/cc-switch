@@ -52,7 +52,11 @@ const KimiModelSelector: React.FC<KimiModelSelectorProps> = ({
       });
 
       if (!response.ok) {
-        throw new Error(t("kimiSelector.requestFailed", { error: `${response.status} ${response.statusText}` }));
+        throw new Error(
+          t("kimiSelector.requestFailed", {
+            error: `${response.status} ${response.statusText}`,
+          }),
+        );
       }
 
       const data = await response.json();
@@ -64,7 +68,11 @@ const KimiModelSelector: React.FC<KimiModelSelectorProps> = ({
       }
     } catch (err) {
       console.error(t("kimiSelector.fetchModelsFailed") + ":", err);
-      setError(err instanceof Error ? err.message : t("kimiSelector.fetchModelsFailed"));
+      setError(
+        err instanceof Error
+          ? err.message
+          : t("kimiSelector.fetchModelsFailed"),
+      );
     } finally {
       setLoading(false);
     }
