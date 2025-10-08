@@ -10,6 +10,7 @@ import { AppSwitcher } from "./components/AppSwitcher";
 import SettingsModal from "./components/SettingsModal";
 import { UpdateBadge } from "./components/UpdateBadge";
 import { Plus, Settings, Moon, Sun } from "lucide-react";
+import McpPanel from "./components/mcp/McpPanel";
 import { buttonStyles } from "./lib/styles";
 import { useDarkMode } from "./hooks/useDarkMode";
 import { extractErrorMessage } from "./utils/errorUtils";
@@ -36,6 +37,7 @@ function App() {
     onConfirm: () => void;
   } | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isMcpOpen, setIsMcpOpen] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 设置通知的辅助函数
@@ -307,9 +309,7 @@ function App() {
             <AppSwitcher activeApp={activeApp} onSwitch={setActiveApp} />
 
             <button
-              onClick={() => {
-                /* TODO: MCP 功能待实现 */
-              }}
+              onClick={() => setIsMcpOpen(true)}
               className="inline-flex items-center gap-2 px-6 py-2 text-sm font-medium rounded-md transition-colors bg-emerald-500 text-white hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-700"
             >
               MCP
@@ -388,6 +388,10 @@ function App() {
           onClose={() => setIsSettingsOpen(false)}
           onImportSuccess={handleImportSuccess}
         />
+      )}
+
+      {isMcpOpen && (
+        <McpPanel onClose={() => setIsMcpOpen(false)} onNotify={showNotification} />
       )}
     </div>
   );
