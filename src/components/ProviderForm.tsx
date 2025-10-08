@@ -1495,7 +1495,7 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                 htmlFor="websiteUrl"
                 className="block text-sm font-medium text-gray-900 dark:text-gray-100"
               >
-                {t("providerForm.websiteLabel")}
+                {t("providerForm.websiteUrl")}
               </label>
               <input
                 type="url"
@@ -1678,8 +1678,8 @@ const ProviderForm: React.FC<ProviderFormProps> = ({
                   onChange={handleCodexApiKeyChange}
                   placeholder={
                     isCodexOfficialPreset
-                      ? t("codexConfig.codexOfficialNoApiKey")
-                      : t("codexConfig.codexApiKeyAutoFill")
+                      ? t("providerForm.codexOfficialNoApiKey")
+                      : t("providerForm.codexApiKeyAutoFill")
                   }
                   disabled={isCodexOfficialPreset}
                   required={
