@@ -77,17 +77,7 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
     reload();
   }, []);
 
-  const handleToggleEnable = async (enable: boolean) => {
-    try {
-      const changed = await window.api.setClaudeMcpEnableAllProjects(enable);
-      if (changed) {
-        await reload();
-        onNotify?.(t("mcp.notice.restartClaude"), "success", 2000);
-      }
-    } catch (e: any) {
-      onNotify?.(e?.message || t("mcp.error.toggleFailed"), "error", 5000);
-    }
-  };
+  // 用户级 MCP：不需要项目级启用开关
 
   const resetForm = () => {
     setEditingId(null);
@@ -200,24 +190,13 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
         <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Left: status & list */}
           <div>
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <div className="text-sm text-gray-500 dark:text-gray-400">
-                  {t("mcp.enableProject")}
-                </div>
-                <div className="text-xs text-gray-400 dark:text-gray-500">
-                  {status?.settingsLocalPath}
-                </div>
+            <div className="mb-4">
+              <div className="text-sm text-gray-500 dark:text-gray-400">
+                {t("mcp.userLevelPath")}
               </div>
-              <label className="inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="sr-only peer"
-                  checked={!!status?.enableAllProjectMcpServers}
-                  onChange={(e) => handleToggleEnable(e.target.checked)}
-                />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500 relative" />
-              </label>
+              <div className="text-xs text-gray-400 dark:text-gray-500 break-all">
+                {status?.userConfigPath}
+              </div>
             </div>
 
             <div className="flex items-center gap-3 mb-3">
@@ -233,12 +212,6 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
               >
                 <Wrench size={16} /> {t("mcp.template.fetch")}
               </button>
-              <button
-                onClick={() => window.api.openConfigFolder("claude")}
-                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-              >
-                {t("mcp.openFolder")}
-              </button>
             </div>
 
             <div className="border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">
@@ -246,11 +219,7 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
                 <span>
                   {t("mcp.serverList")} ({status?.serverCount || 0})
                 </span>
-                {status?.mcpJsonExists ? (
-                  <span className="text-gray-400">{status?.mcpJsonPath}</span>
-                ) : (
-                  <span className="text-gray-400">mcp.json</span>
-                )}
+                <span className="text-gray-400">{status?.userConfigPath}</span>
               </div>
               <div className="max-h-64 overflow-auto divide-y divide-gray-200 dark:divide-gray-800">
                 {loading && (
@@ -403,4 +372,3 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
 };
 
 export default McpPanel;
-

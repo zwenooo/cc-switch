@@ -4,29 +4,21 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::config::{atomic_write, get_claude_config_dir};
+use crate::config::atomic_write;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct McpStatus {
-    pub settings_local_path: String,
-    pub settings_local_exists: bool,
-    pub enable_all_project_mcp_servers: bool,
-    pub mcp_json_path: String,
-    pub mcp_json_exists: bool,
+    pub user_config_path: String,
+    pub user_config_exists: bool,
     pub server_count: usize,
 }
 
-fn claude_dir() -> PathBuf {
-    get_claude_config_dir()
-}
-
-fn settings_local_path() -> PathBuf {
-    claude_dir().join("settings.local.json")
-}
-
-fn mcp_json_path() -> PathBuf {
-    claude_dir().join("mcp.json")
+fn user_config_path() -> PathBuf {
+    // 用户级 MCP 配置文件：~/.claude.json
+    dirs::home_dir()
+        .expect("无法获取用户主目录")
+        .join(".claude.json")
 }
 
 fn read_json_value(path: &Path) -> Result<Value, String> {
@@ -50,20 +42,9 @@ fn write_json_value(path: &Path, value: &Value) -> Result<(), String> {
 }
 
 pub fn get_mcp_status() -> Result<McpStatus, String> {
-    let settings_local = settings_local_path();
-    let mcp_path = mcp_json_path();
-
-    let mut enable = false;
-    if settings_local.exists() {
-        let v = read_json_value(&settings_local)?;
-        enable = v
-            .get("enableAllProjectMcpServers")
-            .and_then(|x| x.as_bool())
-            .unwrap_or(false);
-    }
-
-    let (exists, count) = if mcp_path.exists() {
-        let v = read_json_value(&mcp_path)?;
+    let path = user_config_path();
+    let (exists, count) = if path.exists() {
+        let v = read_json_value(&path)?;
         let servers = v.get("mcpServers").and_then(|x| x.as_object());
         (true, servers.map(|m| m.len()).unwrap_or(0))
     } else {
@@ -71,45 +52,20 @@ pub fn get_mcp_status() -> Result<McpStatus, String> {
     };
 
     Ok(McpStatus {
-        settings_local_path: settings_local.to_string_lossy().to_string(),
-        settings_local_exists: settings_local.exists(),
-        enable_all_project_mcp_servers: enable,
-        mcp_json_path: mcp_path.to_string_lossy().to_string(),
-        mcp_json_exists: exists,
+        user_config_path: path.to_string_lossy().to_string(),
+        user_config_exists: exists,
         server_count: count,
     })
 }
 
 pub fn read_mcp_json() -> Result<Option<String>, String> {
-    let path = mcp_json_path();
+    let path = user_config_path();
     if !path.exists() {
         return Ok(None);
     }
     let content =
         fs::read_to_string(&path).map_err(|e| format!("读取 MCP 配置失败: {}", e))?;
     Ok(Some(content))
-}
-
-pub fn set_enable_all_projects(enable: bool) -> Result<bool, String> {
-    let path = settings_local_path();
-    let mut v = if path.exists() { read_json_value(&path)? } else { serde_json::json!({}) };
-
-    let current = v
-        .get("enableAllProjectMcpServers")
-        .and_then(|x| x.as_bool())
-        .unwrap_or(false);
-    if current == enable && path.exists() {
-        return Ok(false);
-    }
-
-    if let Some(obj) = v.as_object_mut() {
-        obj.insert(
-            "enableAllProjectMcpServers".to_string(),
-            Value::Bool(enable),
-        );
-    }
-    write_json_value(&path, &v)?;
-    Ok(true)
 }
 
 pub fn upsert_mcp_server(id: &str, spec: Value) -> Result<bool, String> {
@@ -132,7 +88,7 @@ pub fn upsert_mcp_server(id: &str, spec: Value) -> Result<bool, String> {
         return Err("MCP 服务器缺少 command".into());
     }
 
-    let path = mcp_json_path();
+    let path = user_config_path();
     let mut root = if path.exists() { read_json_value(&path)? } else { serde_json::json!({}) };
 
     // 确保 mcpServers 对象存在
@@ -163,7 +119,7 @@ pub fn delete_mcp_server(id: &str) -> Result<bool, String> {
     if id.trim().is_empty() {
         return Err("MCP 服务器 ID 不能为空".into());
     }
-    let path = mcp_json_path();
+    let path = user_config_path();
     if !path.exists() {
         return Ok(false);
     }
@@ -215,4 +171,3 @@ pub fn validate_command_in_path(cmd: &str) -> Result<bool, String> {
     }
     Ok(false)
 }
-

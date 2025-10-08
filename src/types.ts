@@ -65,10 +65,7 @@ export interface McpServer {
 
 // MCP 配置状态
 export interface McpStatus {
-  settingsLocalPath: string;
-  settingsLocalExists: boolean;
-  enableAllProjectMcpServers: boolean;
-  mcpJsonPath: string;
-  mcpJsonExists: boolean;
+  userConfigPath: string;
+  userConfigExists: boolean;
   serverCount: number;
 }

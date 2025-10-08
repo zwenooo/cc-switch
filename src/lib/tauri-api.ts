@@ -279,7 +279,7 @@ export const tauriAPI = {
     }
   },
 
-  // Claude MCP：获取状态（settings.local.json + mcp.json）
+  // Claude MCP：获取状态（用户级 ~/.claude.json）
   getClaudeMcpStatus: async (): Promise<McpStatus> => {
     try {
       return await invoke<McpStatus>("get_claude_mcp_status");
@@ -289,22 +289,12 @@ export const tauriAPI = {
     }
   },
 
-  // Claude MCP：读取 mcp.json 文本
+  // Claude MCP：读取 ~/.claude.json 文本
   readClaudeMcpConfig: async (): Promise<string | null> => {
     try {
       return await invoke<string | null>("read_claude_mcp_config");
     } catch (error) {
       console.error("读取 mcp.json 失败:", error);
-      throw error;
-    }
-  },
-
-  // Claude MCP：设置项目级启用开关
-  setClaudeMcpEnableAllProjects: async (enable: boolean): Promise<boolean> => {
-    try {
-      return await invoke<boolean>("set_claude_mcp_enable_all_projects", { enable });
-    } catch (error) {
-      console.error("写入 settings.local.json 失败:", error);
       throw error;
     }
   },

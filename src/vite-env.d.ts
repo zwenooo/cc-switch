@@ -64,7 +64,6 @@ declare global {
       // Claude MCP
       getClaudeMcpStatus: () => Promise<McpStatus>;
       readClaudeMcpConfig: () => Promise<string | null>;
-      setClaudeMcpEnableAllProjects: (enable: boolean) => Promise<boolean>;
       upsertClaudeMcpServer: (
         id: string,
         spec: Record<string, any>,

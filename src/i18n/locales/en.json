@@ -251,8 +251,7 @@
   },
   "mcp": {
     "title": "MCP Management",
-    "enableProject": "Enable project-level MCP servers",
-    "openFolder": "Open ~/.claude",
+    "userLevelPath": "User-level MCP path",
     "serverList": "Servers",
     "loading": "Loading...",
     "empty": "No MCP servers",
@@ -281,7 +280,6 @@
       "templateAdded": "Template added"
     },
     "error": {
-      "toggleFailed": "Failed to update toggle",
       "idRequired": "Please enter identifier",
       "commandRequired": "Please enter command",
       "saveFailed": "Save failed",

@@ -425,7 +425,6 @@ pub fn run() {
             // Claude MCP management
             commands::get_claude_mcp_status,
             commands::read_claude_mcp_config,
-            commands::set_claude_mcp_enable_all_projects,
             commands::upsert_claude_mcp_server,
             commands::delete_claude_mcp_server,
             commands::validate_mcp_command,

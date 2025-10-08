@@ -251,8 +251,7 @@
   },
   "mcp": {
     "title": "MCP 管理",
-    "enableProject": "启用项目级 MCP 服务器",
-    "openFolder": "打开 ~/.claude",
+    "userLevelPath": "用户级 MCP 配置路径",
     "serverList": "服务器列表",
     "loading": "加载中...",
     "empty": "暂无 MCP 服务器",
@@ -281,7 +280,6 @@
       "templateAdded": "已添加模板"
     },
     "error": {
-      "toggleFailed": "更新开关失败",
       "idRequired": "请填写标识",
       "commandRequired": "请填写命令",
       "saveFailed": "保存失败",

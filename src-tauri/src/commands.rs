@@ -676,11 +676,6 @@ pub async fn read_claude_mcp_config() -> Result<Option<String>, String> {
     claude_mcp::read_mcp_json()
 }
 
-/// 设置 enableAllProjectMcpServers 开关
-#[tauri::command]
-pub async fn set_claude_mcp_enable_all_projects(enable: bool) -> Result<bool, String> {
-    claude_mcp::set_enable_all_projects(enable)
-}
 
 /// 新增或更新一个 MCP 服务器条目
 #[tauri::command]
