@@ -248,5 +248,48 @@
     "customDescription": "Manually configure provider, requires complete configuration",
     "officialDescription": "Official login, no API Key required",
     "presetDescription": "Use preset configuration, only API Key required"
+  },
+  "mcp": {
+    "title": "MCP Management",
+    "enableProject": "Enable project-level MCP servers",
+    "openFolder": "Open ~/.claude",
+    "serverList": "Servers",
+    "loading": "Loading...",
+    "empty": "No MCP servers",
+    "add": "Add Server",
+    "addServer": "Add Server",
+    "editServer": "Edit Server",
+    "template": {
+      "fetch": "Quick Template: mcp-fetch"
+    },
+    "id": "Identifier (unique)",
+    "type": "Type",
+    "cwd": "Working Directory (optional)",
+    "command": "Command",
+    "validateCommand": "Validate Command",
+    "args": "Args",
+    "argsPlaceholder": "e.g., mcp-server-fetch --help",
+    "env": "Environment (one per line, KEY=VALUE)",
+    "envPlaceholder": "FOO=bar\nHELLO=world",
+    "reset": "Reset",
+    "notice": {
+      "restartClaude": "Written. Restart Claude to take effect."
+    },
+    "msg": {
+      "saved": "Saved",
+      "deleted": "Deleted",
+      "templateAdded": "Template added"
+    },
+    "error": {
+      "toggleFailed": "Failed to update toggle",
+      "idRequired": "Please enter identifier",
+      "commandRequired": "Please enter command",
+      "saveFailed": "Save failed",
+      "deleteFailed": "Delete failed"
+    },
+    "validation": {
+      "ok": "Command available",
+      "fail": "Command not found"
+    }
   }
 }

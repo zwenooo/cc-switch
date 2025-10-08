@@ -248,5 +248,48 @@
     "customDescription": "手动配置供应商，需要填写完整的配置信息",
     "officialDescription": "官方登录，不需要填写 API Key",
     "presetDescription": "使用预设配置，只需填写 API Key"
+  },
+  "mcp": {
+    "title": "MCP 管理",
+    "enableProject": "启用项目级 MCP 服务器",
+    "openFolder": "打开 ~/.claude",
+    "serverList": "服务器列表",
+    "loading": "加载中...",
+    "empty": "暂无 MCP 服务器",
+    "add": "新增服务器",
+    "addServer": "新增服务器",
+    "editServer": "编辑服务器",
+    "template": {
+      "fetch": "快速模板：mcp-fetch"
+    },
+    "id": "标识 (唯一)",
+    "type": "类型",
+    "cwd": "工作目录 (可选)",
+    "command": "命令",
+    "validateCommand": "校验命令",
+    "args": "参数",
+    "argsPlaceholder": "例如：mcp-server-fetch --help",
+    "env": "环境变量 (一行一个，KEY=VALUE)",
+    "envPlaceholder": "FOO=bar\nHELLO=world",
+    "reset": "重置",
+    "notice": {
+      "restartClaude": "已写入配置，重启 Claude 生效"
+    },
+    "msg": {
+      "saved": "已保存",
+      "deleted": "已删除",
+      "templateAdded": "已添加模板"
+    },
+    "error": {
+      "toggleFailed": "更新开关失败",
+      "idRequired": "请填写标识",
+      "commandRequired": "请填写命令",
+      "saveFailed": "保存失败",
+      "deleteFailed": "删除失败"
+    },
+    "validation": {
+      "ok": "命令可用",
+      "fail": "命令不可用"
+    }
   }
 }
