@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Zap, Loader2, Plus, X, AlertCircle } from "lucide-react";
+import { Zap, Loader2, Plus, X, AlertCircle, Save } from "lucide-react";
 import { isLinux } from "../../lib/platform";
 
 import type { AppType } from "../../lib/tauri-api";
@@ -609,9 +609,10 @@ const EndpointSpeedTest: React.FC<EndpointSpeedTestProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 bg-blue-500 dark:bg-blue-600 text-white rounded-lg hover:bg-blue-600 dark:hover:bg-blue-700 transition-colors text-sm font-medium"
+            className="px-4 py-2 bg-blue-500 dark:bg-blue-600 text-white rounded-lg hover:bg-blue-600 dark:hover:bg-blue-700 transition-colors text-sm font-medium flex items-center gap-2"
           >
-            {t("endpointTest.done")}
+            <Save className="w-4 h-4" />
+            {t("common.save")}
           </button>
         </div>
       </div>
