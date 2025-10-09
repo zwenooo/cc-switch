@@ -8,7 +8,7 @@ import McpWizardModal from "./McpWizardModal";
 interface McpFormModalProps {
   editingId?: string;
   initialData?: McpServer;
-  onSave: (id: string, server: McpServer) => void;
+  onSave: (id: string, server: McpServer) => Promise<void>;
   onClose: () => void;
 }
 
@@ -82,7 +82,7 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
         // 解析 JSON 配置
         server = JSON.parse(formJson) as McpServer;
       } else {
-        // 空 JSON 时提供默认值
+        // 空 JSON 时提供默认值（注意：后端会校验 stdio 需要非空 command / http 需要 url）
         server = {
           type: "stdio",
           command: "",
@@ -95,9 +95,12 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
         server.enabled = initialData.enabled;
       }
 
-      onSave(formId.trim(), server);
-    } catch (error) {
-      alert(t("mcp.error.saveFailed"));
+      // 显式等待父组件保存流程，以便正确处理成功/失败
+      await onSave(formId.trim(), server);
+    } catch (error: any) {
+      // 将后端错误信息直接提示给用户（例如缺少 command/url 等）
+      const msg = error?.message || t("mcp.error.saveFailed");
+      alert(msg);
     } finally {
       setSaving(false);
     }

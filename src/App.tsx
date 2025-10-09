@@ -333,7 +333,7 @@ function App() {
             {/* 通知组件 - 相对于视窗定位 */}
             {notification && (
               <div
-                className={`fixed top-20 left-1/2 transform -translate-x-1/2 z-50 px-4 py-3 rounded-lg shadow-lg transition-all duration-300 ${
+                className={`fixed top-20 left-1/2 transform -translate-x-1/2 z-[80] px-4 py-3 rounded-lg shadow-lg transition-all duration-300 ${
                   notification.type === "error"
                     ? "bg-red-500 text-white"
                     : "bg-green-500 text-white"

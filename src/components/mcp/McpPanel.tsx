@@ -115,6 +115,8 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
       onNotify?.(t("mcp.msg.saved"), "success", 1500);
     } catch (e: any) {
       onNotify?.(e?.message || t("mcp.error.saveFailed"), "error", 6000);
+      // 继续抛出错误，让表单层可以给到直观反馈（避免被更高层遮挡）
+      throw e;
     }
   };
 
