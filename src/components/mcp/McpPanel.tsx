@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { X, Plus, Server } from "lucide-react";
-import { McpServer, McpStatus } from "../../types";
+import { McpServer } from "../../types";
 import McpListItem from "./McpListItem";
 import McpFormModal from "./McpFormModal";
 import { ConfirmDialog } from "../ConfirmDialog";
@@ -25,7 +25,6 @@ interface McpPanelProps {
  */
 const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
   const { t } = useTranslation();
-  const [status, setStatus] = useState<McpStatus | null>(null);
   const [servers, setServers] = useState<Record<string, McpServer>>({});
   const [loading, setLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -41,11 +40,6 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
     setLoading(true);
     try {
       const cfg = await window.api.getMcpConfig("claude");
-      setStatus({
-        userConfigPath: cfg.configPath,
-        userConfigExists: true,
-        serverCount: Object.keys(cfg.servers || {}).length,
-      });
       setServers(cfg.servers || {});
     } finally {
       setLoading(false);
@@ -174,7 +168,7 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
       />
 
       {/* Panel */}
-      <div className="relative bg-white dark:bg-gray-900 rounded-xl shadow-lg max-w-4xl w-full mx-4 overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="relative bg-white dark:bg-gray-900 rounded-xl shadow-lg max-w-3xl w-full mx-4 overflow-hidden flex flex-col max-h-[85vh] min-h-[600px]">
         {/* Header */}
         <div className="flex-shrink-0 flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-800">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
@@ -201,11 +195,7 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
         {/* Info Section */}
         <div className="flex-shrink-0 px-6 pt-4 pb-2">
           <div className="text-sm text-gray-500 dark:text-gray-400">
-            {t("mcp.configPath")}:{" "}
-            <span className="text-xs break-all">{status?.userConfigPath}</span>
-          </div>
-          <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            {t("mcp.serverCount", { count: status?.serverCount || 0 })}
+            {t("mcp.serverCount", { count: Object.keys(servers).length })}
           </div>
         </div>
 
