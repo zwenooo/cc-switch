@@ -1,6 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
-import { Provider, Settings, CustomEndpoint, McpStatus, McpServer } from "../types";
+import {
+  Provider,
+  Settings,
+  CustomEndpoint,
+  McpStatus,
+  McpServer,
+} from "../types";
 
 // 应用类型
 export type AppType = "claude" | "codex";

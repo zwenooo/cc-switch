@@ -60,6 +60,7 @@ export interface McpServer {
   args?: string[];
   env?: Record<string, string>;
   cwd?: string;
+  enabled?: boolean; // 是否启用该 MCP 服务器，默认 true
   [key: string]: any;
 }
 

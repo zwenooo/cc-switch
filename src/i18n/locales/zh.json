@@ -8,6 +8,7 @@
     "edit": "编辑",
     "delete": "删除",
     "save": "保存",
+    "saving": "保存中...",
     "cancel": "取消",
     "confirm": "确定",
     "close": "关闭",
@@ -255,9 +256,12 @@
     "serverList": "服务器列表",
     "loading": "加载中...",
     "empty": "暂无 MCP 服务器",
-    "add": "新增服务器",
+    "emptyDescription": "点击右上角按钮添加第一个 MCP 服务器",
+    "add": "添加 MCP",
     "addServer": "新增服务器",
     "editServer": "编辑服务器",
+    "configPath": "配置路径",
+    "serverCount": "已配置 {{count}} 个 MCP 服务器",
     "template": {
       "fetch": "快速模板：mcp-fetch"
     },
@@ -277,6 +281,8 @@
     "msg": {
       "saved": "已保存",
       "deleted": "已删除",
+      "enabled": "已启用",
+      "disabled": "已禁用",
       "templateAdded": "已添加模板"
     },
     "error": {
@@ -288,6 +294,10 @@
     "validation": {
       "ok": "命令可用",
       "fail": "命令不可用"
+    },
+    "confirm": {
+      "deleteTitle": "删除 MCP 服务器",
+      "deleteMessage": "确定要删除 MCP 服务器 \"{{id}}\" 吗？此操作无法撤销。"
     }
   }
 }
