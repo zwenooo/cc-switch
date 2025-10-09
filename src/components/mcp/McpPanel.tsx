@@ -5,6 +5,10 @@ import { McpServer, McpStatus } from "../../types";
 import McpListItem from "./McpListItem";
 import McpFormModal from "./McpFormModal";
 import { ConfirmDialog } from "../ConfirmDialog";
+import { extractErrorMessage } from "../../utils/errorUtils";
+import { mcpPresets } from "../../config/mcpPresets";
+import McpToggle from "./McpToggle";
+import { cardStyles, cn } from "../../lib/styles";
 
 interface McpPanelProps {
   onClose: () => void;
@@ -63,10 +67,16 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
   const handleToggle = async (id: string, enabled: boolean) => {
     try {
       const server = servers[id];
-      if (!server) return;
+      let updatedServer: McpServer | null = null;
+      if (server) {
+        updatedServer = { ...server, enabled };
+      } else {
+        const preset = mcpPresets.find((p) => p.id === id);
+        if (!preset) return; // 既不是已安装项也不是预设，忽略
+        updatedServer = { ...(preset.server as McpServer), enabled };
+      }
 
-      const updatedServer = { ...server, enabled };
-      await window.api.upsertClaudeMcpServer(id, updatedServer);
+      await window.api.upsertClaudeMcpServer(id, updatedServer as McpServer);
       await reload();
       onNotify?.(
         enabled ? t("mcp.msg.enabled") : t("mcp.msg.disabled"),
@@ -74,7 +84,12 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
         1500,
       );
     } catch (e: any) {
-      onNotify?.(e?.message || t("mcp.error.saveFailed"), "error", 5000);
+      const detail = extractErrorMessage(e);
+      onNotify?.(
+        detail || t("mcp.error.saveFailed"),
+        "error",
+        detail ? 6000 : 5000,
+      );
     }
   };
 
@@ -100,7 +115,12 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
           setConfirmDialog(null);
           onNotify?.(t("mcp.msg.deleted"), "success", 1500);
         } catch (e: any) {
-          onNotify?.(e?.message || t("mcp.error.deleteFailed"), "error", 5000);
+          const detail = extractErrorMessage(e);
+          onNotify?.(
+            detail || t("mcp.error.deleteFailed"),
+            "error",
+            detail ? 6000 : 5000,
+          );
         }
       },
     });
@@ -114,7 +134,12 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
       setEditingId(null);
       onNotify?.(t("mcp.msg.saved"), "success", 1500);
     } catch (e: any) {
-      onNotify?.(e?.message || t("mcp.error.saveFailed"), "error", 6000);
+      const detail = extractErrorMessage(e);
+      onNotify?.(
+        detail || t("mcp.error.saveFailed"),
+        "error",
+        detail ? 6000 : 5000,
+      );
       // 继续抛出错误，让表单层可以给到直观反馈（避免被更高层遮挡）
       throw e;
     }
@@ -177,34 +202,85 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
             <div className="text-center py-12 text-gray-500 dark:text-gray-400">
               {t("mcp.loading")}
             </div>
-          ) : serverEntries.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="w-16 h-16 mx-auto mb-4 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center">
-                <Server
-                  size={24}
-                  className="text-gray-400 dark:text-gray-500"
-                />
-              </div>
-              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
-                {t("mcp.empty")}
-              </h3>
-              <p className="text-gray-500 dark:text-gray-400 text-sm">
-                {t("mcp.emptyDescription")}
-              </p>
-            </div>
           ) : (
-            <div className="space-y-3">
-              {serverEntries.map(([id, server]) => (
-                <McpListItem
-                  key={id}
-                  id={id}
-                  server={server}
-                  onToggle={handleToggle}
-                  onEdit={handleEdit}
-                  onDelete={handleDelete}
-                />
-              ))}
-            </div>
+            (() => {
+              const notInstalledPresets = mcpPresets.filter(
+                (p) => !servers[p.id],
+              );
+              const hasAny =
+                serverEntries.length > 0 || notInstalledPresets.length > 0;
+              if (!hasAny) {
+                return (
+                  <div className="text-center py-12">
+                    <div className="w-16 h-16 mx-auto mb-4 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center">
+                      <Server
+                        size={24}
+                        className="text-gray-400 dark:text-gray-500"
+                      />
+                    </div>
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
+                      {t("mcp.empty")}
+                    </h3>
+                    <p className="text-gray-500 dark:text-gray-400 text-sm">
+                      {t("mcp.emptyDescription")}
+                    </p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="space-y-3">
+                  {/* 已安装 */}
+                  {serverEntries.map(([id, server]) => (
+                    <McpListItem
+                      key={`installed-${id}`}
+                      id={id}
+                      server={server}
+                      onToggle={handleToggle}
+                      onEdit={handleEdit}
+                      onDelete={handleDelete}
+                    />
+                  ))}
+
+                  {/* 预设（未安装） */}
+                  {notInstalledPresets.map((p) => {
+                    const s = {
+                      ...(p.server as McpServer),
+                      enabled: false,
+                    } as McpServer;
+                    const details = [s.type, s.command, ...(s.args || [])].join(
+                      " · ",
+                    );
+                    return (
+                      <div
+                        key={`preset-${p.id}`}
+                        className={cn(
+                          cardStyles.interactive,
+                          "!p-4 opacity-95",
+                        )}
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="flex-shrink-0">
+                            <McpToggle
+                              enabled={false}
+                              onChange={(en) => handleToggle(p.id, en)}
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-medium text-gray-900 dark:text-gray-100 mb-1">
+                              {p.id}
+                            </h3>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                              {details}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()
           )}
         </div>
       </div>

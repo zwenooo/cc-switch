@@ -4,6 +4,7 @@ import { X, Save, AlertCircle } from "lucide-react";
 import { McpServer } from "../../types";
 import { buttonStyles, inputStyles } from "../../lib/styles";
 import McpWizardModal from "./McpWizardModal";
+import { extractErrorMessage } from "../../utils/errorUtils";
 
 interface McpFormModalProps {
   editingId?: string;
@@ -53,7 +54,41 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
 
   const handleJsonChange = (value: string) => {
     setFormJson(value);
-    setJsonError(validateJson(value));
+
+    // 基础 JSON 校验
+    const baseErr = validateJson(value);
+    if (baseErr) {
+      setJsonError(baseErr);
+      return;
+    }
+
+    // 进一步结构校验：仅允许单个服务器对象，禁止整份配置
+    if (value.trim()) {
+      try {
+        const obj = JSON.parse(value);
+        if (obj && typeof obj === "object") {
+          if (Object.prototype.hasOwnProperty.call(obj, "mcpServers")) {
+            setJsonError(t("mcp.error.singleServerObjectRequired"));
+            return;
+          }
+
+          // 若带有类型，做必填字段提示（不阻止输入，仅给出即时反馈）
+          const typ = (obj as any)?.type;
+          if (typ === "stdio" && !(obj as any)?.command?.trim()) {
+            setJsonError(t("mcp.error.commandRequired"));
+            return;
+          }
+          if (typ === "http" && !(obj as any)?.url?.trim()) {
+            setJsonError(t("mcp.wizard.urlRequired"));
+            return;
+          }
+        }
+      } catch {
+        // 解析异常已在基础校验覆盖
+      }
+    }
+
+    setJsonError("");
   };
 
   const handleWizardApply = (json: string) => {
@@ -81,6 +116,16 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
       if (formJson.trim()) {
         // 解析 JSON 配置
         server = JSON.parse(formJson) as McpServer;
+
+        // 前置必填校验，避免后端拒绝后才提示
+        if (server?.type === "stdio" && !server?.command?.trim()) {
+          alert(t("mcp.error.commandRequired"));
+          return;
+        }
+        if (server?.type === "http" && !server?.url?.trim()) {
+          alert(t("mcp.wizard.urlRequired"));
+          return;
+        }
       } else {
         // 空 JSON 时提供默认值（注意：后端会校验 stdio 需要非空 command / http 需要 url）
         server = {
@@ -98,8 +143,9 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
       // 显式等待父组件保存流程，以便正确处理成功/失败
       await onSave(formId.trim(), server);
     } catch (error: any) {
-      // 将后端错误信息直接提示给用户（例如缺少 command/url 等）
-      const msg = error?.message || t("mcp.error.saveFailed");
+      // 提取后端错误信息（支持 string / {message} / tauri payload）
+      const detail = extractErrorMessage(error);
+      const msg = detail || t("mcp.error.saveFailed");
       alert(msg);
     } finally {
       setSaving(false);

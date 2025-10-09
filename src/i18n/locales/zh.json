@@ -318,6 +318,7 @@
       "idRequired": "请填写标识",
       "jsonInvalid": "JSON 格式错误，请检查",
       "commandRequired": "请填写命令",
+      "singleServerObjectRequired": "此处只需单个服务器对象，请不要粘贴包含 mcpServers 的整份配置",
       "saveFailed": "保存失败",
       "deleteFailed": "删除失败"
     },
@@ -328,6 +329,14 @@
     "confirm": {
       "deleteTitle": "删除 MCP 服务器",
       "deleteMessage": "确定要删除 MCP 服务器 \"{{id}}\" 吗？此操作无法撤销。"
+    },
+    "presets": {
+      "title": "预设库",
+      "enable": "启用",
+      "enabled": "已启用",
+      "installed": "已安装",
+      "docs": "文档",
+      "requiresEnv": "需要环境变量"
     }
   }
 }

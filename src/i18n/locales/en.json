@@ -318,6 +318,7 @@
       "idRequired": "Please enter identifier",
       "jsonInvalid": "Invalid JSON format",
       "commandRequired": "Please enter command",
+      "singleServerObjectRequired": "Please paste a single MCP server object (do not include top-level mcpServers)",
       "saveFailed": "Save failed",
       "deleteFailed": "Delete failed"
     },
@@ -328,6 +329,14 @@
     "confirm": {
       "deleteTitle": "Delete MCP Server",
       "deleteMessage": "Are you sure you want to delete MCP server \"{{id}}\"? This action cannot be undone."
+    },
+    "presets": {
+      "title": "Presets",
+      "enable": "Enable",
+      "enabled": "Enabled",
+      "installed": "Installed",
+      "docs": "Docs",
+      "requiresEnv": "Requires env"
     }
   }
 }
