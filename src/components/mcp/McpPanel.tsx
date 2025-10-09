@@ -40,43 +40,56 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
   const reload = async () => {
     setLoading(true);
     try {
-      const s = await window.api.getClaudeMcpStatus();
-      setStatus(s);
-      const text = await window.api.readClaudeMcpConfig();
-      if (text) {
-        try {
-          const obj = JSON.parse(text);
-          const list = (obj?.mcpServers || {}) as Record<string, McpServer>;
-          setServers(list);
-        } catch (e) {
-          console.error("Failed to parse mcp.json", e);
-          setServers({});
-        }
-      } else {
-        setServers({});
-      }
+      const cfg = await window.api.getMcpConfig();
+      setStatus({
+        userConfigPath: cfg.configPath,
+        userConfigExists: true,
+        serverCount: Object.keys(cfg.servers || {}).length,
+      });
+      setServers(cfg.servers || {});
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    reload();
+    const setup = async () => {
+      try {
+        // 先从 ~/.claude.json 导入已存在的 MCP（设为 enabled=true）
+        await window.api.importMcpFromClaude();
+
+        // 读取现有 config.json 内容
+        const cfg = await window.api.getMcpConfig();
+        const existing = cfg.servers || {};
+
+        // 将预设落库为禁用（若缺失）
+        const missing = mcpPresets.filter((p) => !existing[p.id]);
+        for (const p of missing) {
+          const seed: McpServer = {
+            ...(p.server as McpServer),
+            enabled: false,
+            source: "preset",
+          } as unknown as McpServer;
+          await window.api.upsertMcpServerInConfig(p.id, seed);
+        }
+      } catch (e) {
+        console.warn("MCP 初始化导入/落库失败（忽略继续）", e);
+      } finally {
+        await reload();
+      }
+    };
+    setup();
   }, []);
 
   const handleToggle = async (id: string, enabled: boolean) => {
     try {
       const server = servers[id];
-      let updatedServer: McpServer | null = null;
-      if (server) {
-        updatedServer = { ...server, enabled };
-      } else {
+      if (!server) {
         const preset = mcpPresets.find((p) => p.id === id);
-        if (!preset) return; // 既不是已安装项也不是预设，忽略
-        updatedServer = { ...(preset.server as McpServer), enabled };
+        if (!preset) return;
+        await window.api.upsertMcpServerInConfig(id, preset.server as McpServer);
       }
-
-      await window.api.upsertClaudeMcpServer(id, updatedServer as McpServer);
+      await window.api.setMcpEnabled(id, enabled);
       await reload();
       onNotify?.(
         enabled ? t("mcp.msg.enabled") : t("mcp.msg.disabled"),
@@ -110,7 +123,7 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
       message: t("mcp.confirm.deleteMessage", { id }),
       onConfirm: async () => {
         try {
-          await window.api.deleteClaudeMcpServer(id);
+          await window.api.deleteMcpServerInConfig(id);
           await reload();
           setConfirmDialog(null);
           onNotify?.(t("mcp.msg.deleted"), "success", 1500);
@@ -128,7 +141,7 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
 
   const handleSave = async (id: string, server: McpServer) => {
     try {
-      await window.api.upsertClaudeMcpServer(id, server);
+      await window.api.upsertMcpServerInConfig(id, server);
       await reload();
       setIsFormOpen(false);
       setEditingId(null);

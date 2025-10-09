@@ -6,6 +6,7 @@ import {
   CustomEndpoint,
   McpStatus,
   McpServer,
+  McpConfigResponse,
 } from "../types";
 
 // 应用类型
@@ -335,6 +336,64 @@ export const tauriAPI = {
     } catch (error) {
       console.error("校验 MCP 命令失败:", error);
       return false;
+    }
+  },
+
+  // 新：config.json 为 SSOT 的 MCP API
+  getMcpConfig: async (): Promise<McpConfigResponse> => {
+    try {
+      return await invoke<McpConfigResponse>("get_mcp_config");
+    } catch (error) {
+      console.error("获取 MCP 配置失败:", error);
+      throw error;
+    }
+  },
+
+  upsertMcpServerInConfig: async (
+    id: string,
+    spec: McpServer | Record<string, any>,
+  ): Promise<boolean> => {
+    try {
+      return await invoke<boolean>("upsert_mcp_server_in_config", { id, spec });
+    } catch (error) {
+      console.error("写入 MCP（config.json）失败:", error);
+      throw error;
+    }
+  },
+
+  deleteMcpServerInConfig: async (id: string): Promise<boolean> => {
+    try {
+      return await invoke<boolean>("delete_mcp_server_in_config", { id });
+    } catch (error) {
+      console.error("删除 MCP（config.json）失败:", error);
+      throw error;
+    }
+  },
+
+  setMcpEnabled: async (id: string, enabled: boolean): Promise<boolean> => {
+    try {
+      return await invoke<boolean>("set_mcp_enabled", { id, enabled });
+    } catch (error) {
+      console.error("设置 MCP 启用状态失败:", error);
+      throw error;
+    }
+  },
+
+  syncEnabledMcpToClaude: async (): Promise<boolean> => {
+    try {
+      return await invoke<boolean>("sync_enabled_mcp_to_claude");
+    } catch (error) {
+      console.error("同步启用 MCP 到 .claude.json 失败:", error);
+      throw error;
+    }
+  },
+
+  importMcpFromClaude: async (): Promise<number> => {
+    try {
+      return await invoke<number>("import_mcp_from_claude");
+    } catch (error) {
+      console.error("从 ~/.claude.json 导入 MCP 失败:", error);
+      throw error;
     }
   },
 

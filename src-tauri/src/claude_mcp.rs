@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -182,4 +182,33 @@ pub fn validate_command_in_path(cmd: &str) -> Result<bool, String> {
         }
     }
     Ok(false)
+}
+
+/// 将给定的启用 MCP 服务器映射写入到用户级 ~/.claude.json 的 mcpServers 字段
+/// 仅覆盖 mcpServers，其他字段保持不变
+pub fn set_mcp_servers_map(servers: &std::collections::HashMap<String, Value>) -> Result<(), String> {
+    let path = user_config_path();
+    let mut root = if path.exists() { read_json_value(&path)? } else { serde_json::json!({}) };
+
+    // 构建 mcpServers 对象：移除 UI 辅助字段（enabled/source），仅保留实际 MCP 规范
+    let mut out: Map<String, Value> = Map::new();
+    for (id, spec) in servers.iter() {
+        if let Some(mut obj) = spec.as_object().cloned() {
+            obj.remove("enabled");
+            obj.remove("source");
+            out.insert(id.clone(), Value::Object(obj));
+        } else {
+            return Err(format!("MCP 服务器 '{}' 不是对象", id));
+        }
+    }
+
+    {
+        let obj = root
+            .as_object_mut()
+            .ok_or_else(|| "~/.claude.json 根必须是对象".to_string())?;
+        obj.insert("mcpServers".into(), Value::Object(out));
+    }
+
+    write_json_value(&path, &root)?;
+    Ok(())
 }

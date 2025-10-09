@@ -1,6 +1,14 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// MCP 配置：集中存放于 ~/.cc-switch/config.json
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct McpConfig {
+    /// 以 id 为键的服务器定义（宽松 JSON 对象，包含 enabled/source 等 UI 辅助字段）
+    #[serde(default)]
+    pub servers: HashMap<String, serde_json::Value>,
+}
+
 use crate::config::{copy_file, get_app_config_dir, get_app_config_path, write_json_file};
 use crate::provider::ProviderManager;
 
@@ -35,8 +43,12 @@ impl From<&str> for AppType {
 pub struct MultiAppConfig {
     #[serde(default = "default_version")]
     pub version: u32,
+    /// 应用管理器（claude/codex）
     #[serde(flatten)]
     pub apps: HashMap<String, ProviderManager>,
+    /// MCP 配置
+    #[serde(default)]
+    pub mcp: McpConfig,
 }
 
 fn default_version() -> u32 {
@@ -49,7 +61,11 @@ impl Default for MultiAppConfig {
         apps.insert("claude".to_string(), ProviderManager::default());
         apps.insert("codex".to_string(), ProviderManager::default());
 
-        Self { version: 2, apps }
+        Self {
+            version: 2,
+            apps,
+            mcp: McpConfig::default(),
+        }
     }
 }
 
@@ -76,7 +92,11 @@ impl MultiAppConfig {
             apps.insert("claude".to_string(), v1_config);
             apps.insert("codex".to_string(), ProviderManager::default());
 
-            let config = Self { version: 2, apps };
+            let config = Self {
+                version: 2,
+                apps,
+                mcp: McpConfig::default(),
+            };
 
             // 迁移前备份旧版(v1)配置文件
             let backup_dir = get_app_config_dir();
@@ -135,5 +155,10 @@ impl MultiAppConfig {
             self.apps
                 .insert(app.as_str().to_string(), ProviderManager::default());
         }
+    }
+
+    /// 获取 MCP 配置（可变引用）
+    pub fn mcp_mut(&mut self) -> &mut McpConfig {
+        &mut self.mcp
     }
 }
