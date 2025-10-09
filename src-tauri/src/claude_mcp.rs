@@ -80,12 +80,24 @@ pub fn upsert_mcp_server(id: &str, spec: Value) -> Result<bool, String> {
         .get("type")
         .and_then(|x| x.as_str())
         .unwrap_or("");
-    if t != "stdio" && t != "sse" {
-        return Err("MCP 服务器 type 必须是 'stdio' 或 'sse'".into());
+    if t != "stdio" && t != "http" {
+        return Err("MCP 服务器 type 必须是 'stdio' 或 'http'".into());
     }
-    let cmd = spec.get("command").and_then(|x| x.as_str()).unwrap_or("");
-    if cmd.is_empty() {
-        return Err("MCP 服务器缺少 command".into());
+
+    // stdio 类型必须有 command
+    if t == "stdio" {
+        let cmd = spec.get("command").and_then(|x| x.as_str()).unwrap_or("");
+        if cmd.is_empty() {
+            return Err("stdio 类型的 MCP 服务器缺少 command 字段".into());
+        }
+    }
+
+    // http 类型必须有 url
+    if t == "http" {
+        let url = spec.get("url").and_then(|x| x.as_str()).unwrap_or("");
+        if url.is_empty() {
+            return Err("http 类型的 MCP 服务器缺少 url 字段".into());
+        }
     }
 
     let path = user_config_path();

@@ -31,6 +31,34 @@ const parseEnvText = (text: string): Record<string, string> => {
 };
 
 /**
+ * 解析headers文本为对象（支持 KEY: VALUE 或 KEY=VALUE）
+ */
+const parseHeadersText = (text: string): Record<string, string> => {
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  const headers: Record<string, string> = {};
+  for (const l of lines) {
+    // 支持 KEY: VALUE 或 KEY=VALUE
+    const colonIdx = l.indexOf(":");
+    const equalIdx = l.indexOf("=");
+    let idx = -1;
+    if (colonIdx > 0 && (equalIdx === -1 || colonIdx < equalIdx)) {
+      idx = colonIdx;
+    } else if (equalIdx > 0) {
+      idx = equalIdx;
+    }
+    if (idx > 0) {
+      const k = l.slice(0, idx).trim();
+      const v = l.slice(idx + 1).trim();
+      if (k) headers[k] = v;
+    }
+  }
+  return headers;
+};
+
+/**
  * MCP 配置向导模态框
  * 帮助用户快速生成 MCP JSON 配置
  */
@@ -40,35 +68,54 @@ const McpWizardModal: React.FC<McpWizardModalProps> = ({
   onApply,
 }) => {
   const { t } = useTranslation();
-  const [wizardType, setWizardType] = useState<"stdio" | "sse">("stdio");
+  const [wizardType, setWizardType] = useState<"stdio" | "http">("stdio");
+  // stdio 字段
   const [wizardCommand, setWizardCommand] = useState("");
   const [wizardArgs, setWizardArgs] = useState("");
   const [wizardCwd, setWizardCwd] = useState("");
   const [wizardEnv, setWizardEnv] = useState("");
+  // http 字段
+  const [wizardUrl, setWizardUrl] = useState("");
+  const [wizardHeaders, setWizardHeaders] = useState("");
 
   // 生成预览 JSON
   const generatePreview = (): string => {
     const config: McpServer = {
       type: wizardType,
-      command: wizardCommand.trim(),
     };
 
-    // 添加可选字段
-    if (wizardArgs.trim()) {
-      config.args = wizardArgs
-        .split(/\s+/)
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0);
-    }
+    if (wizardType === "stdio") {
+      // stdio 类型必需字段
+      config.command = wizardCommand.trim();
 
-    if (wizardCwd.trim()) {
-      config.cwd = wizardCwd.trim();
-    }
+      // 可选字段
+      if (wizardArgs.trim()) {
+        config.args = wizardArgs
+          .split("\n")
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0);
+      }
 
-    if (wizardEnv.trim()) {
-      const env = parseEnvText(wizardEnv);
-      if (Object.keys(env).length > 0) {
-        config.env = env;
+      if (wizardCwd.trim()) {
+        config.cwd = wizardCwd.trim();
+      }
+
+      if (wizardEnv.trim()) {
+        const env = parseEnvText(wizardEnv);
+        if (Object.keys(env).length > 0) {
+          config.env = env;
+        }
+      }
+    } else {
+      // http 类型必需字段
+      config.url = wizardUrl.trim();
+
+      // 可选字段
+      if (wizardHeaders.trim()) {
+        const headers = parseHeadersText(wizardHeaders);
+        if (Object.keys(headers).length > 0) {
+          config.headers = headers;
+        }
       }
     }
 
@@ -76,8 +123,12 @@ const McpWizardModal: React.FC<McpWizardModalProps> = ({
   };
 
   const handleApply = () => {
-    if (!wizardCommand.trim()) {
+    if (wizardType === "stdio" && !wizardCommand.trim()) {
       alert(t("mcp.error.commandRequired"));
+      return;
+    }
+    if (wizardType === "http" && !wizardUrl.trim()) {
+      alert(t("mcp.wizard.urlRequired"));
       return;
     }
 
@@ -93,6 +144,8 @@ const McpWizardModal: React.FC<McpWizardModalProps> = ({
     setWizardArgs("");
     setWizardCwd("");
     setWizardEnv("");
+    setWizardUrl("");
+    setWizardHeaders("");
     onClose();
   };
 
@@ -163,7 +216,7 @@ const McpWizardModal: React.FC<McpWizardModalProps> = ({
                     value="stdio"
                     checked={wizardType === "stdio"}
                     onChange={(e) =>
-                      setWizardType(e.target.value as "stdio" | "sse")
+                      setWizardType(e.target.value as "stdio" | "http")
                     }
                     className="w-4 h-4 text-emerald-500 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 focus:ring-emerald-500 dark:focus:ring-emerald-400 focus:ring-2"
                   />
@@ -174,84 +227,129 @@ const McpWizardModal: React.FC<McpWizardModalProps> = ({
                 <label className="inline-flex items-center gap-2 cursor-pointer">
                   <input
                     type="radio"
-                    value="sse"
-                    checked={wizardType === "sse"}
+                    value="http"
+                    checked={wizardType === "http"}
                     onChange={(e) =>
-                      setWizardType(e.target.value as "stdio" | "sse")
+                      setWizardType(e.target.value as "stdio" | "http")
                     }
                     className="w-4 h-4 text-emerald-500 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 focus:ring-emerald-500 dark:focus:ring-emerald-400 focus:ring-2"
                   />
                   <span className="text-sm text-gray-900 dark:text-gray-100">
-                    sse
+                    http
                   </span>
                 </label>
               </div>
             </div>
 
-            {/* Command */}
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">
-                {t("mcp.wizard.command")}{" "}
-                <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={wizardCommand}
-                onChange={(e) => setWizardCommand(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={t("mcp.wizard.commandPlaceholder")}
-                required
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
-              />
-            </div>
+            {/* Stdio 类型字段 */}
+            {wizardType === "stdio" && (
+              <>
+                {/* Command */}
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">
+                    {t("mcp.wizard.command")}{" "}
+                    <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={wizardCommand}
+                    onChange={(e) => setWizardCommand(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder={t("mcp.wizard.commandPlaceholder")}
+                    required
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                  />
+                </div>
 
-            {/* Args */}
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">
-                {t("mcp.wizard.args")}
-              </label>
-              <input
-                type="text"
-                value={wizardArgs}
-                onChange={(e) => setWizardArgs(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={t("mcp.wizard.argsPlaceholder")}
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
-              />
-            </div>
+                {/* Args */}
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">
+                    {t("mcp.wizard.args")}
+                  </label>
+                  <textarea
+                    value={wizardArgs}
+                    onChange={(e) => setWizardArgs(e.target.value)}
+                    placeholder={t("mcp.wizard.argsPlaceholder")}
+                    rows={3}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 resize-y"
+                  />
+                </div>
 
-            {/* CWD */}
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">
-                {t("mcp.wizard.cwd")}
-              </label>
-              <input
-                type="text"
-                value={wizardCwd}
-                onChange={(e) => setWizardCwd(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={t("mcp.wizard.cwdPlaceholder")}
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
-              />
-            </div>
+                {/* CWD */}
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">
+                    {t("mcp.wizard.cwd")}
+                  </label>
+                  <input
+                    type="text"
+                    value={wizardCwd}
+                    onChange={(e) => setWizardCwd(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder={t("mcp.wizard.cwdPlaceholder")}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                  />
+                </div>
 
-            {/* Env */}
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">
-                {t("mcp.wizard.env")}
-              </label>
-              <textarea
-                value={wizardEnv}
-                onChange={(e) => setWizardEnv(e.target.value)}
-                placeholder={t("mcp.wizard.envPlaceholder")}
-                rows={3}
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 resize-y"
-              />
-            </div>
+                {/* Env */}
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">
+                    {t("mcp.wizard.env")}
+                  </label>
+                  <textarea
+                    value={wizardEnv}
+                    onChange={(e) => setWizardEnv(e.target.value)}
+                    placeholder={t("mcp.wizard.envPlaceholder")}
+                    rows={3}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 resize-y"
+                  />
+                </div>
+              </>
+            )}
+
+            {/* HTTP 类型字段 */}
+            {wizardType === "http" && (
+              <>
+                {/* URL */}
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">
+                    {t("mcp.wizard.url")}{" "}
+                    <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={wizardUrl}
+                    onChange={(e) => setWizardUrl(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder={t("mcp.wizard.urlPlaceholder")}
+                    required
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                  />
+                </div>
+
+                {/* Headers */}
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">
+                    {t("mcp.wizard.headers")}
+                  </label>
+                  <textarea
+                    value={wizardHeaders}
+                    onChange={(e) => setWizardHeaders(e.target.value)}
+                    placeholder={t("mcp.wizard.headersPlaceholder")}
+                    rows={3}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 resize-y"
+                  />
+                </div>
+              </>
+            )}
           </div>
 
           {/* Preview */}
-          {(wizardCommand || wizardArgs || wizardCwd || wizardEnv) && (
+          {(wizardCommand ||
+            wizardArgs ||
+            wizardCwd ||
+            wizardEnv ||
+            wizardUrl ||
+            wizardHeaders) && (
             <div className="space-y-2 border-t border-gray-200 pt-4 dark:border-gray-700">
               <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">
                 {t("mcp.wizard.preview")}

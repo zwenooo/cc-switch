@@ -55,11 +55,16 @@ export interface Settings {
 
 // MCP 服务器定义（宽松：允许扩展字段）
 export interface McpServer {
-  type: "stdio" | "sse";
-  command: string;
+  type: "stdio" | "http";
+  // stdio 字段
+  command?: string;
   args?: string[];
   env?: Record<string, string>;
   cwd?: string;
+  // http 字段
+  url?: string;
+  headers?: Record<string, string>;
+  // 通用字段
   enabled?: boolean; // 是否启用该 MCP 服务器，默认 true
   [key: string]: any;
 }
