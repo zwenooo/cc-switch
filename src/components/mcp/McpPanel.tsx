@@ -251,9 +251,6 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
                       ...(p.server as McpServer),
                       enabled: false,
                     } as McpServer;
-                    const details = [s.type, s.command, ...(s.args || [])].join(
-                      " · ",
-                    );
                     return (
                       <div
                         key={`preset-${p.id}`}
@@ -273,9 +270,11 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
                             <h3 className="font-medium text-gray-900 dark:text-gray-100 mb-1">
                               {p.id}
                             </h3>
-                            <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
-                              {details}
-                            </p>
+                            {p.description && (
+                              <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                                {p.description}
+                              </p>
+                            )}
                           </div>
                         </div>
                       </div>

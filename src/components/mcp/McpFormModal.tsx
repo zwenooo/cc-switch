@@ -41,7 +41,9 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
 }) => {
   const { t } = useTranslation();
   const [formId, setFormId] = useState(editingId || "");
-  const [formDescription, setFormDescription] = useState("");
+  const [formDescription, setFormDescription] = useState(
+    (initialData as any)?.description || ""
+  );
   const [formJson, setFormJson] = useState(
     initialData ? JSON.stringify(initialData, null, 2) : "",
   );
@@ -138,6 +140,11 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
       // 保留原有的 enabled 状态
       if (initialData?.enabled !== undefined) {
         server.enabled = initialData.enabled;
+      }
+
+      // 保存 description 到 server 对象
+      if (formDescription.trim()) {
+        (server as any).description = formDescription.trim();
       }
 
       // 显式等待父组件保存流程，以便正确处理成功/失败
