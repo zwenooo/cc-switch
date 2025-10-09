@@ -265,6 +265,30 @@
     "template": {
       "fetch": "Quick Template: mcp-fetch"
     },
+    "form": {
+      "title": "Server Title",
+      "titlePlaceholder": "my-mcp-server",
+      "description": "Description",
+      "descriptionPlaceholder": "Optional description",
+      "jsonConfig": "JSON Configuration",
+      "jsonPlaceholder": "{\n  \"type\": \"stdio\",\n  \"command\": \"uvx\",\n  \"args\": [\"mcp-server-fetch\"]\n}",
+      "useWizard": "or use configuration wizard"
+    },
+    "wizard": {
+      "title": "MCP Configuration Wizard",
+      "hint": "Quickly configure MCP server and auto-generate JSON configuration",
+      "type": "Type",
+      "command": "Command",
+      "commandPlaceholder": "uvx",
+      "args": "Arguments",
+      "argsPlaceholder": "mcp-server-fetch",
+      "cwd": "Working Directory",
+      "cwdPlaceholder": "/path/to/project",
+      "env": "Environment Variables",
+      "envPlaceholder": "KEY=VALUE\n(one per line)",
+      "preview": "Configuration Preview",
+      "apply": "Apply Configuration"
+    },
     "id": "Identifier (unique)",
     "type": "Type",
     "cwd": "Working Directory (optional)",
@@ -287,6 +311,7 @@
     },
     "error": {
       "idRequired": "Please enter identifier",
+      "jsonInvalid": "Invalid JSON format",
       "commandRequired": "Please enter command",
       "saveFailed": "Save failed",
       "deleteFailed": "Delete failed"

@@ -1,8 +1,9 @@
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { X, Save, Wrench } from "lucide-react";
+import { X, Save, AlertCircle } from "lucide-react";
 import { McpServer } from "../../types";
 import { buttonStyles, inputStyles } from "../../lib/styles";
+import McpWizardModal from "./McpWizardModal";
 
 interface McpFormModalProps {
   editingId?: string;
@@ -11,33 +12,25 @@ interface McpFormModalProps {
   onClose: () => void;
 }
 
-const parseEnvText = (text: string): Record<string, string> => {
-  const lines = text
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
-  const env: Record<string, string> = {};
-  for (const l of lines) {
-    const idx = l.indexOf("=");
-    if (idx > 0) {
-      const k = l.slice(0, idx).trim();
-      const v = l.slice(idx + 1).trim();
-      if (k) env[k] = v;
+/**
+ * 验证 JSON 格式
+ */
+const validateJson = (text: string): string => {
+  if (!text.trim()) return "";
+  try {
+    const parsed = JSON.parse(text);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return "JSON 必须是对象";
     }
+    return "";
+  } catch {
+    return "JSON 格式错误";
   }
-  return env;
-};
-
-const formatEnvText = (env?: Record<string, string>): string => {
-  if (!env) return "";
-  return Object.entries(env)
-    .map(([k, v]) => `${k}=${v}`)
-    .join("\n");
 };
 
 /**
- * MCP 表单模态框组件
- * 用于添加或编辑 MCP 服务器
+ * MCP 表单模态框组件（简化版）
+ * 仅包含：标题（必填）、描述（可选）、JSON 配置（可选，带格式校验）
  */
 const McpFormModal: React.FC<McpFormModalProps> = ({
   editingId,
@@ -47,32 +40,25 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
 }) => {
   const { t } = useTranslation();
   const [formId, setFormId] = useState(editingId || "");
-  const [formType, setFormType] = useState<"stdio" | "sse">(
-    initialData?.type || "stdio",
+  const [formDescription, setFormDescription] = useState("");
+  const [formJson, setFormJson] = useState(
+    initialData ? JSON.stringify(initialData, null, 2) : "",
   );
-  const [formCommand, setFormCommand] = useState(initialData?.command || "");
-  const [formArgsText, setFormArgsText] = useState(
-    (initialData?.args || []).join(" "),
-  );
-  const [formEnvText, setFormEnvText] = useState(
-    formatEnvText(initialData?.env),
-  );
-  const [formCwd, setFormCwd] = useState(initialData?.cwd || "");
+  const [jsonError, setJsonError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
 
   // 编辑模式下禁止修改 ID
   const isEditing = !!editingId;
 
-  const handleValidateCommand = async () => {
-    if (!formCommand) return;
-    try {
-      const ok = await window.api.validateMcpCommand(formCommand.trim());
-      const message = ok ? t("mcp.validation.ok") : t("mcp.validation.fail");
-      // 这里简单使用 alert，实际项目中应该使用 notification 系统
-      alert(message);
-    } catch (_error) {
-      alert(t("mcp.validation.fail"));
-    }
+  const handleJsonChange = (value: string) => {
+    setFormJson(value);
+    setJsonError(validateJson(value));
+  };
+
+  const handleWizardApply = (json: string) => {
+    setFormJson(json);
+    setJsonError(validateJson(json));
   };
 
   const handleSubmit = async () => {
@@ -80,29 +66,38 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
       alert(t("mcp.error.idRequired"));
       return;
     }
-    if (!formCommand.trim()) {
-      alert(t("mcp.error.commandRequired"));
+
+    // 验证 JSON
+    const currentJsonError = validateJson(formJson);
+    setJsonError(currentJsonError);
+    if (currentJsonError) {
+      alert(t("mcp.error.jsonInvalid"));
       return;
     }
 
     setSaving(true);
     try {
-      const server: McpServer = {
-        type: formType,
-        command: formCommand.trim(),
-        args: formArgsText
-          .split(/\s+/)
-          .map((s) => s.trim())
-          .filter((s) => s.length > 0),
-        env: parseEnvText(formEnvText),
-        ...(formCwd ? { cwd: formCwd } : {}),
-        // 保留原有的 enabled 状态
-        ...(initialData?.enabled !== undefined
-          ? { enabled: initialData.enabled }
-          : {}),
-      };
+      let server: McpServer;
+      if (formJson.trim()) {
+        // 解析 JSON 配置
+        server = JSON.parse(formJson) as McpServer;
+      } else {
+        // 空 JSON 时提供默认值
+        server = {
+          type: "stdio",
+          command: "",
+          args: [],
+        };
+      }
+
+      // 保留原有的 enabled 状态
+      if (initialData?.enabled !== undefined) {
+        server.enabled = initialData.enabled;
+      }
 
       onSave(formId.trim(), server);
+    } catch (error) {
+      alert(t("mcp.error.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -133,94 +128,59 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
 
         {/* Content */}
         <div className="p-6 space-y-4">
-          {/* ID */}
+          {/* ID (标题) */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              {t("mcp.id")}
+              {t("mcp.form.title")} <span className="text-red-500">*</span>
             </label>
             <input
               className={inputStyles.text}
-              placeholder="my-mcp"
+              placeholder={t("mcp.form.titlePlaceholder")}
               value={formId}
               onChange={(e) => setFormId(e.target.value)}
               disabled={isEditing}
             />
           </div>
 
-          {/* Type & CWD */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                {t("mcp.type")}
-              </label>
-              <select
-                className={inputStyles.select}
-                value={formType}
-                onChange={(e) => setFormType(e.target.value as "stdio" | "sse")}
-              >
-                <option value="stdio">stdio</option>
-                <option value="sse">sse</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                {t("mcp.cwd")}
-              </label>
-              <input
-                className={inputStyles.text}
-                placeholder="/path/to/project"
-                value={formCwd}
-                onChange={(e) => setFormCwd(e.target.value)}
-              />
-            </div>
-          </div>
-
-          {/* Command */}
+          {/* Description (描述) */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              {t("mcp.command")}
-            </label>
-            <div className="flex gap-2">
-              <input
-                className={inputStyles.text}
-                placeholder="uvx"
-                value={formCommand}
-                onChange={(e) => setFormCommand(e.target.value)}
-              />
-              <button
-                type="button"
-                onClick={handleValidateCommand}
-                className="px-3 py-2 rounded-md bg-emerald-500 text-white hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-700 text-sm inline-flex items-center gap-1 flex-shrink-0 transition-colors"
-              >
-                <Wrench size={16} /> {t("mcp.validateCommand")}
-              </button>
-            </div>
-          </div>
-
-          {/* Args */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              {t("mcp.args")}
+              {t("mcp.form.description")}
             </label>
             <input
               className={inputStyles.text}
-              placeholder={t("mcp.argsPlaceholder")}
-              value={formArgsText}
-              onChange={(e) => setFormArgsText(e.target.value)}
+              placeholder={t("mcp.form.descriptionPlaceholder")}
+              value={formDescription}
+              onChange={(e) => setFormDescription(e.target.value)}
             />
           </div>
 
-          {/* Env */}
+          {/* JSON 配置 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              {t("mcp.env")}
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                {t("mcp.form.jsonConfig")}
+              </label>
+              <button
+                type="button"
+                onClick={() => setIsWizardOpen(true)}
+                className="text-xs text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 transition-colors"
+              >
+                {t("mcp.form.useWizard")}
+              </button>
+            </div>
             <textarea
-              className={`${inputStyles.text} h-24 resize-none`}
-              placeholder={t("mcp.envPlaceholder")}
-              value={formEnvText}
-              onChange={(e) => setFormEnvText(e.target.value)}
+              className={`${inputStyles.text} h-64 resize-none font-mono text-xs`}
+              placeholder={t("mcp.form.jsonPlaceholder")}
+              value={formJson}
+              onChange={(e) => handleJsonChange(e.target.value)}
             />
+            {jsonError && (
+              <div className="flex items-center gap-2 mt-2 text-red-500 dark:text-red-400 text-sm">
+                <AlertCircle size={16} />
+                <span>{jsonError}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -243,6 +203,13 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Wizard Modal */}
+      <McpWizardModal
+        isOpen={isWizardOpen}
+        onClose={() => setIsWizardOpen(false)}
+        onApply={handleWizardApply}
+      />
     </div>
   );
 };
