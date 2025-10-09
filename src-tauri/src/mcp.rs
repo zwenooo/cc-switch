@@ -1,24 +1,29 @@
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
-use crate::app_config::{McpConfig, MultiAppConfig};
+use crate::app_config::{AppType, McpConfig, MultiAppConfig};
 
-/// 基础校验：type 必须是 stdio/http；对应必填字段存在
+/// 基础校验：允许 stdio/http；或省略 type（视为 stdio）。对应必填字段存在
 fn validate_mcp_spec(spec: &Value) -> Result<(), String> {
     if !spec.is_object() {
         return Err("MCP 服务器定义必须为 JSON 对象".into());
     }
-    let t = spec.get("type").and_then(|x| x.as_str()).unwrap_or("");
-    if t != "stdio" && t != "http" {
-        return Err("MCP 服务器 type 必须是 'stdio' 或 'http'".into());
+    let t_opt = spec.get("type").and_then(|x| x.as_str());
+    // 支持两种：stdio/http；若缺省 type 则按 stdio 处理（与社区常见 .mcp.json 一致）
+    let is_stdio = t_opt.map(|t| t == "stdio").unwrap_or(true);
+    let is_http = t_opt.map(|t| t == "http").unwrap_or(false);
+    
+    if !(is_stdio || is_http) {
+        return Err("MCP 服务器 type 必须是 'stdio' 或 'http'（或省略表示 stdio）".into());
     }
-    if t == "stdio" {
+
+    if is_stdio {
         let cmd = spec.get("command").and_then(|x| x.as_str()).unwrap_or("");
         if cmd.trim().is_empty() {
             return Err("stdio 类型的 MCP 服务器缺少 command 字段".into());
         }
     }
-    if t == "http" {
+    if is_http {
         let url = spec.get("url").and_then(|x| x.as_str()).unwrap_or("");
         if url.trim().is_empty() {
             return Err("http 类型的 MCP 服务器缺少 url 字段".into());
@@ -42,42 +47,52 @@ fn collect_enabled_servers(cfg: &McpConfig) -> HashMap<String, Value> {
     out
 }
 
-pub fn get_servers_snapshot(config: &MultiAppConfig) -> HashMap<String, Value> {
-    config.mcp.servers.clone()
+pub fn get_servers_snapshot_for(config: &MultiAppConfig, app: &AppType) -> HashMap<String, Value> {
+    config.mcp_for(app).servers.clone()
 }
 
-pub fn upsert_in_config(config: &mut MultiAppConfig, id: &str, spec: Value) -> Result<bool, String> {
+pub fn upsert_in_config_for(
+    config: &mut MultiAppConfig,
+    app: &AppType,
+    id: &str,
+    spec: Value,
+) -> Result<bool, String> {
     if id.trim().is_empty() {
         return Err("MCP 服务器 ID 不能为空".into());
     }
     validate_mcp_spec(&spec)?;
 
     // 默认 enabled 不强制设值；若字段不存在则保持不变（或 UI 决定）
-    if !spec.get("enabled").is_some() {
+    if spec.get("enabled").is_none() {
         // 缺省不设，以便后续 set_enabled 独立控制
     }
 
-    let servers = &mut config.mcp_mut().servers;
+    let servers = &mut config.mcp_for_mut(app).servers;
     let before = servers.get(id).cloned();
     servers.insert(id.to_string(), spec);
 
     Ok(before.is_none())
 }
 
-pub fn delete_in_config(config: &mut MultiAppConfig, id: &str) -> Result<bool, String> {
+pub fn delete_in_config_for(config: &mut MultiAppConfig, app: &AppType, id: &str) -> Result<bool, String> {
     if id.trim().is_empty() {
         return Err("MCP 服务器 ID 不能为空".into());
     }
-    let existed = config.mcp_mut().servers.remove(id).is_some();
+    let existed = config.mcp_for_mut(app).servers.remove(id).is_some();
     Ok(existed)
 }
 
 /// 设置启用状态并同步到 ~/.claude.json
-pub fn set_enabled_and_sync(config: &mut MultiAppConfig, id: &str, enabled: bool) -> Result<bool, String> {
+pub fn set_enabled_and_sync_for(
+    config: &mut MultiAppConfig,
+    app: &AppType,
+    id: &str,
+    enabled: bool,
+) -> Result<bool, String> {
     if id.trim().is_empty() {
         return Err("MCP 服务器 ID 不能为空".into());
     }
-    if let Some(spec) = config.mcp_mut().servers.get_mut(id) {
+    if let Some(spec) = config.mcp_for_mut(app).servers.get_mut(id) {
         // 写入 enabled 字段
         let mut obj = spec.as_object().cloned().ok_or_else(|| "MCP 服务器定义必须为 JSON 对象".to_string())?;
         obj.insert("enabled".into(), json!(enabled));
@@ -87,14 +102,22 @@ pub fn set_enabled_and_sync(config: &mut MultiAppConfig, id: &str, enabled: bool
         return Ok(false);
     }
 
-    // 同步启用项到 ~/.claude.json
-    sync_enabled_to_claude(config)?;
+    // 同步启用项
+    match app {
+        AppType::Claude => {
+            // 将启用项投影到 ~/.claude.json
+            sync_enabled_to_claude(config)?;
+        }
+        AppType::Codex => {
+            // Codex 的 MCP 写入尚未实现（TOML 结构未定），此处先跳过
+        }
+    }
     Ok(true)
 }
 
 /// 将 config.json 中 enabled==true 的项投影写入 ~/.claude.json
 pub fn sync_enabled_to_claude(config: &MultiAppConfig) -> Result<(), String> {
-    let enabled = collect_enabled_servers(&config.mcp);
+    let enabled = collect_enabled_servers(&config.mcp.claude);
     crate::claude_mcp::set_mcp_servers_map(&enabled)
 }
 
@@ -115,7 +138,7 @@ pub fn import_from_claude(config: &mut MultiAppConfig) -> Result<usize, String> 
         let mut obj = spec.as_object().cloned().ok_or_else(|| "MCP 服务器定义必须为 JSON 对象".to_string())?;
         obj.insert("enabled".into(), json!(true));
 
-        let entry = config.mcp_mut().servers.entry(id.clone());
+        let entry = config.mcp_for_mut(&AppType::Claude).servers.entry(id.clone());
         use std::collections::hash_map::Entry;
         match entry {
             Entry::Vacant(vac) => {

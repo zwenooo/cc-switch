@@ -40,7 +40,7 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
   const reload = async () => {
     setLoading(true);
     try {
-      const cfg = await window.api.getMcpConfig();
+      const cfg = await window.api.getMcpConfig("claude");
       setStatus({
         userConfigPath: cfg.configPath,
         userConfigExists: true,
@@ -59,7 +59,7 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
         await window.api.importMcpFromClaude();
 
         // 读取现有 config.json 内容
-        const cfg = await window.api.getMcpConfig();
+        const cfg = await window.api.getMcpConfig("claude");
         const existing = cfg.servers || {};
 
         // 将预设落库为禁用（若缺失）
@@ -70,7 +70,7 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
             enabled: false,
             source: "preset",
           } as unknown as McpServer;
-          await window.api.upsertMcpServerInConfig(p.id, seed);
+          await window.api.upsertMcpServerInConfig("claude", p.id, seed);
         }
       } catch (e) {
         console.warn("MCP 初始化导入/落库失败（忽略继续）", e);
@@ -87,9 +87,9 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
       if (!server) {
         const preset = mcpPresets.find((p) => p.id === id);
         if (!preset) return;
-        await window.api.upsertMcpServerInConfig(id, preset.server as McpServer);
+        await window.api.upsertMcpServerInConfig("claude", id, preset.server as McpServer);
       }
-      await window.api.setMcpEnabled(id, enabled);
+      await window.api.setMcpEnabled("claude", id, enabled);
       await reload();
       onNotify?.(
         enabled ? t("mcp.msg.enabled") : t("mcp.msg.disabled"),
@@ -123,7 +123,7 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
       message: t("mcp.confirm.deleteMessage", { id }),
       onConfirm: async () => {
         try {
-          await window.api.deleteMcpServerInConfig(id);
+          await window.api.deleteMcpServerInConfig("claude", id);
           await reload();
           setConfirmDialog(null);
           onNotify?.(t("mcp.msg.deleted"), "success", 1500);
@@ -141,7 +141,7 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
 
   const handleSave = async (id: string, server: McpServer) => {
     try {
-      await window.api.upsertMcpServerInConfig(id, server);
+      await window.api.upsertMcpServerInConfig("claude", id, server);
       await reload();
       setIsFormOpen(false);
       setEditingId(null);

@@ -71,13 +71,18 @@ declare global {
       deleteClaudeMcpServer: (id: string) => Promise<boolean>;
       validateMcpCommand: (cmd: string) => Promise<boolean>;
       // 新：config.json 为 SSOT 的 MCP API
-      getMcpConfig: () => Promise<McpConfigResponse>;
+      getMcpConfig: (app?: AppType) => Promise<McpConfigResponse>;
       upsertMcpServerInConfig: (
+        app: AppType | undefined,
         id: string,
         spec: Record<string, any>,
       ) => Promise<boolean>;
-      deleteMcpServerInConfig: (id: string) => Promise<boolean>;
-      setMcpEnabled: (id: string, enabled: boolean) => Promise<boolean>;
+      deleteMcpServerInConfig: (app: AppType | undefined, id: string) => Promise<boolean>;
+      setMcpEnabled: (
+        app: AppType | undefined,
+        id: string,
+        enabled: boolean,
+      ) => Promise<boolean>;
       syncEnabledMcpToClaude: () => Promise<boolean>;
       importMcpFromClaude: () => Promise<number>;
       testApiEndpoints: (

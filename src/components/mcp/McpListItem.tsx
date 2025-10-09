@@ -30,9 +30,9 @@ const McpListItem: React.FC<McpListItemProps> = ({
   const enabled = server.enabled !== false;
 
   // 构建详细信息文本
-  const details = [server.type, server.command, ...(server.args || [])].join(
-    " · ",
-  );
+  const details = ([server.type, server.command, ...(server.args || [])]
+    .filter(Boolean) as string[])
+    .join(" · ");
 
   return (
     <div className={cn(cardStyles.interactive, "!p-4")}>

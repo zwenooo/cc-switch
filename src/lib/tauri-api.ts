@@ -339,10 +339,10 @@ export const tauriAPI = {
     }
   },
 
-  // 新：config.json 为 SSOT 的 MCP API
-  getMcpConfig: async (): Promise<McpConfigResponse> => {
+  // 新：config.json 为 SSOT 的 MCP API（按客户端）
+  getMcpConfig: async (app: AppType = "claude"): Promise<McpConfigResponse> => {
     try {
-      return await invoke<McpConfigResponse>("get_mcp_config");
+      return await invoke<McpConfigResponse>("get_mcp_config", { app });
     } catch (error) {
       console.error("获取 MCP 配置失败:", error);
       throw error;
@@ -350,29 +350,37 @@ export const tauriAPI = {
   },
 
   upsertMcpServerInConfig: async (
+    app: AppType = "claude",
     id: string,
     spec: McpServer | Record<string, any>,
   ): Promise<boolean> => {
     try {
-      return await invoke<boolean>("upsert_mcp_server_in_config", { id, spec });
+      return await invoke<boolean>("upsert_mcp_server_in_config", { app, id, spec });
     } catch (error) {
       console.error("写入 MCP（config.json）失败:", error);
       throw error;
     }
   },
 
-  deleteMcpServerInConfig: async (id: string): Promise<boolean> => {
+  deleteMcpServerInConfig: async (
+    app: AppType = "claude",
+    id: string,
+  ): Promise<boolean> => {
     try {
-      return await invoke<boolean>("delete_mcp_server_in_config", { id });
+      return await invoke<boolean>("delete_mcp_server_in_config", { app, id });
     } catch (error) {
       console.error("删除 MCP（config.json）失败:", error);
       throw error;
     }
   },
 
-  setMcpEnabled: async (id: string, enabled: boolean): Promise<boolean> => {
+  setMcpEnabled: async (
+    app: AppType = "claude",
+    id: string,
+    enabled: boolean,
+  ): Promise<boolean> => {
     try {
-      return await invoke<boolean>("set_mcp_enabled", { id, enabled });
+      return await invoke<boolean>("set_mcp_enabled", { app, id, enabled });
     } catch (error) {
       console.error("设置 MCP 启用状态失败:", error);
       throw error;

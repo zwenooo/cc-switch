@@ -707,13 +707,14 @@ pub struct McpConfigResponse {
 
 /// 获取 MCP 配置（来自 ~/.cc-switch/config.json）
 #[tauri::command]
-pub async fn get_mcp_config(state: State<'_, AppState>) -> Result<McpConfigResponse, String> {
+pub async fn get_mcp_config(state: State<'_, AppState>, app: Option<String>) -> Result<McpConfigResponse, String> {
     let config_path = crate::config::get_app_config_path().to_string_lossy().to_string();
     let cfg = state
         .config
         .lock()
         .map_err(|e| format!("获取锁失败: {}", e))?;
-    let servers = crate::mcp::get_servers_snapshot(&cfg);
+    let app_ty = crate::app_config::AppType::from(app.as_deref().unwrap_or("claude"));
+    let servers = crate::mcp::get_servers_snapshot_for(&cfg, &app_ty);
     Ok(McpConfigResponse { config_path, servers })
 }
 
@@ -721,6 +722,7 @@ pub async fn get_mcp_config(state: State<'_, AppState>) -> Result<McpConfigRespo
 #[tauri::command]
 pub async fn upsert_mcp_server_in_config(
     state: State<'_, AppState>,
+    app: Option<String>,
     id: String,
     spec: serde_json::Value,
 ) -> Result<bool, String> {
@@ -728,7 +730,8 @@ pub async fn upsert_mcp_server_in_config(
         .config
         .lock()
         .map_err(|e| format!("获取锁失败: {}", e))?;
-    let changed = crate::mcp::upsert_in_config(&mut cfg, &id, spec)?;
+    let app_ty = crate::app_config::AppType::from(app.as_deref().unwrap_or("claude"));
+    let changed = crate::mcp::upsert_in_config_for(&mut cfg, &app_ty, &id, spec)?;
     drop(cfg);
     state.save()?;
     Ok(changed)
@@ -736,31 +739,44 @@ pub async fn upsert_mcp_server_in_config(
 
 /// 在 config.json 中删除一个 MCP 服务器定义
 #[tauri::command]
-pub async fn delete_mcp_server_in_config(state: State<'_, AppState>, id: String) -> Result<bool, String> {
+pub async fn delete_mcp_server_in_config(
+    state: State<'_, AppState>,
+    app: Option<String>,
+    id: String,
+) -> Result<bool, String> {
     let mut cfg = state
         .config
         .lock()
         .map_err(|e| format!("获取锁失败: {}", e))?;
-    let existed = crate::mcp::delete_in_config(&mut cfg, &id)?;
+    let app_ty = crate::app_config::AppType::from(app.as_deref().unwrap_or("claude"));
+    let existed = crate::mcp::delete_in_config_for(&mut cfg, &app_ty, &id)?;
     drop(cfg);
     state.save()?;
-    // 同步一次，确保启用项从 ~/.claude.json 中移除
-    let cfg2 = state
-        .config
-        .lock()
-        .map_err(|e| format!("获取锁失败: {}", e))?;
-    crate::mcp::sync_enabled_to_claude(&cfg2)?;
+    // 若删除的是 Claude 客户端的条目，则同步一次，确保启用项从 ~/.claude.json 中移除
+    if matches!(app_ty, crate::app_config::AppType::Claude) {
+        let cfg2 = state
+            .config
+            .lock()
+            .map_err(|e| format!("获取锁失败: {}", e))?;
+        crate::mcp::sync_enabled_to_claude(&cfg2)?;
+    }
     Ok(existed)
 }
 
 /// 设置启用状态并同步到 ~/.claude.json
 #[tauri::command]
-pub async fn set_mcp_enabled(state: State<'_, AppState>, id: String, enabled: bool) -> Result<bool, String> {
+pub async fn set_mcp_enabled(
+    state: State<'_, AppState>,
+    app: Option<String>,
+    id: String,
+    enabled: bool,
+) -> Result<bool, String> {
     let mut cfg = state
         .config
         .lock()
         .map_err(|e| format!("获取锁失败: {}", e))?;
-    let changed = crate::mcp::set_enabled_and_sync(&mut cfg, &id, enabled)?;
+    let app_ty = crate::app_config::AppType::from(app.as_deref().unwrap_or("claude"));
+    let changed = crate::mcp::set_enabled_and_sync_for(&mut cfg, &app_ty, &id, enabled)?;
     drop(cfg);
     state.save()?;
     Ok(changed)

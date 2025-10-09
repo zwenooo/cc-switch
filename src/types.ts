@@ -55,7 +55,8 @@ export interface Settings {
 
 // MCP 服务器定义（宽松：允许扩展字段）
 export interface McpServer {
-  type: "stdio" | "http";
+  // 可选：社区常见 .mcp.json 中 stdio 配置可不写 type
+  type?: "stdio" | "http";
   // stdio 字段
   command?: string;
   args?: string[];
