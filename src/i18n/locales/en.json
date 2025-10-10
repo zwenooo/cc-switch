@@ -316,6 +316,7 @@
     },
     "error": {
       "idRequired": "Please enter identifier",
+      "idExists": "Identifier already exists. Please choose another.",
       "jsonInvalid": "Invalid JSON format",
       "commandRequired": "Please enter command",
       "singleServerObjectRequired": "Please paste a single MCP server object (do not include top-level mcpServers)",

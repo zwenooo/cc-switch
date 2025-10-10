@@ -316,6 +316,7 @@
     },
     "error": {
       "idRequired": "请填写标识",
+      "idExists": "该标识已存在，请更换",
       "jsonInvalid": "JSON 格式错误，请检查",
       "commandRequired": "请填写命令",
       "singleServerObjectRequired": "此处只需单个服务器对象，请不要粘贴包含 mcpServers 的整份配置",

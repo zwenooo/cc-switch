@@ -292,6 +292,7 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
         <McpFormModal
           editingId={editingId || undefined}
           initialData={editingId ? servers[editingId] : undefined}
+          existingIds={Object.keys(servers)}
           onSave={handleSave}
           onClose={handleCloseForm}
         />

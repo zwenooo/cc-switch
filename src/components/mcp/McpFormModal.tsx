@@ -11,6 +11,7 @@ interface McpFormModalProps {
   initialData?: McpServer;
   onSave: (id: string, server: McpServer) => Promise<void>;
   onClose: () => void;
+  existingIds?: string[];
 }
 
 /**
@@ -38,6 +39,7 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
   initialData,
   onSave,
   onClose,
+  existingIds = [],
 }) => {
   const { t } = useTranslation();
   const [formId, setFormId] = useState(editingId || "");
@@ -50,9 +52,18 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
   const [jsonError, setJsonError] = useState("");
   const [saving, setSaving] = useState(false);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [idError, setIdError] = useState("");
 
   // 编辑模式下禁止修改 ID
   const isEditing = !!editingId;
+
+  const handleIdChange = (value: string) => {
+    setFormId(value);
+    if (!isEditing) {
+      const exists = existingIds.includes(value.trim());
+      setIdError(exists ? t("mcp.error.idExists") : "");
+    }
+  };
 
   const handleJsonChange = (value: string) => {
     setFormJson(value);
@@ -101,6 +112,12 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
   const handleSubmit = async () => {
     if (!formId.trim()) {
       alert(t("mcp.error.idRequired"));
+      return;
+    }
+
+    // 新增模式：阻止提交重名 ID
+    if (!isEditing && existingIds.includes(formId.trim())) {
+      setIdError(t("mcp.error.idExists"));
       return;
     }
 
@@ -186,14 +203,21 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
         <div className="p-6 space-y-4">
           {/* ID (标题) */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              {t("mcp.form.title")} <span className="text-red-500">*</span>
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                {t("mcp.form.title")} <span className="text-red-500">*</span>
+              </label>
+              {!isEditing && idError && (
+                <span className="text-xs text-red-500 dark:text-red-400">
+                  {idError}
+                </span>
+              )}
+            </div>
             <input
               className={inputStyles.text}
               placeholder={t("mcp.form.titlePlaceholder")}
               value={formId}
-              onChange={(e) => setFormId(e.target.value)}
+              onChange={(e) => handleIdChange(e.target.value)}
               disabled={isEditing}
             />
           </div>
@@ -247,7 +271,7 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={saving}
+            disabled={saving || (!isEditing && !!idError)}
             className={buttonStyles.primary}
           >
             <Save size={16} />
