@@ -67,17 +67,27 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify, appType }) => {
   }, [appType]);
 
   const handleToggle = async (id: string, enabled: boolean) => {
-    try {
-      // 启用/禁用已存在的条目
+    // 乐观更新：立即更新 UI
+    const previousServers = servers;
+    setServers((prev) => ({
+      ...prev,
+      [id]: {
+        ...prev[id],
+        enabled,
+      },
+    }));
 
+    try {
+      // 后台调用 API
       await window.api.setMcpEnabled(appType, id, enabled);
-      await reload();
       onNotify?.(
         enabled ? t("mcp.msg.enabled") : t("mcp.msg.disabled"),
         "success",
         1500,
       );
     } catch (e: any) {
+      // 失败时回滚
+      setServers(previousServers);
       const detail = extractErrorMessage(e);
       onNotify?.(
         detail || t("mcp.error.saveFailed"),

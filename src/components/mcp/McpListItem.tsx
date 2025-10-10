@@ -47,8 +47,8 @@ const McpListItem: React.FC<McpListItemProps> = ({
   };
 
   return (
-    <div className={cn(cardStyles.interactive, "!p-4")}>
-      <div className="flex items-center gap-4">
+    <div className={cn(cardStyles.interactive, "!p-4 h-16")}>
+      <div className="flex items-center gap-4 h-full">
         {/* 左侧：Toggle 开关 */}
         <div className="flex-shrink-0">
           <McpToggle
