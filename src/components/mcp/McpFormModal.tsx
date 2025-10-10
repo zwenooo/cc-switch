@@ -241,9 +241,9 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
       />
 
       {/* Modal */}
-      <div className="relative bg-white dark:bg-gray-900 rounded-xl shadow-lg max-w-2xl w-full mx-4 overflow-hidden">
+      <div className="relative bg-white dark:bg-gray-900 rounded-xl shadow-lg max-w-3xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-800">
+        <div className="flex-shrink-0 flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-800">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
             {getFormTitle()}
           </h3>
@@ -255,8 +255,8 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
           </button>
         </div>
 
-        {/* Content */}
-        <div className="p-6 space-y-4">
+        {/* Content - Scrollable */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
           {/* 预设选择（仅新增时展示） */}
           {!isEditing && (
             <div className="space-y-2">
@@ -356,7 +356,7 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-800">
+        <div className="flex-shrink-0 flex items-center justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-800 bg-gray-100 dark:bg-gray-800">
           <button onClick={onClose} className={buttonStyles.secondary}>
             {t("common.cancel")}
           </button>

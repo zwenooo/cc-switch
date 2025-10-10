@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { X, Plus, Server } from "lucide-react";
+import { X, Plus, Server, Check } from "lucide-react";
 import { McpServer } from "../../types";
 import McpListItem from "./McpListItem";
 import McpFormModal from "./McpFormModal";
@@ -241,11 +241,22 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify, appType }) => {
                     />
                   ))}
 
-                  {/* 预设已移至“新增 MCP”面板中展示与套用 */}
+                  {/* 预设已移至"新增 MCP"面板中展示与套用 */}
                 </div>
               );
             })()
           )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex-shrink-0 flex items-center justify-end p-6 border-t border-gray-200 dark:border-gray-800 bg-gray-100 dark:bg-gray-800">
+          <button
+            onClick={onClose}
+            className={`inline-flex items-center gap-2 ${buttonStyles.mcp}`}
+          >
+            <Check size={16} />
+            {t("common.done")}
+          </button>
         </div>
       </div>
 
