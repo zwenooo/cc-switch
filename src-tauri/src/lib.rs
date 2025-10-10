@@ -435,6 +435,7 @@ pub fn run() {
             commands::delete_mcp_server_in_config,
             commands::set_mcp_enabled,
             commands::sync_enabled_mcp_to_claude,
+            commands::sync_enabled_mcp_to_codex,
             commands::import_mcp_from_claude,
             // ours: endpoint speed test + custom endpoint management
             commands::test_api_endpoints,

@@ -314,16 +314,20 @@ pub async fn switch_provider(
         .lock()
         .map_err(|e| format!("获取锁失败: {}", e))?;
 
-    let manager = config
-        .get_manager_mut(&app_type)
-        .ok_or_else(|| format!("应用类型不存在: {:?}", app_type))?;
+    // 为避免长期可变借用，尽快获取必要数据并缩小借用范围
+    let provider = {
+        let manager = config
+            .get_manager_mut(&app_type)
+            .ok_or_else(|| format!("应用类型不存在: {:?}", app_type))?;
 
-    // 检查供应商是否存在
-    let provider = manager
-        .providers
-        .get(&id)
-        .ok_or_else(|| format!("供应商不存在: {}", id))?
-        .clone();
+        // 检查供应商是否存在
+        let provider = manager
+            .providers
+            .get(&id)
+            .ok_or_else(|| format!("供应商不存在: {}", id))?
+            .clone();
+        provider
+    };
 
     // SSOT 切换：先回填 live 配置到当前供应商，然后从内存写入目标主配置
     match app_type {
@@ -331,7 +335,12 @@ pub async fn switch_provider(
             use serde_json::Value;
 
             // 回填：读取 live（auth.json + config.toml）写回当前供应商 settings_config
-            if !manager.current.is_empty() {
+            if !{
+                let cur = config
+                    .get_manager_mut(&app_type)
+                    .ok_or_else(|| format!("应用类型不存在: {:?}", app_type))?;
+                cur.current.is_empty()
+            } {
                 let auth_path = codex_config::get_codex_auth_path();
                 let config_path = codex_config::get_codex_config_path();
                 if auth_path.exists() {
@@ -353,7 +362,16 @@ pub async fn switch_provider(
                         "config": config_str,
                     });
 
-                    if let Some(cur) = manager.providers.get_mut(&manager.current) {
+                    let cur_id2 = {
+                        let m = config
+                            .get_manager(&app_type)
+                            .ok_or_else(|| format!("应用类型不存在: {:?}", app_type))?;
+                        m.current.clone()
+                    };
+                    let m = config
+                        .get_manager_mut(&app_type)
+                        .ok_or_else(|| format!("应用类型不存在: {:?}", app_type))?;
+                    if let Some(cur) = m.providers.get_mut(&cur_id2) {
                         cur.settings_config = live;
                     }
                 }
@@ -376,10 +394,21 @@ pub async fn switch_provider(
             let settings_path = get_claude_settings_path();
 
             // 回填：读取 live settings.json 写回当前供应商 settings_config
-            if settings_path.exists() && !manager.current.is_empty() {
-                if let Ok(live) = read_json_file::<serde_json::Value>(&settings_path) {
-                    if let Some(cur) = manager.providers.get_mut(&manager.current) {
-                        cur.settings_config = live;
+            if settings_path.exists() {
+                let cur_id = {
+                    let m = config
+                        .get_manager(&app_type)
+                        .ok_or_else(|| format!("应用类型不存在: {:?}", app_type))?;
+                    m.current.clone()
+                };
+                if !cur_id.is_empty() {
+                    if let Ok(live) = read_json_file::<serde_json::Value>(&settings_path) {
+                        let m = config
+                            .get_manager_mut(&app_type)
+                            .ok_or_else(|| format!("应用类型不存在: {:?}", app_type))?;
+                        if let Some(cur) = m.providers.get_mut(&cur_id) {
+                            cur.settings_config = live;
+                        }
                     }
                 }
             }
@@ -394,8 +423,18 @@ pub async fn switch_provider(
         }
     }
 
-    // 更新当前供应商
-    manager.current = id;
+    // 更新当前供应商（短借用范围）
+    {
+        let manager = config
+            .get_manager_mut(&app_type)
+            .ok_or_else(|| format!("应用类型不存在: {:?}", app_type))?;
+        manager.current = id;
+    }
+
+    // 对 Codex：切换完成且释放可变借用后，再依据 SSOT 同步 MCP 到 config.toml
+    if let AppType::Codex = app_type {
+        crate::mcp::sync_enabled_to_codex(&config)?;
+    }
 
     log::info!("成功切换到供应商: {}", provider.name);
 
@@ -752,13 +791,14 @@ pub async fn delete_mcp_server_in_config(
     let existed = crate::mcp::delete_in_config_for(&mut cfg, &app_ty, &id)?;
     drop(cfg);
     state.save()?;
-    // 若删除的是 Claude 客户端的条目，则同步一次，确保启用项从 ~/.claude.json 中移除
-    if matches!(app_ty, crate::app_config::AppType::Claude) {
-        let cfg2 = state
-            .config
-            .lock()
-            .map_err(|e| format!("获取锁失败: {}", e))?;
-        crate::mcp::sync_enabled_to_claude(&cfg2)?;
+    // 若删除的是 Claude/Codex 客户端的条目，则同步一次，确保启用项从对应 live 配置中移除
+    let cfg2 = state
+        .config
+        .lock()
+        .map_err(|e| format!("获取锁失败: {}", e))?;
+    match app_ty {
+        crate::app_config::AppType::Claude => crate::mcp::sync_enabled_to_claude(&cfg2)?,
+        crate::app_config::AppType::Codex => crate::mcp::sync_enabled_to_codex(&cfg2)?,
     }
     Ok(existed)
 }
@@ -790,6 +830,17 @@ pub async fn sync_enabled_mcp_to_claude(state: State<'_, AppState>) -> Result<bo
         .lock()
         .map_err(|e| format!("获取锁失败: {}", e))?;
     crate::mcp::sync_enabled_to_claude(&cfg)?;
+    Ok(true)
+}
+
+/// 手动同步：将启用的 MCP 投影到 ~/.codex/config.toml（不更改 config.json）
+#[tauri::command]
+pub async fn sync_enabled_mcp_to_codex(state: State<'_, AppState>) -> Result<bool, String> {
+    let cfg = state
+        .config
+        .lock()
+        .map_err(|e| format!("获取锁失败: {}", e))?;
+    crate::mcp::sync_enabled_to_codex(&cfg)?;
     Ok(true)
 }
 

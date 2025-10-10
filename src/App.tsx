@@ -392,6 +392,7 @@ function App() {
 
       {isMcpOpen && (
         <McpPanel
+          appType={activeApp}
           onClose={() => setIsMcpOpen(false)}
           onNotify={showNotification}
         />

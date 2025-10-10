@@ -9,6 +9,7 @@ import { extractErrorMessage } from "../../utils/errorUtils";
 import { mcpPresets } from "../../config/mcpPresets";
 import McpToggle from "./McpToggle";
 import { buttonStyles, cardStyles, cn } from "../../lib/styles";
+import { AppType } from "../../lib/tauri-api";
 
 interface McpPanelProps {
   onClose: () => void;
@@ -17,13 +18,14 @@ interface McpPanelProps {
     type: "success" | "error",
     duration?: number,
   ) => void;
+  appType: AppType;
 }
 
 /**
  * MCP 管理面板
  * 采用与主界面一致的设计风格，右上角添加按钮，每个 MCP 占一行
  */
-const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
+const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify, appType }) => {
   const { t } = useTranslation();
   const [servers, setServers] = useState<Record<string, McpServer>>({});
   const [loading, setLoading] = useState(true);
@@ -39,7 +41,7 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
   const reload = async () => {
     setLoading(true);
     try {
-      const cfg = await window.api.getMcpConfig("claude");
+      const cfg = await window.api.getMcpConfig(appType);
       setServers(cfg.servers || {});
     } finally {
       setLoading(false);
@@ -49,11 +51,13 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
   useEffect(() => {
     const setup = async () => {
       try {
-        // 先从 ~/.claude.json 导入已存在的 MCP（设为 enabled=true）
-        await window.api.importMcpFromClaude();
+        // Claude：从 ~/.claude.json 导入已存在的 MCP（设为 enabled=true）
+        if (appType === "claude") {
+          await window.api.importMcpFromClaude();
+        }
 
         // 读取现有 config.json 内容
-        const cfg = await window.api.getMcpConfig("claude");
+        const cfg = await window.api.getMcpConfig(appType);
         const existing = cfg.servers || {};
 
         // 将预设落库为禁用（若缺失）
@@ -64,7 +68,7 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
             enabled: false,
             source: "preset",
           } as unknown as McpServer;
-          await window.api.upsertMcpServerInConfig("claude", p.id, seed);
+          await window.api.upsertMcpServerInConfig(appType, p.id, seed);
         }
       } catch (e) {
         console.warn("MCP 初始化导入/落库失败（忽略继续）", e);
@@ -73,7 +77,8 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
       }
     };
     setup();
-  }, []);
+    // appType 改变时重新初始化
+  }, [appType]);
 
   const handleToggle = async (id: string, enabled: boolean) => {
     try {
@@ -81,9 +86,9 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
       if (!server) {
         const preset = mcpPresets.find((p) => p.id === id);
         if (!preset) return;
-        await window.api.upsertMcpServerInConfig("claude", id, preset.server as McpServer);
+        await window.api.upsertMcpServerInConfig(appType, id, preset.server as McpServer);
       }
-      await window.api.setMcpEnabled("claude", id, enabled);
+      await window.api.setMcpEnabled(appType, id, enabled);
       await reload();
       onNotify?.(
         enabled ? t("mcp.msg.enabled") : t("mcp.msg.disabled"),
@@ -117,7 +122,7 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
       message: t("mcp.confirm.deleteMessage", { id }),
       onConfirm: async () => {
         try {
-          await window.api.deleteMcpServerInConfig("claude", id);
+          await window.api.deleteMcpServerInConfig(appType, id);
           await reload();
           setConfirmDialog(null);
           onNotify?.(t("mcp.msg.deleted"), "success", 1500);
@@ -135,7 +140,7 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
 
   const handleSave = async (id: string, server: McpServer) => {
     try {
-      await window.api.upsertMcpServerInConfig("claude", id, server);
+      await window.api.upsertMcpServerInConfig(appType, id, server);
       await reload();
       setIsFormOpen(false);
       setEditingId(null);
@@ -172,7 +177,7 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
         {/* Header */}
         <div className="flex-shrink-0 flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-800">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-            {t("mcp.title")}
+            {t("mcp.title")} · {t(appType === "claude" ? "apps.claude" : "apps.codex")}
           </h3>
 
           <div className="flex items-center gap-3">

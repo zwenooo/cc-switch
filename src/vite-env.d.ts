@@ -84,6 +84,7 @@ declare global {
         enabled: boolean,
       ) => Promise<boolean>;
       syncEnabledMcpToClaude: () => Promise<boolean>;
+      syncEnabledMcpToCodex: () => Promise<boolean>;
       importMcpFromClaude: () => Promise<number>;
       testApiEndpoints: (
         urls: string[],

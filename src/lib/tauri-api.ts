@@ -396,6 +396,16 @@ export const tauriAPI = {
     }
   },
 
+  // 手动同步：将启用的 MCP 投影到 ~/.codex/config.toml
+  syncEnabledMcpToCodex: async (): Promise<boolean> => {
+    try {
+      return await invoke<boolean>("sync_enabled_mcp_to_codex");
+    } catch (error) {
+      console.error("同步启用 MCP 到 config.toml 失败:", error);
+      throw error;
+    }
+  },
+
   importMcpFromClaude: async (): Promise<number> => {
     try {
       return await invoke<number>("import_mcp_from_claude");

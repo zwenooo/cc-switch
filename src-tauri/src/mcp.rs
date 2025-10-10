@@ -109,7 +109,8 @@ pub fn set_enabled_and_sync_for(
             sync_enabled_to_claude(config)?;
         }
         AppType::Codex => {
-            // Codex 的 MCP 写入尚未实现（TOML 结构未定），此处先跳过
+            // 将启用项投影到 ~/.codex/config.toml
+            sync_enabled_to_codex(config)?;
         }
     }
     Ok(true)
@@ -159,4 +160,123 @@ pub fn import_from_claude(config: &mut MultiAppConfig) -> Result<usize, String> 
         }
     }
     Ok(changed)
+}
+
+/// 将 config.json 中 Codex 的 enabled==true 项以 TOML 形式写入 ~/.codex/config.toml 的 [mcp.servers]
+/// 策略：
+/// - 读取现有 config.toml；若语法无效则报错，不尝试覆盖
+/// - 重写根下的 `mcp` 节点（整体替换），其他节点保持不变
+/// - 仅写入启用项；无启用项时移除 `mcp` 节点
+pub fn sync_enabled_to_codex(config: &MultiAppConfig) -> Result<(), String> {
+    use toml::{value::Value as TomlValue, Table as TomlTable};
+
+    // 1) 收集启用项（Codex 维度）
+    let enabled = collect_enabled_servers(&config.mcp.codex);
+
+    // 2) 读取现有 config.toml 并解析为 Table（允许空文件）
+    let base_text = crate::codex_config::read_and_validate_codex_config_text()?;
+    let mut root: TomlTable = if base_text.trim().is_empty() {
+        TomlTable::new()
+    } else {
+        toml::from_str::<TomlTable>(&base_text)
+            .map_err(|e| format!("解析 config.toml 失败: {}", e))?
+    };
+
+    // 3) 构建 mcp.servers 表
+    if enabled.is_empty() {
+        // 无启用项：清理 mcp 节点
+        root.remove("mcp");
+    } else {
+        let mut servers_tbl = TomlTable::new();
+
+        for (id, spec) in enabled.iter() {
+            let mut s = TomlTable::new();
+
+            // 类型（缺省视为 stdio）
+            let typ = spec
+                .get("type")
+                .and_then(|v| v.as_str())
+                .unwrap_or("stdio");
+            s.insert("type".into(), TomlValue::String(typ.to_string()));
+
+            match typ {
+                "stdio" => {
+                    let cmd = spec
+                        .get("command")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    s.insert("command".into(), TomlValue::String(cmd));
+
+                    if let Some(args) = spec.get("args").and_then(|v| v.as_array()) {
+                        let arr = args
+                            .iter()
+                            .filter_map(|x| x.as_str())
+                            .map(|x| TomlValue::String(x.to_string()))
+                            .collect::<Vec<_>>();
+                        if !arr.is_empty() {
+                            s.insert("args".into(), TomlValue::Array(arr));
+                        }
+                    }
+
+                    if let Some(cwd) = spec.get("cwd").and_then(|v| v.as_str()) {
+                        if !cwd.trim().is_empty() {
+                            s.insert("cwd".into(), TomlValue::String(cwd.to_string()));
+                        }
+                    }
+
+                    if let Some(env) = spec.get("env").and_then(|v| v.as_object()) {
+                        let mut env_tbl = TomlTable::new();
+                        for (k, v) in env.iter() {
+                            if let Some(sv) = v.as_str() {
+                                env_tbl.insert(k.clone(), TomlValue::String(sv.to_string()));
+                            }
+                        }
+                        if !env_tbl.is_empty() {
+                            s.insert("env".into(), TomlValue::Table(env_tbl));
+                        }
+                    }
+                }
+                "http" => {
+                    let url = spec
+                        .get("url")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    s.insert("url".into(), TomlValue::String(url));
+
+                    if let Some(headers) = spec.get("headers").and_then(|v| v.as_object()) {
+                        let mut h_tbl = TomlTable::new();
+                        for (k, v) in headers.iter() {
+                            if let Some(sv) = v.as_str() {
+                                h_tbl.insert(k.clone(), TomlValue::String(sv.to_string()));
+                            }
+                        }
+                        if !h_tbl.is_empty() {
+                            s.insert("headers".into(), TomlValue::Table(h_tbl));
+                        }
+                    }
+                }
+                _ => {
+                    // 已在 validate_mcp_spec 保障，这里忽略
+                }
+            }
+
+            servers_tbl.insert(id.clone(), TomlValue::Table(s));
+        }
+
+        let mut mcp_tbl = TomlTable::new();
+        mcp_tbl.insert("servers".into(), TomlValue::Table(servers_tbl));
+
+        // 覆盖写入 mcp 节点
+        root.insert("mcp".into(), TomlValue::Table(mcp_tbl));
+    }
+
+    // 4) 序列化并写回 config.toml（仅改 TOML，不触碰 auth.json）
+    let new_text = toml::to_string(&TomlValue::Table(root))
+        .map_err(|e| format!("序列化 config.toml 失败: {}", e))?;
+    let path = crate::codex_config::get_codex_config_path();
+    crate::config::write_text_file(&path, &new_text)?;
+
+    Ok(())
 }
