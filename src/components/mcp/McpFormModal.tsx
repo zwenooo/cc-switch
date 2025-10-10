@@ -244,13 +244,13 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
               <button
                 type="button"
                 onClick={() => setIsWizardOpen(true)}
-                className="text-xs text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 transition-colors"
+                className="text-sm text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 transition-colors"
               >
                 {t("mcp.form.useWizard")}
               </button>
             </div>
             <textarea
-              className={`${inputStyles.text} h-64 resize-none font-mono text-xs`}
+              className={`${inputStyles.text} h-48 resize-none font-mono text-xs`}
               placeholder={t("mcp.form.jsonPlaceholder")}
               value={formJson}
               onChange={(e) => handleJsonChange(e.target.value)}
@@ -272,7 +272,7 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
           <button
             onClick={handleSubmit}
             disabled={saving || (!isEditing && !!idError)}
-            className={buttonStyles.primary}
+            className={`inline-flex items-center gap-2 ${buttonStyles.mcp}`}
           >
             <Save size={16} />
             {saving

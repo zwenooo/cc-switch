@@ -258,21 +258,21 @@
     "empty": "暂无 MCP 服务器",
     "emptyDescription": "点击右上角按钮添加第一个 MCP 服务器",
     "add": "添加 MCP",
-    "addServer": "新增服务器",
-    "editServer": "编辑服务器",
+    "addServer": "新增 MCP",
+    "editServer": "编辑 MCP",
     "configPath": "配置路径",
     "serverCount": "已配置 {{count}} 个 MCP 服务器",
     "template": {
       "fetch": "快速模板：mcp-fetch"
     },
     "form": {
-      "title": "服务器标题",
+      "title": "MCP 标题（唯一）",
       "titlePlaceholder": "my-mcp-server",
       "description": "描述",
       "descriptionPlaceholder": "可选的描述信息",
       "jsonConfig": "JSON 配置",
       "jsonPlaceholder": "{\n  \"type\": \"stdio\",\n  \"command\": \"uvx\",\n  \"args\": [\"mcp-server-fetch\"]\n}",
-      "useWizard": "或者使用配置向导"
+      "useWizard": "配置向导"
     },
     "wizard": {
       "title": "MCP 配置向导",

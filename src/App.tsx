@@ -23,7 +23,7 @@ function App() {
   const [currentProviderId, setCurrentProviderId] = useState<string>("");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingProviderId, setEditingProviderId] = useState<string | null>(
-    null,
+    null
   );
   const [notification, setNotification] = useState<{
     message: string;
@@ -44,7 +44,7 @@ function App() {
   const showNotification = (
     message: string,
     type: "success" | "error",
-    duration = 3000,
+    duration = 3000
   ) => {
     // 清除之前的定时器
     if (timeoutRef.current) {
@@ -196,7 +196,7 @@ function App() {
             ? t("notifications.removedFromClaudePlugin")
             : t("notifications.appliedToClaudePlugin"),
           "success",
-          2000,
+          2000
         );
       }
     } catch (error: any) {
@@ -219,7 +219,7 @@ function App() {
         showNotification(
           t("notifications.switchSuccess", { appName }),
           "success",
-          2000,
+          2000
         );
         // 更新托盘菜单
         await window.api.updateTrayMenu();
@@ -310,7 +310,7 @@ function App() {
 
             <button
               onClick={() => setIsMcpOpen(true)}
-              className="inline-flex items-center gap-2 px-6 py-2 text-sm font-medium rounded-md transition-colors bg-emerald-500 text-white hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-700"
+              className="inline-flex items-center gap-2 px-7 py-2 text-sm font-medium rounded-lg transition-colors bg-emerald-500 text-white hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-700"
             >
               MCP
             </button>

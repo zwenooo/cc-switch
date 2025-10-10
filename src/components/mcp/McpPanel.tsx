@@ -8,7 +8,7 @@ import { ConfirmDialog } from "../ConfirmDialog";
 import { extractErrorMessage } from "../../utils/errorUtils";
 import { mcpPresets } from "../../config/mcpPresets";
 import McpToggle from "./McpToggle";
-import { cardStyles, cn } from "../../lib/styles";
+import { buttonStyles, cardStyles, cn } from "../../lib/styles";
 
 interface McpPanelProps {
   onClose: () => void;
@@ -178,7 +178,7 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify }) => {
           <div className="flex items-center gap-3">
             <button
               onClick={handleAdd}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md bg-emerald-500 text-white hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-700 transition-colors"
+              className={`inline-flex items-center gap-2 ${buttonStyles.mcp}`}
             >
               <Plus size={16} />
               {t("mcp.add")}

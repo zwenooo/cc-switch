@@ -258,21 +258,21 @@
     "empty": "No MCP servers",
     "emptyDescription": "Click the button in the top right to add your first MCP server",
     "add": "Add MCP",
-    "addServer": "Add Server",
-    "editServer": "Edit Server",
+    "addServer": "Add MCP",
+    "editServer": "Edit MCP",
     "configPath": "Config Path",
     "serverCount": "{{count}} MCP server(s) configured",
     "template": {
       "fetch": "Quick Template: mcp-fetch"
     },
     "form": {
-      "title": "Server Title",
+      "title": "MCP Title (Unique)",
       "titlePlaceholder": "my-mcp-server",
       "description": "Description",
       "descriptionPlaceholder": "Optional description",
       "jsonConfig": "JSON Configuration",
       "jsonPlaceholder": "{\n  \"type\": \"stdio\",\n  \"command\": \"uvx\",\n  \"args\": [\"mcp-server-fetch\"]\n}",
-      "useWizard": "or use configuration wizard"
+      "useWizard": "Config Wizard"
     },
     "wizard": {
       "title": "MCP Configuration Wizard",

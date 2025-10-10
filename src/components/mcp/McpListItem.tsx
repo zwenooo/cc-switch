@@ -26,8 +26,8 @@ const McpListItem: React.FC<McpListItemProps> = ({
 }) => {
   const { t } = useTranslation();
 
-  // 默认启用
-  const enabled = server.enabled !== false;
+  // 仅当显式为 true 时视为启用；避免 undefined 被误判为启用
+  const enabled = server.enabled === true;
 
   // 只显示 description，没有则留空
   const description = (server as any).description || "";
