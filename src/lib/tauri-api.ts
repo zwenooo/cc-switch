@@ -355,7 +355,11 @@ export const tauriAPI = {
     spec: McpServer | Record<string, any>,
   ): Promise<boolean> => {
     try {
-      return await invoke<boolean>("upsert_mcp_server_in_config", { app, id, spec });
+      return await invoke<boolean>("upsert_mcp_server_in_config", {
+        app,
+        id,
+        spec,
+      });
     } catch (error) {
       console.error("写入 MCP（config.json）失败:", error);
       throw error;
@@ -411,6 +415,16 @@ export const tauriAPI = {
       return await invoke<number>("import_mcp_from_claude");
     } catch (error) {
       console.error("从 ~/.claude.json 导入 MCP 失败:", error);
+      throw error;
+    }
+  },
+
+  // 从 ~/.codex/config.toml 导入 MCP（Codex 作用域）
+  importMcpFromCodex: async (): Promise<number> => {
+    try {
+      return await invoke<number>("import_mcp_from_codex");
+    } catch (error) {
+      console.error("从 ~/.codex/config.toml 导入 MCP 失败:", error);
       throw error;
     }
   },

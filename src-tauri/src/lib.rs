@@ -437,6 +437,7 @@ pub fn run() {
             commands::sync_enabled_mcp_to_claude,
             commands::sync_enabled_mcp_to_codex,
             commands::import_mcp_from_claude,
+            commands::import_mcp_from_codex,
             // ours: endpoint speed test + custom endpoint management
             commands::test_api_endpoints,
             commands::get_custom_endpoints,

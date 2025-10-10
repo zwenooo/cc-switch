@@ -162,6 +162,147 @@ pub fn import_from_claude(config: &mut MultiAppConfig) -> Result<usize, String> 
     Ok(changed)
 }
 
+/// 从 ~/.codex/config.toml 导入 MCP 到 config.json（Codex 作用域），并将导入项设为 enabled=true。
+/// 支持两种 schema：[mcp.servers.<id>] 与 [mcp_servers.<id>]。
+/// 已存在的项仅强制 enabled=true，不覆盖其他字段。
+pub fn import_from_codex(config: &mut MultiAppConfig) -> Result<usize, String> {
+    let text = crate::codex_config::read_and_validate_codex_config_text()?;
+    if text.trim().is_empty() {
+        return Ok(0);
+    }
+
+    let root: toml::Table = toml::from_str(&text)
+        .map_err(|e| format!("解析 ~/.codex/config.toml 失败: {}", e))?;
+
+    let mut changed_total = 0usize;
+
+    // helper：处理一组 servers 表
+    let mut import_servers_tbl = |servers_tbl: &toml::value::Table| {
+        let mut changed = 0usize;
+        for (id, entry_val) in servers_tbl.iter() {
+            let Some(entry_tbl) = entry_val.as_table() else { continue };
+
+            // type 缺省为 stdio
+            let typ = entry_tbl
+                .get("type")
+                .and_then(|v| v.as_str())
+                .unwrap_or("stdio");
+
+            // 构建 JSON 规范
+            let mut spec = serde_json::Map::new();
+            spec.insert("type".into(), json!(typ));
+
+            match typ {
+                "stdio" => {
+                    if let Some(cmd) = entry_tbl.get("command").and_then(|v| v.as_str()) {
+                        spec.insert("command".into(), json!(cmd));
+                    }
+                    if let Some(args) = entry_tbl.get("args").and_then(|v| v.as_array()) {
+                        let arr = args
+                            .iter()
+                            .filter_map(|x| x.as_str())
+                            .map(|s| json!(s))
+                            .collect::<Vec<_>>();
+                        if !arr.is_empty() {
+                            spec.insert("args".into(), serde_json::Value::Array(arr));
+                        }
+                    }
+                    if let Some(cwd) = entry_tbl.get("cwd").and_then(|v| v.as_str()) {
+                        if !cwd.trim().is_empty() {
+                            spec.insert("cwd".into(), json!(cwd));
+                        }
+                    }
+                    if let Some(env_tbl) = entry_tbl.get("env").and_then(|v| v.as_table()) {
+                        let mut env_json = serde_json::Map::new();
+                        for (k, v) in env_tbl.iter() {
+                            if let Some(sv) = v.as_str() {
+                                env_json.insert(k.clone(), json!(sv));
+                            }
+                        }
+                        if !env_json.is_empty() {
+                            spec.insert("env".into(), serde_json::Value::Object(env_json));
+                        }
+                    }
+                }
+                "http" => {
+                    if let Some(url) = entry_tbl.get("url").and_then(|v| v.as_str()) {
+                        spec.insert("url".into(), json!(url));
+                    }
+                    if let Some(headers_tbl) = entry_tbl.get("headers").and_then(|v| v.as_table()) {
+                        let mut headers_json = serde_json::Map::new();
+                        for (k, v) in headers_tbl.iter() {
+                            if let Some(sv) = v.as_str() {
+                                headers_json.insert(k.clone(), json!(sv));
+                            }
+                        }
+                        if !headers_json.is_empty() {
+                            spec.insert("headers".into(), serde_json::Value::Object(headers_json));
+                        }
+                    }
+                }
+                _ => {}
+            }
+
+            let spec_v = serde_json::Value::Object(spec);
+
+            // 校验
+            if let Err(e) = validate_mcp_spec(&spec_v) {
+                log::warn!("跳过无效 Codex MCP 项 '{}': {}", id, e);
+                continue;
+            }
+
+            // 合并：仅强制 enabled=true
+            use std::collections::hash_map::Entry;
+            let entry = config
+                .mcp_for_mut(&AppType::Codex)
+                .servers
+                .entry(id.clone());
+            match entry {
+                Entry::Vacant(vac) => {
+                    let mut obj = spec_v.as_object().cloned().unwrap_or_default();
+                    obj.insert("enabled".into(), json!(true));
+                    vac.insert(serde_json::Value::Object(obj));
+                    changed += 1;
+                }
+                Entry::Occupied(mut occ) => {
+                    if let Some(mut existing) = occ.get().as_object().cloned() {
+                        let prev = existing
+                            .get("enabled")
+                            .and_then(|b| b.as_bool())
+                            .unwrap_or(false);
+                        if !prev {
+                            existing.insert("enabled".into(), json!(true));
+                            occ.insert(serde_json::Value::Object(existing));
+                            changed += 1;
+                        }
+                    }
+                }
+            }
+        }
+        changed
+    };
+
+    // 1) 处理 mcp.servers
+    if let Some(mcp_val) = root.get("mcp") {
+        if let Some(mcp_tbl) = mcp_val.as_table() {
+            if let Some(servers_val) = mcp_tbl.get("servers") {
+                if let Some(servers_tbl) = servers_val.as_table() {
+                    changed_total += import_servers_tbl(servers_tbl);
+                }
+            }
+        }
+    }
+
+    // 2) 处理 mcp_servers
+    if let Some(servers_val) = root.get("mcp_servers") {
+        if let Some(servers_tbl) = servers_val.as_table() {
+            changed_total += import_servers_tbl(servers_tbl);
+        }
+    }
+
+    Ok(changed_total)
+}
+
 /// 将 config.json 中 Codex 的 enabled==true 项以 TOML 形式写入 ~/.codex/config.toml 的 [mcp.servers]
 /// 策略：
 /// - 读取现有 config.toml；若语法无效则报错，不尝试覆盖
@@ -182,10 +323,12 @@ pub fn sync_enabled_to_codex(config: &MultiAppConfig) -> Result<(), String> {
             .map_err(|e| format!("解析 config.toml 失败: {}", e))?
     };
 
-    // 3) 构建 mcp.servers 表
+    // 3) 写入 servers 表（支持 mcp.servers 与 mcp_servers；优先沿用已有风格，默认 mcp_servers）
+    let prefer_mcp_servers = root.contains_key("mcp_servers") || !root.contains_key("mcp");
     if enabled.is_empty() {
-        // 无启用项：清理 mcp 节点
+        // 无启用项：移除两种节点
         root.remove("mcp");
+        root.remove("mcp_servers");
     } else {
         let mut servers_tbl = TomlTable::new();
 
@@ -257,19 +400,21 @@ pub fn sync_enabled_to_codex(config: &MultiAppConfig) -> Result<(), String> {
                         }
                     }
                 }
-                _ => {
-                    // 已在 validate_mcp_spec 保障，这里忽略
-                }
+                _ => {}
             }
 
             servers_tbl.insert(id.clone(), TomlValue::Table(s));
         }
 
-        let mut mcp_tbl = TomlTable::new();
-        mcp_tbl.insert("servers".into(), TomlValue::Table(servers_tbl));
-
-        // 覆盖写入 mcp 节点
-        root.insert("mcp".into(), TomlValue::Table(mcp_tbl));
+        if prefer_mcp_servers {
+            root.insert("mcp_servers".into(), TomlValue::Table(servers_tbl));
+            root.remove("mcp");
+        } else {
+            let mut mcp_tbl = TomlTable::new();
+            mcp_tbl.insert("servers".into(), TomlValue::Table(servers_tbl));
+            root.insert("mcp".into(), TomlValue::Table(mcp_tbl));
+            root.remove("mcp_servers");
+        }
     }
 
     // 4) 序列化并写回 config.toml（仅改 TOML，不触碰 auth.json）

@@ -859,6 +859,21 @@ pub async fn import_mcp_from_claude(state: State<'_, AppState>) -> Result<usize,
     Ok(changed)
 }
 
+/// 从 ~/.codex/config.toml 导入 MCP 定义到 config.json（Codex 作用域），返回变更数量
+#[tauri::command]
+pub async fn import_mcp_from_codex(state: State<'_, AppState>) -> Result<usize, String> {
+    let mut cfg = state
+        .config
+        .lock()
+        .map_err(|e| format!("获取锁失败: {}", e))?;
+    let changed = crate::mcp::import_from_codex(&mut cfg)?;
+    drop(cfg);
+    if changed > 0 {
+        state.save()?;
+    }
+    Ok(changed)
+}
+
 /// 获取设置
 #[tauri::command]
 pub async fn get_settings() -> Result<crate::settings::AppSettings, String> {

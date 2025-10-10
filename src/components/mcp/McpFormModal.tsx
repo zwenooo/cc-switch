@@ -44,7 +44,7 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
   const { t } = useTranslation();
   const [formId, setFormId] = useState(editingId || "");
   const [formDescription, setFormDescription] = useState(
-    (initialData as any)?.description || ""
+    (initialData as any)?.description || "",
   );
   const [formJson, setFormJson] = useState(
     initialData ? JSON.stringify(initialData, null, 2) : "",

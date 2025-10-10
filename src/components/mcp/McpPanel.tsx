@@ -51,9 +51,11 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify, appType }) => {
   useEffect(() => {
     const setup = async () => {
       try {
-        // Claude：从 ~/.claude.json 导入已存在的 MCP（设为 enabled=true）
+        // 初始化导入：按应用类型从对应客户端导入已有 MCP（设为 enabled=true）
         if (appType === "claude") {
           await window.api.importMcpFromClaude();
+        } else if (appType === "codex") {
+          await window.api.importMcpFromCodex();
         }
 
         // 读取现有 config.json 内容
@@ -86,7 +88,11 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify, appType }) => {
       if (!server) {
         const preset = mcpPresets.find((p) => p.id === id);
         if (!preset) return;
-        await window.api.upsertMcpServerInConfig(appType, id, preset.server as McpServer);
+        await window.api.upsertMcpServerInConfig(
+          appType,
+          id,
+          preset.server as McpServer,
+        );
       }
       await window.api.setMcpEnabled(appType, id, enabled);
       await reload();
@@ -177,7 +183,8 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify, appType }) => {
         {/* Header */}
         <div className="flex-shrink-0 flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-800">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-            {t("mcp.title")} · {t(appType === "claude" ? "apps.claude" : "apps.codex")}
+            {t("mcp.title")} ·{" "}
+            {t(appType === "claude" ? "apps.claude" : "apps.codex")}
           </h3>
 
           <div className="flex items-center gap-3">
@@ -252,10 +259,6 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify, appType }) => {
 
                   {/* 预设（未安装） */}
                   {notInstalledPresets.map((p) => {
-                    const s = {
-                      ...(p.server as McpServer),
-                      enabled: false,
-                    } as McpServer;
                     return (
                       <div
                         key={`preset-${p.id}`}

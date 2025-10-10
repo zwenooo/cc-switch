@@ -1,6 +1,12 @@
 /// <reference types="vite/client" />
 
-import { Provider, Settings, CustomEndpoint, McpStatus, McpConfigResponse } from "./types";
+import {
+  Provider,
+  Settings,
+  CustomEndpoint,
+  McpStatus,
+  McpConfigResponse,
+} from "./types";
 import { AppType } from "./lib/tauri-api";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 
@@ -77,7 +83,10 @@ declare global {
         id: string,
         spec: Record<string, any>,
       ) => Promise<boolean>;
-      deleteMcpServerInConfig: (app: AppType | undefined, id: string) => Promise<boolean>;
+      deleteMcpServerInConfig: (
+        app: AppType | undefined,
+        id: string,
+      ) => Promise<boolean>;
       setMcpEnabled: (
         app: AppType | undefined,
         id: string,
@@ -86,6 +95,7 @@ declare global {
       syncEnabledMcpToClaude: () => Promise<boolean>;
       syncEnabledMcpToCodex: () => Promise<boolean>;
       importMcpFromClaude: () => Promise<number>;
+      importMcpFromCodex: () => Promise<number>;
       testApiEndpoints: (
         urls: string[],
         options?: { timeoutSecs?: number },
