@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { X, Save, AlertCircle } from "lucide-react";
 import { McpServer } from "../../types";
+import { mcpPresets } from "../../config/mcpPresets";
 import { buttonStyles, inputStyles } from "../../lib/styles";
 import McpWizardModal from "./McpWizardModal";
 import { extractErrorMessage } from "../../utils/errorUtils";
@@ -66,12 +67,50 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
   // 编辑模式下禁止修改 ID
   const isEditing = !!editingId;
 
+  // 预设选择状态（仅新增模式显示；-1 表示自定义）
+  const [selectedPreset, setSelectedPreset] = useState<number | null>(
+    isEditing ? null : -1,
+  );
+
   const handleIdChange = (value: string) => {
     setFormId(value);
     if (!isEditing) {
       const exists = existingIds.includes(value.trim());
       setIdError(exists ? t("mcp.error.idExists") : "");
     }
+  };
+
+  const ensureUniqueId = (base: string): string => {
+    let candidate = base.trim();
+    if (!candidate) candidate = "mcp-server";
+    if (!existingIds.includes(candidate)) return candidate;
+    let i = 1;
+    while (existingIds.includes(`${candidate}-${i}`)) i++;
+    return `${candidate}-${i}`;
+  };
+
+  // 应用预设（写入表单但不落库）
+  const applyPreset = (index: number) => {
+    if (index < 0 || index >= mcpPresets.length) return;
+    const p = mcpPresets[index];
+    const id = ensureUniqueId(p.id);
+    setFormId(id);
+    setFormDescription(p.description || "");
+    const json = JSON.stringify(p.server, null, 2);
+    setFormJson(json);
+    // 触发一次校验
+    setJsonError(validateJson(json));
+    setSelectedPreset(index);
+  };
+
+  // 切回自定义
+  const applyCustom = () => {
+    setSelectedPreset(-1);
+    // 恢复到空白模板
+    setFormId("");
+    setFormDescription("");
+    setFormJson("");
+    setJsonError("");
   };
 
   const handleJsonChange = (value: string) => {
@@ -218,6 +257,41 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
 
         {/* Content */}
         <div className="p-6 space-y-4">
+          {/* 预设选择（仅新增时展示） */}
+          {!isEditing && (
+            <div className="space-y-2">
+              <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                {t("mcp.presets.title")}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={applyCustom}
+                  className={`${
+                    selectedPreset === -1 ? "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900" : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200"
+                  } px-3 py-1.5 rounded-md text-xs font-medium transition-colors`}
+                >
+                  {t("presetSelector.custom")}
+                </button>
+                {mcpPresets.map((p, idx) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => applyPreset(idx)}
+                    className={`${
+                      selectedPreset === idx
+                        ? "bg-emerald-500 text-white"
+                        : "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
+                    } px-3 py-1.5 rounded-md text-xs font-medium transition-colors`}
+                    title={p.description}
+                  >
+                    {p.name || p.id}
+                  </button>
+                ))}
+              </div>
+              {/* 无需环境变量提示：已移除 */}
+            </div>
+          )}
           {/* ID (标题) */}
           <div>
             <div className="flex items-center justify-between mb-2">
