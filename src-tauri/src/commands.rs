@@ -420,6 +420,18 @@ pub async fn switch_provider(
 
             // 不做归档，直接写入
             write_json_file(&settings_path, &provider.settings_config)?;
+
+            // 写入后回读 live，并回填到目标供应商的 SSOT，保证一致
+            if settings_path.exists() {
+                if let Ok(live_after) = read_json_file::<serde_json::Value>(&settings_path) {
+                    let m = config
+                        .get_manager_mut(&app_type)
+                        .ok_or_else(|| format!("应用类型不存在: {:?}", app_type))?;
+                    if let Some(target) = m.providers.get_mut(&id) {
+                        target.settings_config = live_after;
+                    }
+                }
+            }
         }
     }
 
@@ -431,9 +443,32 @@ pub async fn switch_provider(
         manager.current = id;
     }
 
-    // 对 Codex：切换完成且释放可变借用后，再依据 SSOT 同步 MCP 到 config.toml
+    // 对 Codex：切换完成后，同步 MCP 到 config.toml，并将最新的 config.toml 回填到当前供应商 settings_config.config
     if let AppType::Codex = app_type {
+        // 1) 依据 SSOT 将启用的 MCP 投影到 ~/.codex/config.toml
         crate::mcp::sync_enabled_to_codex(&config)?;
+
+        // 2) 读取投影后的 live config.toml 文本
+        let cfg_text_after = crate::codex_config::read_and_validate_codex_config_text()?;
+
+        // 3) 回填到当前（目标）供应商的 settings_config.config，确保编辑面板读取到最新 MCP
+        let cur_id = {
+            let m = config
+                .get_manager(&app_type)
+                .ok_or_else(|| format!("应用类型不存在: {:?}", app_type))?;
+            m.current.clone()
+        };
+        let m = config
+            .get_manager_mut(&app_type)
+            .ok_or_else(|| format!("应用类型不存在: {:?}", app_type))?;
+        if let Some(p) = m.providers.get_mut(&cur_id) {
+            if let Some(obj) = p.settings_config.as_object_mut() {
+                obj.insert(
+                    "config".to_string(),
+                    serde_json::Value::String(cfg_text_after),
+                );
+            }
+        }
     }
 
     log::info!("成功切换到供应商: {}", provider.name);
@@ -872,6 +907,41 @@ pub async fn import_mcp_from_codex(state: State<'_, AppState>) -> Result<usize, 
         state.save()?;
     }
     Ok(changed)
+}
+
+/// 读取当前生效（live）的配置内容，返回可直接作为 provider.settings_config 的对象
+/// - Codex: 返回 { auth: JSON, config: string }
+/// - Claude: 返回 settings.json 的 JSON 内容
+#[tauri::command]
+pub async fn read_live_provider_settings(
+    app_type: Option<AppType>,
+    app: Option<String>,
+    appType: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let app_type = app_type
+        .or_else(|| app.as_deref().map(|s| s.into()))
+        .or_else(|| appType.as_deref().map(|s| s.into()))
+        .unwrap_or(AppType::Claude);
+
+    match app_type {
+        AppType::Codex => {
+            let auth_path = crate::codex_config::get_codex_auth_path();
+            if !auth_path.exists() {
+                return Err("Codex 配置文件不存在：缺少 auth.json".to_string());
+            }
+            let auth: serde_json::Value = crate::config::read_json_file(&auth_path)?;
+            let cfg_text = crate::codex_config::read_and_validate_codex_config_text()?;
+            Ok(serde_json::json!({ "auth": auth, "config": cfg_text }))
+        }
+        AppType::Claude => {
+            let path = crate::config::get_claude_settings_path();
+            if !path.exists() {
+                return Err("Claude Code 配置文件不存在".to_string());
+            }
+            let v: serde_json::Value = crate::config::read_json_file(&path)?;
+            Ok(v)
+        }
+    }
 }
 
 /// 获取设置

@@ -429,6 +429,22 @@ export const tauriAPI = {
     }
   },
 
+  // 读取当前生效（live）的 provider settings（根据 appType）
+  // Codex: { auth: object, config: string }
+  // Claude: settings.json 内容
+  getLiveProviderSettings: async (app?: AppType): Promise<any> => {
+    try {
+      return await invoke<any>("read_live_provider_settings", {
+        app_type: app,
+        app,
+        appType: app,
+      });
+    } catch (error) {
+      console.error("读取 live 配置失败:", error);
+      throw error;
+    }
+  },
+
   // ours: 第三方/自定义供应商——测速与端点管理
   // 第三方/自定义供应商：批量测试端点延迟
   testApiEndpoints: async (

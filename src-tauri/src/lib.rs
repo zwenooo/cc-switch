@@ -415,6 +415,7 @@ pub fn run() {
             commands::open_external,
             commands::get_app_config_path,
             commands::open_app_config_folder,
+            commands::read_live_provider_settings,
             commands::get_settings,
             commands::save_settings,
             commands::check_for_updates,
