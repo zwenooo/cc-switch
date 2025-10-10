@@ -5,13 +5,20 @@ import { McpServer } from "../../types";
 import { buttonStyles, inputStyles } from "../../lib/styles";
 import McpWizardModal from "./McpWizardModal";
 import { extractErrorMessage } from "../../utils/errorUtils";
+import { AppType } from "../../lib/tauri-api";
 
 interface McpFormModalProps {
+  appType: AppType;
   editingId?: string;
   initialData?: McpServer;
   onSave: (id: string, server: McpServer) => Promise<void>;
   onClose: () => void;
   existingIds?: string[];
+  onNotify?: (
+    message: string,
+    type: "success" | "error",
+    duration?: number,
+  ) => void;
 }
 
 /**
@@ -35,11 +42,13 @@ const validateJson = (text: string): string => {
  * 仅包含：标题（必填）、描述（可选）、JSON 配置（可选，带格式校验）
  */
 const McpFormModal: React.FC<McpFormModalProps> = ({
+  appType,
   editingId,
   initialData,
   onSave,
   onClose,
   existingIds = [],
+  onNotify,
 }) => {
   const { t } = useTranslation();
   const [formId, setFormId] = useState(editingId || "");
@@ -111,7 +120,7 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
 
   const handleSubmit = async () => {
     if (!formId.trim()) {
-      alert(t("mcp.error.idRequired"));
+      onNotify?.(t("mcp.error.idRequired"), "error", 3000);
       return;
     }
 
@@ -125,7 +134,7 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
     const currentJsonError = validateJson(formJson);
     setJsonError(currentJsonError);
     if (currentJsonError) {
-      alert(t("mcp.error.jsonInvalid"));
+      onNotify?.(t("mcp.error.jsonInvalid"), "error", 3000);
       return;
     }
 
@@ -138,11 +147,11 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
 
         // 前置必填校验，避免后端拒绝后才提示
         if (server?.type === "stdio" && !server?.command?.trim()) {
-          alert(t("mcp.error.commandRequired"));
+          onNotify?.(t("mcp.error.commandRequired"), "error", 3000);
           return;
         }
         if (server?.type === "http" && !server?.url?.trim()) {
-          alert(t("mcp.wizard.urlRequired"));
+          onNotify?.(t("mcp.wizard.urlRequired"), "error", 3000);
           return;
         }
       } else {
@@ -170,9 +179,17 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
       // 提取后端错误信息（支持 string / {message} / tauri payload）
       const detail = extractErrorMessage(error);
       const msg = detail || t("mcp.error.saveFailed");
-      alert(msg);
+      onNotify?.(msg, "error", detail ? 6000 : 4000);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const getFormTitle = () => {
+    if (appType === "claude") {
+      return isEditing ? t("mcp.editClaudeServer") : t("mcp.addClaudeServer");
+    } else {
+      return isEditing ? t("mcp.editCodexServer") : t("mcp.addCodexServer");
     }
   };
 
@@ -189,7 +206,7 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-800">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-            {isEditing ? t("mcp.editServer") : t("mcp.addServer")}
+            {getFormTitle()}
           </h3>
           <button
             onClick={onClose}
@@ -289,6 +306,7 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
         isOpen={isWizardOpen}
         onClose={() => setIsWizardOpen(false)}
         onApply={handleWizardApply}
+        onNotify={onNotify}
       />
     </div>
   );

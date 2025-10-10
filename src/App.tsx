@@ -354,7 +354,6 @@ function App() {
               onSwitch={handleSwitchProvider}
               onDelete={handleDeleteProvider}
               onEdit={setEditingProviderId}
-              appType={activeApp}
               onNotify={showNotification}
             />
           </div>
@@ -392,6 +391,7 @@ function App() {
         <SettingsModal
           onClose={() => setIsSettingsOpen(false)}
           onImportSuccess={handleImportSuccess}
+          onNotify={showNotification}
         />
       )}
 

@@ -24,11 +24,17 @@ import { isLinux } from "../lib/platform";
 interface SettingsModalProps {
   onClose: () => void;
   onImportSuccess?: () => void | Promise<void>;
+  onNotify?: (
+    message: string,
+    type: "success" | "error",
+    duration?: number,
+  ) => void;
 }
 
 export default function SettingsModal({
   onClose,
   onImportSuccess,
+  onNotify,
 }: SettingsModalProps) {
   const { t, i18n } = useTranslation();
 
@@ -387,11 +393,19 @@ export default function SettingsModal({
       const result = await window.api.exportConfigToFile(filePath);
 
       if (result.success) {
-        alert(`${t("settings.configExported")}\n${result.filePath}`);
+        onNotify?.(
+          `${t("settings.configExported")}\n${result.filePath}`,
+          "success",
+          4000,
+        );
       }
     } catch (error) {
       console.error(t("settings.exportFailedError"), error);
-      alert(`${t("settings.exportFailed")}: ${error}`);
+      onNotify?.(
+        `${t("settings.exportFailed")}: ${String(error)}`,
+        "error",
+        5000,
+      );
     }
   };
 
@@ -406,7 +420,11 @@ export default function SettingsModal({
       }
     } catch (error) {
       console.error(t("settings.selectFileFailed") + ":", error);
-      alert(`${t("settings.selectFileFailed")}: ${error}`);
+      onNotify?.(
+        `${t("settings.selectFileFailed")}: ${String(error)}`,
+        "error",
+        5000,
+      );
     }
   };
 

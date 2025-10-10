@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 import { Provider } from "../types";
 import { Play, Edit3, Trash2, CheckCircle2, Users, Check } from "lucide-react";
 import { buttonStyles, cardStyles, badgeStyles, cn } from "../lib/styles";
-import { AppType } from "../lib/tauri-api";
 // 不再在列表中显示分类徽章，避免造成困惑
 
 interface ProviderListProps {
@@ -12,7 +11,6 @@ interface ProviderListProps {
   onSwitch: (id: string) => void;
   onDelete: (id: string) => void;
   onEdit: (id: string) => void;
-  appType?: AppType;
   onNotify?: (
     message: string,
     type: "success" | "error",
@@ -26,7 +24,6 @@ const ProviderList: React.FC<ProviderListProps> = ({
   onSwitch,
   onDelete,
   onEdit,
-  appType,
   onNotify,
 }) => {
   const { t, i18n } = useTranslation();
@@ -55,6 +52,11 @@ const ProviderList: React.FC<ProviderListProps> = ({
       await window.api.openExternal(url);
     } catch (error) {
       console.error(t("console.openLinkFailed"), error);
+      onNotify?.(
+        `${t("console.openLinkFailed")}: ${String(error)}`,
+        "error",
+        4000,
+      );
     }
   };
 

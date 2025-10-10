@@ -170,6 +170,9 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify, appType }) => {
 
   const serverEntries = useMemo(() => Object.entries(servers), [servers]);
 
+  const panelTitle =
+    appType === "claude" ? t("mcp.claudeTitle") : t("mcp.codexTitle");
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
@@ -183,8 +186,7 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify, appType }) => {
         {/* Header */}
         <div className="flex-shrink-0 flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-800">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-            {t("mcp.title")} ·{" "}
-            {t(appType === "claude" ? "apps.claude" : "apps.codex")}
+            {panelTitle}
           </h3>
 
           <div className="flex items-center gap-3">
@@ -298,11 +300,13 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify, appType }) => {
       {/* Form Modal */}
       {isFormOpen && (
         <McpFormModal
+          appType={appType}
           editingId={editingId || undefined}
           initialData={editingId ? servers[editingId] : undefined}
           existingIds={Object.keys(servers)}
           onSave={handleSave}
           onClose={handleCloseForm}
+          onNotify={onNotify}
         />
       )}
 
