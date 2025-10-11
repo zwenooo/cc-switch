@@ -285,6 +285,8 @@
       "descriptionPlaceholder": "可选的描述信息",
       "jsonConfig": "JSON 配置",
       "jsonPlaceholder": "{\n  \"type\": \"stdio\",\n  \"command\": \"uvx\",\n  \"args\": [\"mcp-server-fetch\"]\n}",
+      "tomlConfig": "TOML 配置",
+      "tomlPlaceholder": "type = \"stdio\"\ncommand = \"uvx\"\nargs = [\"mcp-server-fetch\"]",
       "useWizard": "配置向导"
     },
     "wizard": {
@@ -328,6 +330,7 @@
       "idRequired": "请填写标识",
       "idExists": "该标识已存在，请更换",
       "jsonInvalid": "JSON 格式错误，请检查",
+      "tomlInvalid": "TOML 格式错误，请检查",
       "commandRequired": "请填写命令",
       "singleServerObjectRequired": "此处只需单个服务器对象，请不要粘贴包含 mcpServers 的整份配置",
       "saveFailed": "保存失败",

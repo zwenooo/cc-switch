@@ -285,6 +285,8 @@
       "descriptionPlaceholder": "Optional description",
       "jsonConfig": "JSON Configuration",
       "jsonPlaceholder": "{\n  \"type\": \"stdio\",\n  \"command\": \"uvx\",\n  \"args\": [\"mcp-server-fetch\"]\n}",
+      "tomlConfig": "TOML Configuration",
+      "tomlPlaceholder": "type = \"stdio\"\ncommand = \"uvx\"\nargs = [\"mcp-server-fetch\"]",
       "useWizard": "Config Wizard"
     },
     "wizard": {
@@ -328,6 +330,7 @@
       "idRequired": "Please enter identifier",
       "idExists": "Identifier already exists. Please choose another.",
       "jsonInvalid": "Invalid JSON format",
+      "tomlInvalid": "Invalid TOML format",
       "commandRequired": "Please enter command",
       "singleServerObjectRequired": "Please paste a single MCP server object (do not include top-level mcpServers)",
       "saveFailed": "Save failed",
