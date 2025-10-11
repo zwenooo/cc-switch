@@ -293,6 +293,8 @@
       "title": "MCP 配置向导",
       "hint": "快速配置 MCP 服务器，自动生成 JSON 配置",
       "type": "类型",
+      "typeStdio": "stdio",
+      "typeHttp": "http",
       "command": "命令",
       "commandPlaceholder": "npx 或 uvx",
       "args": "参数",

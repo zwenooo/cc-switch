@@ -293,6 +293,8 @@
       "title": "MCP Configuration Wizard",
       "hint": "Quickly configure MCP server and auto-generate JSON configuration",
       "type": "Type",
+      "typeStdio": "stdio",
+      "typeHttp": "http",
       "command": "Command",
       "commandPlaceholder": "npx or uvx",
       "args": "Arguments",

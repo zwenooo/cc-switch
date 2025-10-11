@@ -5,7 +5,10 @@ import { McpServer } from "../../types";
 import { mcpPresets } from "../../config/mcpPresets";
 import { buttonStyles, inputStyles } from "../../lib/styles";
 import McpWizardModal from "./McpWizardModal";
-import { extractErrorMessage } from "../../utils/errorUtils";
+import {
+  extractErrorMessage,
+  translateMcpBackendError,
+} from "../../utils/errorUtils";
 import { AppType } from "../../lib/tauri-api";
 import {
   validateToml,
@@ -335,8 +338,9 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
       await onSave(formId.trim(), server);
     } catch (error: any) {
       const detail = extractErrorMessage(error);
-      const msg = detail || t("mcp.error.saveFailed");
-      onNotify?.(msg, "error", detail ? 6000 : 4000);
+      const mapped = translateMcpBackendError(detail, t);
+      const msg = mapped || detail || t("mcp.error.saveFailed");
+      onNotify?.(msg, "error", mapped || detail ? 6000 : 4000);
     } finally {
       setSaving(false);
     }

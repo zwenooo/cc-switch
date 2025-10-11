@@ -389,7 +389,11 @@ export default function SettingsModal({
       const filePath = await window.api.saveFileDialog(defaultName);
 
       if (!filePath) {
-        onNotify?.(`${t("settings.exportFailed")}: ${t("settings.selectFileFailed")}`, "error", 4000);
+        onNotify?.(
+          `${t("settings.exportFailed")}: ${t("settings.selectFileFailed")}`,
+          "error",
+          4000,
+        );
         return;
       }
 
