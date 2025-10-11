@@ -192,13 +192,30 @@ pub fn set_mcp_servers_map(servers: &std::collections::HashMap<String, Value>) -
     // 构建 mcpServers 对象：移除 UI 辅助字段（enabled/source），仅保留实际 MCP 规范
     let mut out: Map<String, Value> = Map::new();
     for (id, spec) in servers.iter() {
-        if let Some(mut obj) = spec.as_object().cloned() {
-            obj.remove("enabled");
-            obj.remove("source");
-            out.insert(id.clone(), Value::Object(obj));
+        let mut obj = if let Some(map) = spec.as_object() {
+            map.clone()
         } else {
             return Err(format!("MCP 服务器 '{}' 不是对象", id));
+        };
+
+        if let Some(server_val) = obj.remove("server") {
+            let server_obj = server_val
+                .as_object()
+                .cloned()
+                .ok_or_else(|| format!("MCP 服务器 '{}' server 字段不是对象", id))?;
+            obj = server_obj;
         }
+
+        obj.remove("enabled");
+        obj.remove("source");
+        obj.remove("id");
+        obj.remove("name");
+        obj.remove("description");
+        obj.remove("tags");
+        obj.remove("homepage");
+        obj.remove("docs");
+
+        out.insert(id.clone(), Value::Object(obj));
     }
 
     {

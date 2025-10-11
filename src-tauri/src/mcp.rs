@@ -4,15 +4,15 @@ use std::collections::HashMap;
 use crate::app_config::{AppType, McpConfig, MultiAppConfig};
 
 /// 基础校验：允许 stdio/http；或省略 type（视为 stdio）。对应必填字段存在
-fn validate_mcp_spec(spec: &Value) -> Result<(), String> {
+fn validate_server_spec(spec: &Value) -> Result<(), String> {
     if !spec.is_object() {
-        return Err("MCP 服务器定义必须为 JSON 对象".into());
+        return Err("MCP 服务器连接定义必须为 JSON 对象".into());
     }
     let t_opt = spec.get("type").and_then(|x| x.as_str());
     // 支持两种：stdio/http；若缺省 type 则按 stdio 处理（与社区常见 .mcp.json 一致）
     let is_stdio = t_opt.map(|t| t == "stdio").unwrap_or(true);
     let is_http = t_opt.map(|t| t == "http").unwrap_or(false);
-    
+
     if !(is_stdio || is_http) {
         return Err("MCP 服务器 type 必须是 'stdio' 或 'http'（或省略表示 stdio）".into());
     }
@@ -32,23 +32,99 @@ fn validate_mcp_spec(spec: &Value) -> Result<(), String> {
     Ok(())
 }
 
+fn validate_mcp_entry(entry: &Value) -> Result<(), String> {
+    let obj = entry
+        .as_object()
+        .ok_or_else(|| "MCP 服务器条目必须为 JSON 对象".to_string())?;
+
+    let server = obj
+        .get("server")
+        .ok_or_else(|| "MCP 服务器条目缺少 server 字段".to_string())?;
+    validate_server_spec(server)?;
+
+    for key in ["name", "description", "homepage", "docs"] {
+        if let Some(val) = obj.get(key) {
+            if !val.is_string() {
+                return Err(format!("MCP 服务器 {} 必须为字符串", key));
+            }
+        }
+    }
+
+    if let Some(tags) = obj.get("tags") {
+        let arr = tags
+            .as_array()
+            .ok_or_else(|| "MCP 服务器 tags 必须为字符串数组".to_string())?;
+        if !arr.iter().all(|item| item.is_string()) {
+            return Err("MCP 服务器 tags 必须为字符串数组".into());
+        }
+    }
+
+    if let Some(enabled) = obj.get("enabled") {
+        if !enabled.is_boolean() {
+            return Err("MCP 服务器 enabled 必须为布尔值".into());
+        }
+    }
+
+    Ok(())
+}
+
+fn extract_server_spec(entry: &Value) -> Result<Value, String> {
+    let obj = entry
+        .as_object()
+        .ok_or_else(|| "MCP 服务器条目必须为 JSON 对象".to_string())?;
+    let server = obj
+        .get("server")
+        .ok_or_else(|| "MCP 服务器条目缺少 server 字段".to_string())?;
+
+    if !server.is_object() {
+        return Err("MCP 服务器 server 字段必须为 JSON 对象".into());
+    }
+
+    Ok(server.clone())
+}
+
 /// 返回已启用的 MCP 服务器（过滤 enabled==true）
 fn collect_enabled_servers(cfg: &McpConfig) -> HashMap<String, Value> {
     let mut out = HashMap::new();
-    for (id, spec) in cfg.servers.iter() {
-        let enabled = spec
+    for (id, entry) in cfg.servers.iter() {
+        let enabled = entry
             .get("enabled")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
-        if enabled {
-            out.insert(id.clone(), spec.clone());
+        if !enabled {
+            continue;
+        }
+        match extract_server_spec(entry) {
+            Ok(spec) => {
+                out.insert(id.clone(), spec);
+            }
+            Err(err) => {
+                log::warn!("跳过无效的 MCP 条目 '{}': {}", id, err);
+            }
         }
     }
     out
 }
 
 pub fn get_servers_snapshot_for(config: &MultiAppConfig, app: &AppType) -> HashMap<String, Value> {
-    config.mcp_for(app).servers.clone()
+    let mut snapshot = config.mcp_for(app).servers.clone();
+    snapshot.retain(|id, value| {
+        let Some(obj) = value.as_object_mut() else {
+            log::warn!("跳过无效的 MCP 条目 '{}': 必须为 JSON 对象", id);
+            return false;
+        };
+
+        obj.entry(String::from("id")).or_insert(json!(id));
+
+        match validate_mcp_entry(value) {
+            Ok(()) => true,
+            Err(err) => {
+                log::error!("config.json 中存在无效的 MCP 条目 '{}': {}", id, err);
+                false
+            }
+        }
+    });
+    snapshot
 }
 
 pub fn upsert_in_config_for(
@@ -60,16 +136,31 @@ pub fn upsert_in_config_for(
     if id.trim().is_empty() {
         return Err("MCP 服务器 ID 不能为空".into());
     }
-    validate_mcp_spec(&spec)?;
+    validate_mcp_entry(&spec)?;
 
-    // 默认 enabled 不强制设值；若字段不存在则保持不变（或 UI 决定）
-    if spec.get("enabled").is_none() {
-        // 缺省不设，以便后续 set_enabled 独立控制
+    let mut entry_obj = spec
+        .as_object()
+        .cloned()
+        .ok_or_else(|| "MCP 服务器条目必须为 JSON 对象".to_string())?;
+    if let Some(existing_id) = entry_obj.get("id") {
+        let Some(existing_id_str) = existing_id.as_str() else {
+            return Err("MCP 服务器 id 必须为字符串".into());
+        };
+        if existing_id_str != id {
+            return Err(format!(
+                "MCP 服务器条目中的 id '{}' 与参数 id '{}' 不一致",
+                existing_id_str, id
+            ));
+        }
+    } else {
+        entry_obj.insert(String::from("id"), json!(id));
     }
+
+    let value = Value::Object(entry_obj);
 
     let servers = &mut config.mcp_for_mut(app).servers;
     let before = servers.get(id).cloned();
-    servers.insert(id.to_string(), spec);
+    servers.insert(id.to_string(), value);
 
     Ok(before.is_none())
 }
@@ -133,28 +224,58 @@ pub fn import_from_claude(config: &mut MultiAppConfig) -> Result<usize, String> 
     let mut changed = 0usize;
     for (id, spec) in map.iter() {
         // 校验目标 spec
-        validate_mcp_spec(spec)?;
+        validate_server_spec(spec)?;
 
-        // 规范化为对象
-        let mut obj = spec.as_object().cloned().ok_or_else(|| "MCP 服务器定义必须为 JSON 对象".to_string())?;
-        obj.insert("enabled".into(), json!(true));
-
-        let entry = config.mcp_for_mut(&AppType::Claude).servers.entry(id.clone());
+        let entry = config
+            .mcp_for_mut(&AppType::Claude)
+            .servers
+            .entry(id.clone());
         use std::collections::hash_map::Entry;
         match entry {
             Entry::Vacant(vac) => {
+                let mut obj = serde_json::Map::new();
+                obj.insert(String::from("id"), json!(id));
+                obj.insert(String::from("name"), json!(id));
+                obj.insert(String::from("server"), spec.clone());
+                obj.insert(String::from("enabled"), json!(true));
                 vac.insert(Value::Object(obj));
                 changed += 1;
             }
             Entry::Occupied(mut occ) => {
-                // 只确保 enabled=true；不覆盖其他字段
-                if let Some(mut existing) = occ.get().as_object().cloned() {
-                    let prev = existing.get("enabled").and_then(|b| b.as_bool()).unwrap_or(false);
-                    if !prev {
-                        existing.insert("enabled".into(), json!(true));
-                        occ.insert(Value::Object(existing));
-                        changed += 1;
-                    }
+                let value = occ.get_mut();
+                let Some(existing) = value.as_object_mut() else {
+                    log::warn!("MCP 条目 '{}' 不是 JSON 对象，覆盖为导入数据", id);
+                    let mut obj = serde_json::Map::new();
+                    obj.insert(String::from("id"), json!(id));
+                    obj.insert(String::from("name"), json!(id));
+                    obj.insert(String::from("server"), spec.clone());
+                    obj.insert(String::from("enabled"), json!(true));
+                    occ.insert(Value::Object(obj));
+                    changed += 1;
+                    continue;
+                };
+
+                let mut modified = false;
+                let prev_enabled = existing
+                    .get("enabled")
+                    .and_then(|b| b.as_bool())
+                    .unwrap_or(false);
+                if !prev_enabled {
+                    existing.insert(String::from("enabled"), json!(true));
+                    modified = true;
+                }
+                if existing.get("server").is_none() {
+                    log::warn!("MCP 条目 '{}' 缺少 server 字段，覆盖为导入数据", id);
+                    existing.insert(String::from("server"), spec.clone());
+                    modified = true;
+                }
+                if existing.get("id").is_none() {
+                    log::warn!("MCP 条目 '{}' 缺少 id 字段，自动填充", id);
+                    existing.insert(String::from("id"), json!(id));
+                    modified = true;
+                }
+                if modified {
+                    changed += 1;
                 }
             }
         }
@@ -246,7 +367,7 @@ pub fn import_from_codex(config: &mut MultiAppConfig) -> Result<usize, String> {
             let spec_v = serde_json::Value::Object(spec);
 
             // 校验
-            if let Err(e) = validate_mcp_spec(&spec_v) {
+            if let Err(e) = validate_server_spec(&spec_v) {
                 log::warn!("跳过无效 Codex MCP 项 '{}': {}", id, e);
                 continue;
             }
@@ -259,22 +380,49 @@ pub fn import_from_codex(config: &mut MultiAppConfig) -> Result<usize, String> {
                 .entry(id.clone());
             match entry {
                 Entry::Vacant(vac) => {
-                    let mut obj = spec_v.as_object().cloned().unwrap_or_default();
-                    obj.insert("enabled".into(), json!(true));
+                    let mut obj = serde_json::Map::new();
+                    obj.insert(String::from("id"), json!(id));
+                    obj.insert(String::from("name"), json!(id));
+                    obj.insert(String::from("server"), spec_v.clone());
+                    obj.insert(String::from("enabled"), json!(true));
                     vac.insert(serde_json::Value::Object(obj));
                     changed += 1;
                 }
                 Entry::Occupied(mut occ) => {
-                    if let Some(mut existing) = occ.get().as_object().cloned() {
-                        let prev = existing
-                            .get("enabled")
-                            .and_then(|b| b.as_bool())
-                            .unwrap_or(false);
-                        if !prev {
-                            existing.insert("enabled".into(), json!(true));
-                            occ.insert(serde_json::Value::Object(existing));
-                            changed += 1;
-                        }
+                    let value = occ.get_mut();
+                    let Some(existing) = value.as_object_mut() else {
+                        log::warn!("MCP 条目 '{}' 不是 JSON 对象，覆盖为导入数据", id);
+                        let mut obj = serde_json::Map::new();
+                        obj.insert(String::from("id"), json!(id));
+                        obj.insert(String::from("name"), json!(id));
+                        obj.insert(String::from("server"), spec_v.clone());
+                        obj.insert(String::from("enabled"), json!(true));
+                        occ.insert(serde_json::Value::Object(obj));
+                        changed += 1;
+                        continue;
+                    };
+
+                    let mut modified = false;
+                    let prev = existing
+                        .get("enabled")
+                        .and_then(|b| b.as_bool())
+                        .unwrap_or(false);
+                    if !prev {
+                        existing.insert(String::from("enabled"), json!(true));
+                        modified = true;
+                    }
+                    if existing.get("server").is_none() {
+                        log::warn!("MCP 条目 '{}' 缺少 server 字段，覆盖为导入数据", id);
+                        existing.insert(String::from("server"), spec_v.clone());
+                        modified = true;
+                    }
+                    if existing.get("id").is_none() {
+                        log::warn!("MCP 条目 '{}' 缺少 id 字段，自动填充", id);
+                        existing.insert(String::from("id"), json!(id));
+                        modified = true;
+                    }
+                    if modified {
+                        changed += 1;
                     }
                 }
             }
