@@ -152,7 +152,8 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
     setJsonError("");
   };
 
-  const handleWizardApply = (json: string) => {
+  const handleWizardApply = (title: string, json: string) => {
+    setFormId(title);
     setFormJson(json);
     setJsonError(validateJson(json));
   };
