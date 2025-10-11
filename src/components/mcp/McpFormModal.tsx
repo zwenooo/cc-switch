@@ -259,50 +259,38 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           {/* 预设选择（仅新增时展示） */}
           {!isEditing && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
-                  {t("mcp.presets.title")}
-                </label>
-                <div className="flex flex-wrap gap-2">
+            <div>
+              <label className="block text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
+                {t("mcp.presets.title")}
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={applyCustom}
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    selectedPreset === -1
+                      ? "bg-emerald-500 text-white dark:bg-emerald-600"
+                      : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+                  }`}
+                >
+                  {t("presetSelector.custom")}
+                </button>
+                {mcpPresets.map((p, idx) => (
                   <button
+                    key={p.id}
                     type="button"
-                    onClick={applyCustom}
+                    onClick={() => applyPreset(idx)}
                     className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      selectedPreset === -1
+                      selectedPreset === idx
                         ? "bg-emerald-500 text-white dark:bg-emerald-600"
                         : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
                     }`}
+                    title={p.description}
                   >
-                    {t("presetSelector.custom")}
+                    {p.name || p.id}
                   </button>
-                  {mcpPresets.map((p, idx) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => applyPreset(idx)}
-                      className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                        selectedPreset === idx
-                          ? "bg-emerald-500 text-white dark:bg-emerald-600"
-                          : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
-                      }`}
-                      title={p.description}
-                    >
-                      {p.name || p.id}
-                    </button>
-                  ))}
-                </div>
+                ))}
               </div>
-              {selectedPreset === -1 && (
-                <div className="text-sm text-gray-500 dark:text-gray-400">
-                  {t("presetSelector.customDescription")}
-                </div>
-              )}
-              {selectedPreset !== null && selectedPreset >= 0 && (
-                <div className="text-sm text-gray-500 dark:text-gray-400">
-                  {t("presetSelector.presetDescription")}
-                </div>
-              )}
             </div>
           )}
           {/* ID (标题) */}
@@ -345,13 +333,15 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                 {t("mcp.form.jsonConfig")}
               </label>
-              <button
-                type="button"
-                onClick={() => setIsWizardOpen(true)}
-                className="text-sm text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 transition-colors"
-              >
-                {t("mcp.form.useWizard")}
-              </button>
+              {(isEditing || selectedPreset === -1) && (
+                <button
+                  type="button"
+                  onClick={() => setIsWizardOpen(true)}
+                  className="text-sm text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 transition-colors"
+                >
+                  {t("mcp.form.useWizard")}
+                </button>
+              )}
             </div>
             <textarea
               className={`${inputStyles.text} h-48 resize-none font-mono text-xs`}

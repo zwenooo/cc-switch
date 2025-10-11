@@ -345,7 +345,7 @@
       "deleteMessage": "Are you sure you want to delete MCP server \"{{id}}\"? This action cannot be undone."
     },
     "presets": {
-      "title": "Presets",
+      "title": "Select MCP Type",
       "enable": "Enable",
       "enabled": "Enabled",
       "installed": "Installed",
