@@ -259,37 +259,50 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           {/* 预设选择（仅新增时展示） */}
           {!isEditing && (
-            <div className="space-y-2">
-              <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                {t("mcp.presets.title")}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={applyCustom}
-                  className={`${
-                    selectedPreset === -1 ? "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900" : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-200"
-                  } px-3 py-1.5 rounded-md text-xs font-medium transition-colors`}
-                >
-                  {t("presetSelector.custom")}
-                </button>
-                {mcpPresets.map((p, idx) => (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
+                  {t("mcp.presets.title")}
+                </label>
+                <div className="flex flex-wrap gap-2">
                   <button
-                    key={p.id}
                     type="button"
-                    onClick={() => applyPreset(idx)}
-                    className={`${
-                      selectedPreset === idx
-                        ? "bg-emerald-500 text-white"
-                        : "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
-                    } px-3 py-1.5 rounded-md text-xs font-medium transition-colors`}
-                    title={p.description}
+                    onClick={applyCustom}
+                    className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      selectedPreset === -1
+                        ? "bg-emerald-500 text-white dark:bg-emerald-600"
+                        : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+                    }`}
                   >
-                    {p.name || p.id}
+                    {t("presetSelector.custom")}
                   </button>
-                ))}
+                  {mcpPresets.map((p, idx) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => applyPreset(idx)}
+                      className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        selectedPreset === idx
+                          ? "bg-emerald-500 text-white dark:bg-emerald-600"
+                          : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+                      }`}
+                      title={p.description}
+                    >
+                      {p.name || p.id}
+                    </button>
+                  ))}
+                </div>
               </div>
-              {/* 无需环境变量提示：已移除 */}
+              {selectedPreset === -1 && (
+                <div className="text-sm text-gray-500 dark:text-gray-400">
+                  {t("presetSelector.customDescription")}
+                </div>
+              )}
+              {selectedPreset !== null && selectedPreset >= 0 && (
+                <div className="text-sm text-gray-500 dark:text-gray-400">
+                  {t("presetSelector.presetDescription")}
+                </div>
+              )}
             </div>
           )}
           {/* ID (标题) */}
@@ -357,7 +370,10 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
 
         {/* Footer */}
         <div className="flex-shrink-0 flex items-center justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-800 bg-gray-100 dark:bg-gray-800">
-          <button onClick={onClose} className={buttonStyles.secondary}>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-200 rounded-lg transition-colors text-sm font-medium"
+          >
             {t("common.cancel")}
           </button>
           <button
