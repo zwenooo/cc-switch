@@ -291,6 +291,7 @@
       "homepagePlaceholder": "https://example.com",
       "docs": "文档链接",
       "docsPlaceholder": "https://example.com/docs",
+      "additionalInfo": "附加信息",
       "jsonConfig": "JSON 配置",
       "jsonPlaceholder": "{\n  \"type\": \"stdio\",\n  \"command\": \"uvx\",\n  \"args\": [\"mcp-server-fetch\"]\n}",
       "tomlConfig": "TOML 配置",

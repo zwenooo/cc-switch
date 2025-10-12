@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { X, Save, AlertCircle } from "lucide-react";
+import { X, Save, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
 import { McpServer, McpServerSpec } from "../../types";
 import { mcpPresets } from "../../config/mcpPresets";
 import { buttonStyles, inputStyles } from "../../lib/styles";
@@ -80,6 +80,22 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
   const [formDocs, setFormDocs] = useState(initialData?.docs || "");
   const [formTags, setFormTags] = useState(initialData?.tags?.join(", ") || "");
 
+  // 编辑模式下禁止修改 ID
+  const isEditing = !!editingId;
+
+  // 判断是否在编辑模式下有附加信息
+  const hasAdditionalInfo = !!(
+    initialData?.description ||
+    initialData?.tags?.length ||
+    initialData?.homepage ||
+    initialData?.docs
+  );
+
+  // 附加信息展开状态（编辑模式下有值时默认展开）
+  const [showMetadata, setShowMetadata] = useState(
+    isEditing ? hasAdditionalInfo : false,
+  );
+
   // 根据 appType 决定初始格式
   const [formConfig, setFormConfig] = useState(() => {
     const spec = initialData?.server;
@@ -94,9 +110,6 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
   const [saving, setSaving] = useState(false);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [idError, setIdError] = useState("");
-
-  // 编辑模式下禁止修改 ID
-  const isEditing = !!editingId;
 
   // 判断是否使用 TOML 格式
   const useToml = appType === "codex";
@@ -503,57 +516,78 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
             />
           </div>
 
-          {/* Description (描述) */}
+          {/* 可折叠的附加信息按钮 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              {t("mcp.form.description")}
-            </label>
-            <input
-              className={inputStyles.text}
-              placeholder={t("mcp.form.descriptionPlaceholder")}
-              value={formDescription}
-              onChange={(e) => setFormDescription(e.target.value)}
-            />
+            <button
+              type="button"
+              onClick={() => setShowMetadata(!showMetadata)}
+              className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+            >
+              {showMetadata ? (
+                <ChevronUp size={16} />
+              ) : (
+                <ChevronDown size={16} />
+              )}
+              {t("mcp.form.additionalInfo")}
+            </button>
           </div>
 
-          {/* Tags */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              {t("mcp.form.tags")}
-            </label>
-            <input
-              className={inputStyles.text}
-              placeholder={t("mcp.form.tagsPlaceholder")}
-              value={formTags}
-              onChange={(e) => setFormTags(e.target.value)}
-            />
-          </div>
+          {/* 附加信息区域（可折叠） */}
+          {showMetadata && (
+            <>
+              {/* Description (描述) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  {t("mcp.form.description")}
+                </label>
+                <input
+                  className={inputStyles.text}
+                  placeholder={t("mcp.form.descriptionPlaceholder")}
+                  value={formDescription}
+                  onChange={(e) => setFormDescription(e.target.value)}
+                />
+              </div>
 
-          {/* Homepage */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              {t("mcp.form.homepage")}
-            </label>
-            <input
-              className={inputStyles.text}
-              placeholder={t("mcp.form.homepagePlaceholder")}
-              value={formHomepage}
-              onChange={(e) => setFormHomepage(e.target.value)}
-            />
-          </div>
+              {/* Tags */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  {t("mcp.form.tags")}
+                </label>
+                <input
+                  className={inputStyles.text}
+                  placeholder={t("mcp.form.tagsPlaceholder")}
+                  value={formTags}
+                  onChange={(e) => setFormTags(e.target.value)}
+                />
+              </div>
 
-          {/* Docs */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              {t("mcp.form.docs")}
-            </label>
-            <input
-              className={inputStyles.text}
-              placeholder={t("mcp.form.docsPlaceholder")}
-              value={formDocs}
-              onChange={(e) => setFormDocs(e.target.value)}
-            />
-          </div>
+              {/* Homepage */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  {t("mcp.form.homepage")}
+                </label>
+                <input
+                  className={inputStyles.text}
+                  placeholder={t("mcp.form.homepagePlaceholder")}
+                  value={formHomepage}
+                  onChange={(e) => setFormHomepage(e.target.value)}
+                />
+              </div>
+
+              {/* Docs */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  {t("mcp.form.docs")}
+                </label>
+                <input
+                  className={inputStyles.text}
+                  placeholder={t("mcp.form.docsPlaceholder")}
+                  value={formDocs}
+                  onChange={(e) => setFormDocs(e.target.value)}
+                />
+              </div>
+            </>
+          )}
 
           {/* 配置输入框（根据格式显示 JSON 或 TOML） */}
           <div>

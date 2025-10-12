@@ -291,6 +291,7 @@
       "homepagePlaceholder": "https://example.com",
       "docs": "Docs",
       "docsPlaceholder": "https://example.com/docs",
+      "additionalInfo": "Additional Info",
       "jsonConfig": "JSON Configuration",
       "jsonPlaceholder": "{\n  \"type\": \"stdio\",\n  \"command\": \"uvx\",\n  \"args\": [\"mcp-server-fetch\"]\n}",
       "tomlConfig": "TOML Configuration",
