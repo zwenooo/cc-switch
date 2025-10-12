@@ -169,7 +169,7 @@
     "getApiKey": "获取 API Key",
     "parameterConfig": "参数配置 - {{name}} *",
     "mainModel": "主模型 (可选)",
-    "mainModelPlaceholder": "例如: GLM-4.5",
+    "mainModelPlaceholder": "例如: GLM-4.6",
     "fastModel": "快速模型 (可选)",
     "fastModelPlaceholder": "例如: GLM-4.5-Air",
     "modelHint": "💡 留空将使用供应商的默认模型",

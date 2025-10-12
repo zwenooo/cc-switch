@@ -169,7 +169,7 @@
     "getApiKey": "Get API Key",
     "parameterConfig": "Parameter Config - {{name}} *",
     "mainModel": "Main Model (optional)",
-    "mainModelPlaceholder": "e.g., GLM-4.5",
+    "mainModelPlaceholder": "e.g., GLM-4.6",
     "fastModel": "Fast Model (optional)",
     "fastModelPlaceholder": "e.g., GLM-4.5-Air",
     "modelHint": "💡 Leave blank to use provider's default model",
