@@ -1,6 +1,6 @@
 # Claude Code & Codex 供应商切换器
 
-[![Version](https://img.shields.io/badge/version-3.4.0-blue.svg)](https://github.com/farion1231/cc-switch/releases)
+[![Version](https://img.shields.io/badge/version-3.5.0-blue.svg)](https://github.com/farion1231/cc-switch/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)](https://github.com/farion1231/cc-switch/releases)
 [![Built with Tauri](https://img.shields.io/badge/built%20with-Tauri%202-orange.svg)](https://tauri.app/)
 
@@ -49,6 +49,20 @@
 从 [Releases](../../releases) 页面下载最新版本的 `CC-Switch-Setup.msi` 安装包或者 `CC-Switch-Windows-Portable.zip` 绿色版。
 
 ### macOS 用户
+
+**方式一：通过 Homebrew 安装（推荐）**
+
+```bash
+brew tap farion1231/ccswitch
+brew install --cask cc-switch
+```
+
+更新：
+```bash
+brew upgrade --cask cc-switch
+```
+
+**方式二：手动下载**
 
 从 [Releases](../../releases) 页面下载 `CC-Switch-macOS.zip` 解压使用。
 
