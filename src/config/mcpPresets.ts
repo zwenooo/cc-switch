@@ -25,7 +25,7 @@ export const mcpPresets: McpPreset[] = [
     id: "time",
     name: "@modelcontextprotocol/server-time",
     description:
-      "时间查询工具，提供当前时间、时区转换、日期计算等功能，完全无需配置",
+      "时间查询工具，提供当前时间、时区转换、日期计算等功能",
     tags: ["stdio", "time", "utility"],
     server: {
       type: "stdio",
@@ -64,17 +64,17 @@ export const mcpPresets: McpPreset[] = [
   },
   {
     id: "context7",
-    name: "@context7/mcp-server",
+    name: "@upstash/context7-mcp",
     description:
-      "Context7 文档搜索工具，提供最新的库文档和代码示例，完全无需配置",
+      "Context7 文档搜索工具，提供最新的库文档和代码示例，配置 key 会有更高限额",
     tags: ["stdio", "docs", "search"],
     server: {
       type: "stdio",
       command: "npx",
-      args: ["-y", "@context7/mcp-server"],
+      args: ["-y", "@upstash/context7-mcp"],
     } as McpServerSpec,
     homepage: "https://context7.com",
-    docs: "https://github.com/context7/mcp-server",
+    docs: "https://github.com/upstash/context7/blob/master/README.md",
   },
 ];
 
