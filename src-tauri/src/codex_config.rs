@@ -33,7 +33,7 @@ pub fn get_codex_provider_paths(
     provider_name: Option<&str>,
 ) -> (PathBuf, PathBuf) {
     let base_name = provider_name
-        .map(|name| sanitize_provider_name(name))
+        .map(sanitize_provider_name)
         .unwrap_or_else(|| sanitize_provider_name(provider_id));
 
     let auth_path = get_codex_config_dir().join(format!("auth-{}.json", base_name));

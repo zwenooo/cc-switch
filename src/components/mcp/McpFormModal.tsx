@@ -2,7 +2,10 @@ import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { X, Save, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
 import { McpServer, McpServerSpec } from "../../types";
-import { mcpPresets, getMcpPresetWithDescription } from "../../config/mcpPresets";
+import {
+  mcpPresets,
+  getMcpPresetWithDescription,
+} from "../../config/mcpPresets";
 import { buttonStyles, inputStyles } from "../../lib/styles";
 import McpWizardModal from "./McpWizardModal";
 import {

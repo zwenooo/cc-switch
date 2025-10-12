@@ -106,7 +106,7 @@ pub fn sanitize_provider_name(name: &str) -> String {
 /// 获取供应商配置文件路径
 pub fn get_provider_config_path(provider_id: &str, provider_name: Option<&str>) -> PathBuf {
     let base_name = provider_name
-        .map(|name| sanitize_provider_name(name))
+        .map(sanitize_provider_name)
         .unwrap_or_else(|| sanitize_provider_name(provider_id));
 
     get_claude_config_dir().join(format!("settings-{}.json", base_name))

@@ -375,7 +375,7 @@
         "name": "@modelcontextprotocol/server-memory",
         "description": "知识图谱记忆系统，支持存储实体、关系和观察，让 AI 记住对话中的重要信息"
       },
-      "sequentialThinking": {
+      "sequential-thinking": {
         "name": "@modelcontextprotocol/server-sequential-thinking",
         "description": "顺序思考工具，帮助 AI 将复杂问题分解为多个步骤，逐步深入思考"
       },

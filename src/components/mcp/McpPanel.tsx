@@ -210,7 +210,8 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify, appType }) => {
         {/* Info Section */}
         <div className="flex-shrink-0 px-6 pt-4 pb-2">
           <div className="text-sm text-gray-500 dark:text-gray-400">
-            {t("mcp.serverCount", { count: Object.keys(servers).length })} · {t("mcp.enabledCount", { count: enabledCount })}
+            {t("mcp.serverCount", { count: Object.keys(servers).length })} ·{" "}
+            {t("mcp.enabledCount", { count: enabledCount })}
           </div>
         </div>
 
