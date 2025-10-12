@@ -140,7 +140,7 @@ export const providerPresets: ProviderPreset[] = [
         ANTHROPIC_DEFAULT_SONNET_MODEL: "LongCat-Flash-Chat",
         ANTHROPIC_DEFAULT_OPUS_MODEL: "LongCat-Flash-Chat",
         CLAUDE_CODE_MAX_OUTPUT_TOKENS: "6000",
-        CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: 1
+        CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: 1,
       },
     },
     category: "cn_official",
