@@ -362,7 +362,27 @@
       "enabled": "已启用",
       "installed": "已安装",
       "docs": "文档",
-      "requiresEnv": "需要环境变量"
+      "requiresEnv": "需要环境变量",
+      "fetch": {
+        "name": "mcp-server-fetch",
+        "description": "通用 HTTP 请求工具，支持 GET/POST 等 HTTP 方法，适合快速请求接口/抓取网页数据"
+      },
+      "time": {
+        "name": "@modelcontextprotocol/server-time",
+        "description": "时间查询工具，提供当前时间、时区转换、日期计算等功能"
+      },
+      "memory": {
+        "name": "@modelcontextprotocol/server-memory",
+        "description": "知识图谱记忆系统，支持存储实体、关系和观察，让 AI 记住对话中的重要信息"
+      },
+      "sequentialThinking": {
+        "name": "@modelcontextprotocol/server-sequential-thinking",
+        "description": "顺序思考工具，帮助 AI 将复杂问题分解为多个步骤，逐步深入思考"
+      },
+      "context7": {
+        "name": "@upstash/context7-mcp",
+        "description": "Context7 文档搜索工具，提供最新的库文档和代码示例，配置 key 会有更高限额"
+      }
     }
   }
 }

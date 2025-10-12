@@ -1,17 +1,16 @@
 import { McpServer, McpServerSpec } from "../types";
 
-export type McpPreset = Omit<McpServer, "enabled">;
+export type McpPreset = Omit<McpServer, "enabled" | "description">;
 
 // 预设 MCP（逻辑简化版）：
 // - 仅包含最常用、可快速落地的 stdio 模式示例
 // - 不涉及分类/模板/测速等复杂逻辑，默认以 disabled 形式"回种"到 config.json
 // - 用户可在 MCP 面板中一键启用/编辑
+// - description 字段使用国际化 key，在使用时通过 t() 函数获取翻译
 export const mcpPresets: McpPreset[] = [
   {
     id: "fetch",
     name: "mcp-server-fetch",
-    description:
-      "通用 HTTP 请求工具，支持 GET/POST 等 HTTP 方法，适合快速请求接口/抓取网页数据",
     tags: ["stdio", "http", "web"],
     server: {
       type: "stdio",
@@ -24,8 +23,6 @@ export const mcpPresets: McpPreset[] = [
   {
     id: "time",
     name: "@modelcontextprotocol/server-time",
-    description:
-      "时间查询工具，提供当前时间、时区转换、日期计算等功能",
     tags: ["stdio", "time", "utility"],
     server: {
       type: "stdio",
@@ -38,8 +35,6 @@ export const mcpPresets: McpPreset[] = [
   {
     id: "memory",
     name: "@modelcontextprotocol/server-memory",
-    description:
-      "知识图谱记忆系统，支持存储实体、关系和观察，让 AI 记住对话中的重要信息",
     tags: ["stdio", "memory", "graph"],
     server: {
       type: "stdio",
@@ -52,7 +47,6 @@ export const mcpPresets: McpPreset[] = [
   {
     id: "sequential-thinking",
     name: "@modelcontextprotocol/server-sequential-thinking",
-    description: "顺序思考工具，帮助 AI 将复杂问题分解为多个步骤，逐步深入思考",
     tags: ["stdio", "thinking", "reasoning"],
     server: {
       type: "stdio",
@@ -65,8 +59,6 @@ export const mcpPresets: McpPreset[] = [
   {
     id: "context7",
     name: "@upstash/context7-mcp",
-    description:
-      "Context7 文档搜索工具，提供最新的库文档和代码示例，配置 key 会有更高限额",
     tags: ["stdio", "docs", "search"],
     server: {
       type: "stdio",
@@ -77,5 +69,17 @@ export const mcpPresets: McpPreset[] = [
     docs: "https://github.com/upstash/context7/blob/master/README.md",
   },
 ];
+
+// 获取带国际化描述的预设
+export const getMcpPresetWithDescription = (
+  preset: McpPreset,
+  t: (key: string) => string,
+): McpServer => {
+  const descriptionKey = `mcp.presets.${preset.id}.description`;
+  return {
+    ...preset,
+    description: t(descriptionKey),
+  } as McpServer;
+};
 
 export default mcpPresets;

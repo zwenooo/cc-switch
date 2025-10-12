@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { X, Save, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
 import { McpServer, McpServerSpec } from "../../types";
-import { mcpPresets } from "../../config/mcpPresets";
+import { mcpPresets, getMcpPresetWithDescription } from "../../config/mcpPresets";
 import { buttonStyles, inputStyles } from "../../lib/styles";
 import McpWizardModal from "./McpWizardModal";
 import {
@@ -139,25 +139,27 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
   // 应用预设（写入表单但不落库）
   const applyPreset = (index: number) => {
     if (index < 0 || index >= mcpPresets.length) return;
-    const p = mcpPresets[index];
-    const id = ensureUniqueId(p.id);
+    const preset = mcpPresets[index];
+    const presetWithDesc = getMcpPresetWithDescription(preset, t);
+
+    const id = ensureUniqueId(presetWithDesc.id);
     setFormId(id);
-    setFormName(p.name || p.id);
-    setFormDescription(p.description || "");
-    setFormHomepage(p.homepage || "");
-    setFormDocs(p.docs || "");
-    setFormTags(p.tags?.join(", ") || "");
+    setFormName(presetWithDesc.name || presetWithDesc.id);
+    setFormDescription(presetWithDesc.description || "");
+    setFormHomepage(presetWithDesc.homepage || "");
+    setFormDocs(presetWithDesc.docs || "");
+    setFormTags(presetWithDesc.tags?.join(", ") || "");
 
     // 根据格式转换配置
     if (useToml) {
-      const toml = mcpServerToToml(p.server);
+      const toml = mcpServerToToml(presetWithDesc.server);
       setFormConfig(toml);
       {
         const err = validateToml(toml);
         setConfigError(formatTomlError(err));
       }
     } else {
-      const json = JSON.stringify(p.server, null, 2);
+      const json = JSON.stringify(presetWithDesc.server, null, 2);
       setFormConfig(json);
       setConfigError(validateJson(json));
     }
@@ -464,21 +466,24 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
                 >
                   {t("presetSelector.custom")}
                 </button>
-                {mcpPresets.map((p, idx) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => applyPreset(idx)}
-                    className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      selectedPreset === idx
-                        ? "bg-emerald-500 text-white dark:bg-emerald-600"
-                        : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
-                    }`}
-                    title={p.description}
-                  >
-                    {p.id}
-                  </button>
-                ))}
+                {mcpPresets.map((preset, idx) => {
+                  const descriptionKey = `mcp.presets.${preset.id}.description`;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => applyPreset(idx)}
+                      className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        selectedPreset === idx
+                          ? "bg-emerald-500 text-white dark:bg-emerald-600"
+                          : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+                      }`}
+                      title={t(descriptionKey)}
+                    >
+                      {preset.id}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
