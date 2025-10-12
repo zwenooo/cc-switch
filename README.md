@@ -42,11 +42,11 @@
 
 - **Windows**: Windows 10 及以上
 - **macOS**: macOS 10.15 (Catalina) 及以上
-- **Linux**: Ubuntu 20.04+ / Debian 11+ / Fedora 34+ 等主流发行版
+- **Linux**: Ubuntu 22.04+ / Debian 11+ / Fedora 34+ 等主流发行版
 
 ### Windows 用户
 
-从 [Releases](../../releases) 页面下载最新版本的 `CC-Switch-Setup.msi` 安装包或者 `CC-Switch-Windows-Portable.zip` 绿色版。
+从 [Releases](../../releases) 页面下载最新版本的 `CC-Switch-v{版本号}-Windows.msi` 安装包或者 `CC-Switch-v{版本号}-Windows-Portable.zip` 绿色版。
 
 ### macOS 用户
 
@@ -58,19 +58,20 @@ brew install --cask cc-switch
 ```
 
 更新：
+
 ```bash
 brew upgrade --cask cc-switch
 ```
 
 **方式二：手动下载**
 
-从 [Releases](../../releases) 页面下载 `CC-Switch-macOS.zip` 解压使用。
+从 [Releases](../../releases) 页面下载 `CC-Switch-v{版本号}-macOS.zip` 解压使用。
 
 > **注意**：由于作者没有苹果开发者账号，首次打开可能出现"未知开发者"警告，请先关闭，然后前往"系统设置" → "隐私与安全性" → 点击"仍要打开"，之后便可以正常打开
 
 ### Linux 用户
 
-从 [Releases](../../releases) 页面下载最新版本的 `.deb` 包或者 `AppImage`安装包。
+从 [Releases](../../releases) 页面下载最新版本的 `CC-Switch-v{版本号}-Linux.deb` 包或者 `CC-Switch-v{版本号}-Linux.AppImage` 安装包。
 
 ## 使用说明
 

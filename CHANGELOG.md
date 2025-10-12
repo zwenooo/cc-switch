@@ -34,6 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated GLM provider configurations with latest models
 - Refined UI/UX with better spacing, icons, and visual feedback
 - Enhanced tray menu functionality and responsiveness
+- **Standardized release artifact naming** - All platform releases now use consistent version-tagged filenames:
+  - macOS: `CC-Switch-v{version}-macOS.tar.gz` / `.zip`
+  - Windows: `CC-Switch-v{version}-Windows.msi` / `-Portable.zip`
+  - Linux: `CC-Switch-v{version}-Linux.AppImage` / `.deb`
 
 ### 🐛 Bug Fixes
 
