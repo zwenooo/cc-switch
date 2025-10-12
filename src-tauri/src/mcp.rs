@@ -68,6 +68,97 @@ fn validate_mcp_entry(entry: &Value) -> Result<(), String> {
     Ok(())
 }
 
+fn normalize_server_keys(map: &mut HashMap<String, Value>) -> usize {
+    let mut change_count = 0usize;
+    let mut renames: Vec<(String, String)> = Vec::new();
+
+    for (key_ref, value) in map.iter_mut() {
+        let key = key_ref.clone();
+        let Some(obj) = value.as_object_mut() else {
+            continue;
+        };
+
+        let id_value = obj.get("id").cloned();
+
+        let target_id: String;
+
+        match id_value {
+            Some(id_val) => match id_val.as_str() {
+                Some(id_str) => {
+                    let trimmed = id_str.trim();
+                    if trimmed.is_empty() {
+                        obj.insert("id".into(), json!(key.clone()));
+                        change_count += 1;
+                        target_id = key.clone();
+                    } else {
+                        if trimmed != id_str {
+                            obj.insert("id".into(), json!(trimmed));
+                            change_count += 1;
+                        }
+                        target_id = trimmed.to_string();
+                    }
+                }
+                None => {
+                    obj.insert("id".into(), json!(key.clone()));
+                    change_count += 1;
+                    target_id = key.clone();
+                }
+            },
+            None => {
+                obj.insert("id".into(), json!(key.clone()));
+                change_count += 1;
+                target_id = key.clone();
+            }
+        }
+
+        if target_id != key {
+            renames.push((key, target_id));
+        }
+    }
+
+    for (old_key, new_key) in renames {
+        if old_key == new_key {
+            continue;
+        }
+        if map.contains_key(&new_key) {
+            log::warn!(
+                "MCP 条目 '{}' 的内部 id '{}' 与现有键冲突，回退为原键",
+                old_key,
+                new_key
+            );
+            if let Some(value) = map.get_mut(&old_key) {
+                if let Some(obj) = value.as_object_mut() {
+                    if obj
+                        .get("id")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s != old_key)
+                        .unwrap_or(true)
+                    {
+                        obj.insert("id".into(), json!(old_key.clone()));
+                        change_count += 1;
+                    }
+                }
+            }
+            continue;
+        }
+        if let Some(mut value) = map.remove(&old_key) {
+            if let Some(obj) = value.as_object_mut() {
+                obj.insert("id".into(), json!(new_key.clone()));
+            }
+            log::info!("MCP 条目键名已自动修复: '{}' -> '{}'", old_key, new_key);
+            map.insert(new_key, value);
+            change_count += 1;
+        }
+    }
+
+    change_count
+}
+
+pub fn normalize_servers_for(config: &mut MultiAppConfig, app: &AppType) -> usize {
+    let servers = &mut config.mcp_for_mut(app).servers;
+    normalize_server_keys(servers)
+}
+
 fn extract_server_spec(entry: &Value) -> Result<Value, String> {
     let obj = entry
         .as_object()
@@ -106,7 +197,11 @@ fn collect_enabled_servers(cfg: &McpConfig) -> HashMap<String, Value> {
     out
 }
 
-pub fn get_servers_snapshot_for(config: &MultiAppConfig, app: &AppType) -> HashMap<String, Value> {
+pub fn get_servers_snapshot_for(
+    config: &mut MultiAppConfig,
+    app: &AppType,
+) -> (HashMap<String, Value>, usize) {
+    let normalized = normalize_servers_for(config, app);
     let mut snapshot = config.mcp_for(app).servers.clone();
     snapshot.retain(|id, value| {
         let Some(obj) = value.as_object_mut() else {
@@ -124,7 +219,7 @@ pub fn get_servers_snapshot_for(config: &MultiAppConfig, app: &AppType) -> HashM
             }
         }
     });
-    snapshot
+    (snapshot, normalized)
 }
 
 pub fn upsert_in_config_for(
@@ -136,6 +231,7 @@ pub fn upsert_in_config_for(
     if id.trim().is_empty() {
         return Err("MCP 服务器 ID 不能为空".into());
     }
+    normalize_servers_for(config, app);
     validate_mcp_entry(&spec)?;
 
     let mut entry_obj = spec
@@ -165,10 +261,15 @@ pub fn upsert_in_config_for(
     Ok(before.is_none())
 }
 
-pub fn delete_in_config_for(config: &mut MultiAppConfig, app: &AppType, id: &str) -> Result<bool, String> {
+pub fn delete_in_config_for(
+    config: &mut MultiAppConfig,
+    app: &AppType,
+    id: &str,
+) -> Result<bool, String> {
     if id.trim().is_empty() {
         return Err("MCP 服务器 ID 不能为空".into());
     }
+    normalize_servers_for(config, app);
     let existed = config.mcp_for_mut(app).servers.remove(id).is_some();
     Ok(existed)
 }
@@ -183,9 +284,13 @@ pub fn set_enabled_and_sync_for(
     if id.trim().is_empty() {
         return Err("MCP 服务器 ID 不能为空".into());
     }
+    normalize_servers_for(config, app);
     if let Some(spec) = config.mcp_for_mut(app).servers.get_mut(id) {
         // 写入 enabled 字段
-        let mut obj = spec.as_object().cloned().ok_or_else(|| "MCP 服务器定义必须为 JSON 对象".to_string())?;
+        let mut obj = spec
+            .as_object()
+            .cloned()
+            .ok_or_else(|| "MCP 服务器定义必须为 JSON 对象".to_string())?;
         obj.insert("enabled".into(), json!(enabled));
         *spec = Value::Object(obj);
     } else {
@@ -218,10 +323,13 @@ pub fn sync_enabled_to_claude(config: &MultiAppConfig) -> Result<(), String> {
 pub fn import_from_claude(config: &mut MultiAppConfig) -> Result<usize, String> {
     let text_opt = crate::claude_mcp::read_mcp_json()?;
     let Some(text) = text_opt else { return Ok(0) };
-    let v: Value = serde_json::from_str(&text).map_err(|e| format!("解析 ~/.claude.json 失败: {}", e))?;
-    let Some(map) = v.get("mcpServers").and_then(|x| x.as_object()) else { return Ok(0) };
+    let mut changed = normalize_servers_for(config, &AppType::Claude);
+    let v: Value =
+        serde_json::from_str(&text).map_err(|e| format!("解析 ~/.claude.json 失败: {}", e))?;
+    let Some(map) = v.get("mcpServers").and_then(|x| x.as_object()) else {
+        return Ok(changed);
+    };
 
-    let mut changed = 0usize;
     for (id, spec) in map.iter() {
         // 校验目标 spec
         validate_server_spec(spec)?;
@@ -291,17 +399,18 @@ pub fn import_from_codex(config: &mut MultiAppConfig) -> Result<usize, String> {
     if text.trim().is_empty() {
         return Ok(0);
     }
+    let mut changed_total = normalize_servers_for(config, &AppType::Codex);
 
-    let root: toml::Table = toml::from_str(&text)
-        .map_err(|e| format!("解析 ~/.codex/config.toml 失败: {}", e))?;
-
-    let mut changed_total = 0usize;
+    let root: toml::Table =
+        toml::from_str(&text).map_err(|e| format!("解析 ~/.codex/config.toml 失败: {}", e))?;
 
     // helper：处理一组 servers 表
     let mut import_servers_tbl = |servers_tbl: &toml::value::Table| {
         let mut changed = 0usize;
         for (id, entry_val) in servers_tbl.iter() {
-            let Some(entry_tbl) = entry_val.as_table() else { continue };
+            let Some(entry_tbl) = entry_val.as_table() else {
+                continue;
+            };
 
             // type 缺省为 stdio
             let typ = entry_tbl
@@ -472,10 +581,7 @@ pub fn sync_enabled_to_codex(config: &MultiAppConfig) -> Result<(), String> {
     };
 
     // 3) 写入 servers 表（支持 mcp.servers 与 mcp_servers；优先沿用已有风格，默认 mcp_servers）
-    let prefer_mcp_servers = root
-        .get("mcp_servers")
-        .is_some()
-        || root.get("mcp").is_none();
+    let prefer_mcp_servers = root.get("mcp_servers").is_some() || root.get("mcp").is_none();
     if enabled.is_empty() {
         // 无启用项：移除两种节点
         // 清除 mcp.servers，但保留其他 mcp 字段
@@ -502,10 +608,7 @@ pub fn sync_enabled_to_codex(config: &MultiAppConfig) -> Result<(), String> {
             let mut s = TomlTable::new();
 
             // 类型（缺省视为 stdio）
-            let typ = spec
-                .get("type")
-                .and_then(|v| v.as_str())
-                .unwrap_or("stdio");
+            let typ = spec.get("type").and_then(|v| v.as_str()).unwrap_or("stdio");
             s.insert("type".into(), TomlValue::String(typ.to_string()));
 
             match typ {
