@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { X, Save } from "lucide-react";
 import { McpServerSpec } from "../../types";
@@ -13,6 +13,8 @@ interface McpWizardModalProps {
     type: "success" | "error",
     duration?: number,
   ) => void;
+  initialTitle?: string;
+  initialServer?: McpServerSpec;
 }
 
 /**
@@ -72,6 +74,8 @@ const McpWizardModal: React.FC<McpWizardModalProps> = ({
   onClose,
   onApply,
   onNotify,
+  initialTitle,
+  initialServer,
 }) => {
   const { t } = useTranslation();
   const [wizardType, setWizardType] = useState<"stdio" | "http">("stdio");
@@ -161,6 +165,55 @@ const McpWizardModal: React.FC<McpWizardModalProps> = ({
       handleApply();
     }
   };
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const title = initialTitle ?? "";
+    setWizardTitle(title);
+
+    const resolvedType =
+      initialServer?.type ??
+      (initialServer?.url ? "http" : "stdio");
+
+    setWizardType(resolvedType);
+
+    if (resolvedType === "http") {
+      setWizardUrl(initialServer?.url ?? "");
+      const headersCandidate = initialServer?.headers;
+      const headers =
+        headersCandidate && typeof headersCandidate === "object"
+          ? headersCandidate
+          : undefined;
+      setWizardHeaders(
+        headers
+          ? Object.entries(headers)
+              .map(([k, v]) => `${k}: ${v ?? ""}`)
+              .join("\n")
+          : "",
+      );
+      setWizardCommand("");
+      setWizardArgs("");
+      setWizardEnv("");
+      return;
+    }
+
+    setWizardCommand(initialServer?.command ?? "");
+    const argsValue = initialServer?.args;
+    setWizardArgs(Array.isArray(argsValue) ? argsValue.join("\n") : "");
+    const envCandidate = initialServer?.env;
+    const env =
+      envCandidate && typeof envCandidate === "object" ? envCandidate : undefined;
+    setWizardEnv(
+      env
+        ? Object.entries(env)
+            .map(([k, v]) => `${k}=${v ?? ""}`)
+            .join("\n")
+        : "",
+    );
+    setWizardUrl("");
+    setWizardHeaders("");
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { X, Save, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
 import { McpServer, McpServerSpec } from "../../types";
@@ -116,6 +116,31 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
 
   // 判断是否使用 TOML 格式
   const useToml = appType === "codex";
+
+  const wizardInitialSpec = useMemo(() => {
+    const fallback = initialData?.server;
+    if (!formConfig.trim()) {
+      return fallback;
+    }
+
+    if (useToml) {
+      try {
+        return tomlToMcpServer(formConfig);
+      } catch {
+        return fallback;
+      }
+    }
+
+    try {
+      const parsed = JSON.parse(formConfig);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as McpServerSpec;
+      }
+      return fallback;
+    } catch {
+      return fallback;
+    }
+  }, [formConfig, initialData, useToml]);
 
   // 预设选择状态（仅新增模式显示；-1 表示自定义）
   const [selectedPreset, setSelectedPreset] = useState<number | null>(
@@ -661,6 +686,8 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
         onClose={() => setIsWizardOpen(false)}
         onApply={handleWizardApply}
         onNotify={onNotify}
+        initialTitle={formId}
+        initialServer={wizardInitialSpec}
       />
     </div>
   );
