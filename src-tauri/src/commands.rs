@@ -850,6 +850,24 @@ pub async fn upsert_mcp_server_in_config(
     let changed = crate::mcp::upsert_in_config_for(&mut cfg, &app_ty, &id, spec)?;
     drop(cfg);
     state.save()?;
+
+    let cfg2 = state
+        .config
+        .lock()
+        .map_err(|e| format!("获取锁失败: {}", e))?;
+    let should_sync = cfg2
+        .mcp_for(&app_ty)
+        .servers
+        .get(&id)
+        .and_then(|entry| entry.get("enabled"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    if should_sync {
+        match app_ty {
+            crate::app_config::AppType::Claude => crate::mcp::sync_enabled_to_claude(&cfg2)?,
+            crate::app_config::AppType::Codex => crate::mcp::sync_enabled_to_codex(&cfg2)?,
+        }
+    }
     Ok(changed)
 }
 
