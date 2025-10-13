@@ -298,7 +298,9 @@
       "jsonPlaceholder": "{\n  \"type\": \"stdio\",\n  \"command\": \"uvx\",\n  \"args\": [\"mcp-server-fetch\"]\n}",
       "tomlConfig": "TOML 配置",
       "tomlPlaceholder": "type = \"stdio\"\ncommand = \"uvx\"\nargs = [\"mcp-server-fetch\"]",
-      "useWizard": "配置向导"
+      "useWizard": "配置向导",
+      "syncOtherSide": "同步到 {{target}}",
+      "syncOtherSideHint": "勾选后会把当前配置同时写入 {{target}}，若存在同名配置将被覆盖"
     },
     "wizard": {
       "title": "MCP 配置向导",

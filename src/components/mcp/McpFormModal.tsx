@@ -24,7 +24,11 @@ interface McpFormModalProps {
   appType: AppType;
   editingId?: string;
   initialData?: McpServer;
-  onSave: (id: string, server: McpServer) => Promise<void>;
+  onSave: (
+    id: string,
+    server: McpServer,
+    options?: { syncOtherSide?: boolean },
+  ) => Promise<void>;
   onClose: () => void;
   existingIds?: string[];
   onNotify?: (
@@ -113,9 +117,16 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
   const [saving, setSaving] = useState(false);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [idError, setIdError] = useState("");
+  const [syncOtherSide, setSyncOtherSide] = useState(false);
 
   // 判断是否使用 TOML 格式
   const useToml = appType === "codex";
+  const syncTargetLabel =
+    appType === "claude" ? t("apps.codex") : t("apps.claude");
+  const syncCheckboxId = useMemo(
+    () => `sync-other-side-${appType}`,
+    [appType],
+  );
 
   const wizardInitialSpec = useMemo(() => {
     const fallback = initialData?.server;
@@ -432,7 +443,7 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
       }
 
       // 显式等待父组件保存流程
-      await onSave(trimmedId, entry);
+      await onSave(trimmedId, entry, { syncOtherSide });
     } catch (error: any) {
       const detail = extractErrorMessage(error);
       const mapped = translateMcpBackendError(detail, t);
@@ -654,6 +665,28 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
                 <span>{configError}</span>
               </div>
             )}
+          </div>
+
+          {/* 双端同步选项 */}
+          <div className="mt-4 flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-900/40">
+            <input
+              id={syncCheckboxId}
+              type="checkbox"
+              className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800"
+              checked={syncOtherSide}
+              onChange={(event) => setSyncOtherSide(event.target.checked)}
+            />
+            <label
+              htmlFor={syncCheckboxId}
+              className="text-sm text-gray-700 dark:text-gray-300"
+            >
+              <span className="font-medium">
+                {t("mcp.form.syncOtherSide", { target: syncTargetLabel })}
+              </span>
+              <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">
+                {t("mcp.form.syncOtherSideHint", { target: syncTargetLabel })}
+              </span>
+            </label>
           </div>
         </div>
 

@@ -354,13 +354,18 @@ export const tauriAPI = {
     app: AppType = "claude",
     id: string,
     spec: McpServer,
+    options?: { syncOtherSide?: boolean },
   ): Promise<boolean> => {
     try {
-      return await invoke<boolean>("upsert_mcp_server_in_config", {
+      const payload = {
         app,
         id,
         spec,
-      });
+        ...(options?.syncOtherSide !== undefined
+          ? { syncOtherSide: options.syncOtherSide }
+          : {}),
+      };
+      return await invoke<boolean>("upsert_mcp_server_in_config", payload);
     } catch (error) {
       console.error("写入 MCP（config.json）失败:", error);
       throw error;

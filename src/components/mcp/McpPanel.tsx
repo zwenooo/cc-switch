@@ -135,10 +135,16 @@ const McpPanel: React.FC<McpPanelProps> = ({ onClose, onNotify, appType }) => {
     });
   };
 
-  const handleSave = async (id: string, server: McpServer) => {
+  const handleSave = async (
+    id: string,
+    server: McpServer,
+    options?: { syncOtherSide?: boolean },
+  ) => {
     try {
       const payload: McpServer = { ...server, id };
-      await window.api.upsertMcpServerInConfig(appType, id, payload);
+      await window.api.upsertMcpServerInConfig(appType, id, payload, {
+        syncOtherSide: options?.syncOtherSide,
+      });
       await reload();
       setIsFormOpen(false);
       setEditingId(null);

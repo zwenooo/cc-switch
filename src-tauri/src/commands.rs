@@ -841,13 +841,46 @@ pub async fn upsert_mcp_server_in_config(
     app: Option<String>,
     id: String,
     spec: serde_json::Value,
+    sync_other_side: Option<bool>,
 ) -> Result<bool, String> {
     let mut cfg = state
         .config
         .lock()
         .map_err(|e| format!("获取锁失败: {}", e))?;
     let app_ty = crate::app_config::AppType::from(app.as_deref().unwrap_or("claude"));
-    let changed = crate::mcp::upsert_in_config_for(&mut cfg, &app_ty, &id, spec)?;
+    let mut sync_targets: Vec<crate::app_config::AppType> = Vec::new();
+
+    let changed = crate::mcp::upsert_in_config_for(&mut cfg, &app_ty, &id, spec.clone())?;
+
+    let should_sync_current = cfg
+        .mcp_for(&app_ty)
+        .servers
+        .get(&id)
+        .and_then(|entry| entry.get("enabled"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    if should_sync_current {
+        sync_targets.push(app_ty.clone());
+    }
+
+    if sync_other_side.unwrap_or(false) {
+        let other_app = match app_ty.clone() {
+            crate::app_config::AppType::Claude => crate::app_config::AppType::Codex,
+            crate::app_config::AppType::Codex => crate::app_config::AppType::Claude,
+        };
+        crate::mcp::upsert_in_config_for(&mut cfg, &other_app, &id, spec)?;
+
+        let should_sync_other = cfg
+            .mcp_for(&other_app)
+            .servers
+            .get(&id)
+            .and_then(|entry| entry.get("enabled"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        if should_sync_other {
+            sync_targets.push(other_app.clone());
+        }
+    }
     drop(cfg);
     state.save()?;
 
@@ -855,18 +888,11 @@ pub async fn upsert_mcp_server_in_config(
         .config
         .lock()
         .map_err(|e| format!("获取锁失败: {}", e))?;
-    let should_sync = cfg2
-        .mcp_for(&app_ty)
-        .servers
-        .get(&id)
-        .and_then(|entry| entry.get("enabled"))
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-    if should_sync {
-        match app_ty {
+    for app_ty_to_sync in sync_targets {
+        match app_ty_to_sync {
             crate::app_config::AppType::Claude => crate::mcp::sync_enabled_to_claude(&cfg2)?,
             crate::app_config::AppType::Codex => crate::mcp::sync_enabled_to_codex(&cfg2)?,
-        }
+        };
     }
     Ok(changed)
 }

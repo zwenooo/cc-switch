@@ -298,7 +298,9 @@
       "jsonPlaceholder": "{\n  \"type\": \"stdio\",\n  \"command\": \"uvx\",\n  \"args\": [\"mcp-server-fetch\"]\n}",
       "tomlConfig": "TOML Configuration",
       "tomlPlaceholder": "type = \"stdio\"\ncommand = \"uvx\"\nargs = [\"mcp-server-fetch\"]",
-      "useWizard": "Config Wizard"
+      "useWizard": "Config Wizard",
+      "syncOtherSide": "Mirror to {{target}}",
+      "syncOtherSideHint": "Apply the same settings to {{target}}; existing entries with the same id will be overwritten."
     },
     "wizard": {
       "title": "MCP Configuration Wizard",

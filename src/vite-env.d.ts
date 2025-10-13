@@ -84,6 +84,7 @@ declare global {
         app: AppType | undefined,
         id: string,
         spec: McpServer,
+        options?: { syncOtherSide?: boolean },
       ) => Promise<boolean>;
       deleteMcpServerInConfig: (
         app: AppType | undefined,
