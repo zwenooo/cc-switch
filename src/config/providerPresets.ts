@@ -157,24 +157,5 @@ export const providerPresets: ProviderPreset[] = [
     },
     category: "third_party",
   },
-  {
-    name: "PackyCode",
-    websiteUrl: "https://www.packycode.com",
-    apiKeyUrl: "https://www.packycode.com/?aff=rlo54mgz",
-    settingsConfig: {
-      env: {
-        ANTHROPIC_BASE_URL: "https://api.packycode.com",
-        ANTHROPIC_AUTH_TOKEN: "",
-      },
-    },
-    // 请求地址候选（用于地址管理/测速）
-    endpointCandidates: [
-      "https://api.packycode.com",
-      "https://api-hk-cn2.packycode.com",
-      "https://api-hk-g.packycode.com",
-      "https://api-us-cn2.packycode.com",
-      "https://api-cf-pro.packycode.com",
-    ],
-    category: "third_party",
-  },
+  
 ];
