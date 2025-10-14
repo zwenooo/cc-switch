@@ -300,7 +300,8 @@
       "tomlPlaceholder": "type = \"stdio\"\ncommand = \"uvx\"\nargs = [\"mcp-server-fetch\"]",
       "useWizard": "Config Wizard",
       "syncOtherSide": "Mirror to {{target}}",
-      "syncOtherSideHint": "Apply the same settings to {{target}}; existing entries with the same id will be overwritten."
+      "syncOtherSideHint": "Apply the same settings to {{target}}; existing entries with the same id will be overwritten.",
+      "willOverwriteWarning": "Will overwrite existing config in {{target}}"
     },
     "wizard": {
       "title": "MCP Configuration Wizard",

@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { X, Save, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { X, Save, AlertCircle, ChevronDown, ChevronUp, AlertTriangle } from "lucide-react";
 import { McpServer, McpServerSpec } from "../../types";
 import {
   mcpPresets,
@@ -118,15 +118,39 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [idError, setIdError] = useState("");
   const [syncOtherSide, setSyncOtherSide] = useState(false);
+  const [otherSideHasConflict, setOtherSideHasConflict] = useState(false);
 
   // 判断是否使用 TOML 格式
   const useToml = appType === "codex";
   const syncTargetLabel =
     appType === "claude" ? t("apps.codex") : t("apps.claude");
+  const otherAppType: AppType = appType === "claude" ? "codex" : "claude";
   const syncCheckboxId = useMemo(
     () => `sync-other-side-${appType}`,
     [appType],
   );
+
+  // 检测另一侧是否有同名 MCP
+  useEffect(() => {
+    const checkOtherSide = async () => {
+      const currentId = formId.trim();
+      if (!currentId) {
+        setOtherSideHasConflict(false);
+        return;
+      }
+
+      try {
+        const otherConfig = await window.api.getMcpConfig(otherAppType);
+        const hasConflict = Object.keys(otherConfig.servers || {}).includes(currentId);
+        setOtherSideHasConflict(hasConflict);
+      } catch (error) {
+        console.error("检查另一侧 MCP 配置失败:", error);
+        setOtherSideHasConflict(false);
+      }
+    };
+
+    checkOtherSide();
+  }, [formId, otherAppType]);
 
   const wizardInitialSpec = useMemo(() => {
     const fallback = initialData?.server;
@@ -666,50 +690,59 @@ const McpFormModal: React.FC<McpFormModalProps> = ({
               </div>
             )}
           </div>
-
-          {/* 双端同步选项 */}
-          <div className="mt-4 flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-900/40">
-            <input
-              id={syncCheckboxId}
-              type="checkbox"
-              className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800"
-              checked={syncOtherSide}
-              onChange={(event) => setSyncOtherSide(event.target.checked)}
-            />
-            <label
-              htmlFor={syncCheckboxId}
-              className="text-sm text-gray-700 dark:text-gray-300"
-            >
-              <span className="font-medium">
-                {t("mcp.form.syncOtherSide", { target: syncTargetLabel })}
-              </span>
-              <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">
-                {t("mcp.form.syncOtherSideHint", { target: syncTargetLabel })}
-              </span>
-            </label>
-          </div>
         </div>
 
         {/* Footer */}
-        <div className="flex-shrink-0 flex items-center justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-800 bg-gray-100 dark:bg-gray-800">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-200 rounded-lg transition-colors text-sm font-medium"
-          >
-            {t("common.cancel")}
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={saving || (!isEditing && !!idError)}
-            className={`inline-flex items-center gap-2 ${buttonStyles.mcp}`}
-          >
-            <Save size={16} />
-            {saving
-              ? t("common.saving")
-              : isEditing
-                ? t("common.save")
-                : t("common.add")}
-          </button>
+        <div className="flex-shrink-0 flex items-center justify-between p-6 border-t border-gray-200 dark:border-gray-800 bg-gray-100 dark:bg-gray-800">
+          {/* 双端同步选项 */}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <input
+                id={syncCheckboxId}
+                type="checkbox"
+                className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 dark:border-gray-600 dark:bg-gray-800"
+                checked={syncOtherSide}
+                onChange={(event) => setSyncOtherSide(event.target.checked)}
+              />
+              <label
+                htmlFor={syncCheckboxId}
+                className="text-sm text-gray-700 dark:text-gray-300 cursor-pointer select-none"
+                title={t("mcp.form.syncOtherSideHint", { target: syncTargetLabel })}
+              >
+                {t("mcp.form.syncOtherSide", { target: syncTargetLabel })}
+              </label>
+            </div>
+            {syncOtherSide && otherSideHasConflict && (
+              <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                <AlertTriangle size={14} />
+                <span className="text-xs font-medium">
+                  {t("mcp.form.willOverwriteWarning", { target: syncTargetLabel })}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* 操作按钮 */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-200 rounded-lg transition-colors text-sm font-medium"
+            >
+              {t("common.cancel")}
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={saving || (!isEditing && !!idError)}
+              className={`inline-flex items-center gap-2 ${buttonStyles.mcp}`}
+            >
+              <Save size={16} />
+              {saving
+                ? t("common.saving")
+                : isEditing
+                  ? t("common.save")
+                  : t("common.add")}
+            </button>
+          </div>
         </div>
       </div>
 
