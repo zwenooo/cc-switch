@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import {
   X,
   RefreshCw,
@@ -8,8 +9,10 @@ import {
   Check,
   Undo2,
   FolderSearch,
+  Save,
 } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
+import { ImportProgressModal } from "./ImportProgressModal";
 import { homeDir, join } from "@tauri-apps/api/path";
 import "../lib/tauri-api";
 import { relaunchApp } from "../lib/updater";
@@ -20,14 +23,47 @@ import { isLinux } from "../lib/platform";
 
 interface SettingsModalProps {
   onClose: () => void;
+  onImportSuccess?: () => void | Promise<void>;
+  onNotify?: (
+    message: string,
+    type: "success" | "error",
+    duration?: number,
+  ) => void;
 }
 
-export default function SettingsModal({ onClose }: SettingsModalProps) {
+export default function SettingsModal({
+  onClose,
+  onImportSuccess,
+  onNotify,
+}: SettingsModalProps) {
+  const { t, i18n } = useTranslation();
+
+  const normalizeLanguage = (lang?: string | null): "zh" | "en" =>
+    lang === "en" ? "en" : "zh";
+
+  const readPersistedLanguage = (): "zh" | "en" => {
+    if (typeof window !== "undefined") {
+      const stored = window.localStorage.getItem("language");
+      if (stored === "en" || stored === "zh") {
+        return stored;
+      }
+    }
+    return normalizeLanguage(i18n.language);
+  };
+
+  const persistedLanguage = readPersistedLanguage();
+
   const [settings, setSettings] = useState<Settings>({
     showInTray: true,
+    minimizeToTrayOnClose: true,
+    enableClaudePluginIntegration: false,
     claudeConfigDir: undefined,
     codexConfigDir: undefined,
+    language: persistedLanguage,
   });
+  const [initialLanguage, setInitialLanguage] = useState<"zh" | "en">(
+    persistedLanguage,
+  );
   const [configPath, setConfigPath] = useState<string>("");
   const [version, setVersion] = useState<string>("");
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
@@ -35,14 +71,25 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const [showUpToDate, setShowUpToDate] = useState(false);
   const [resolvedClaudeDir, setResolvedClaudeDir] = useState<string>("");
   const [resolvedCodexDir, setResolvedCodexDir] = useState<string>("");
+  const [isPortable, setIsPortable] = useState(false);
   const { hasUpdate, updateInfo, updateHandle, checkUpdate, resetDismiss } =
     useUpdate();
+
+  // 导入/导出相关状态
+  const [isImporting, setIsImporting] = useState(false);
+  const [importStatus, setImportStatus] = useState<
+    "idle" | "importing" | "success" | "error"
+  >("idle");
+  const [importError, setImportError] = useState<string>("");
+  const [importBackupId, setImportBackupId] = useState<string>("");
+  const [selectedImportFile, setSelectedImportFile] = useState<string>("");
 
   useEffect(() => {
     loadSettings();
     loadConfigPath();
     loadVersion();
     loadResolvedDirs();
+    loadPortableFlag();
   }, []);
 
   const loadVersion = async () => {
@@ -50,9 +97,9 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
       const appVersion = await getVersion();
       setVersion(appVersion);
     } catch (error) {
-      console.error("获取版本信息失败:", error);
+      console.error(t("console.getVersionFailed"), error);
       // 失败时不硬编码版本号，显示为未知
-      setVersion("未知");
+      setVersion(t("common.unknown"));
     }
   };
 
@@ -63,8 +110,24 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         (loadedSettings as any)?.showInTray ??
         (loadedSettings as any)?.showInDock ??
         true;
+      const minimizeToTrayOnClose =
+        (loadedSettings as any)?.minimizeToTrayOnClose ??
+        (loadedSettings as any)?.minimize_to_tray_on_close ??
+        true;
+      const storedLanguage = normalizeLanguage(
+        typeof (loadedSettings as any)?.language === "string"
+          ? (loadedSettings as any).language
+          : persistedLanguage,
+      );
+
       setSettings({
         showInTray,
+        minimizeToTrayOnClose,
+        enableClaudePluginIntegration:
+          typeof (loadedSettings as any)?.enableClaudePluginIntegration ===
+          "boolean"
+            ? (loadedSettings as any).enableClaudePluginIntegration
+            : false,
         claudeConfigDir:
           typeof (loadedSettings as any)?.claudeConfigDir === "string"
             ? (loadedSettings as any).claudeConfigDir
@@ -73,9 +136,14 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
           typeof (loadedSettings as any)?.codexConfigDir === "string"
             ? (loadedSettings as any).codexConfigDir
             : undefined,
+        language: storedLanguage,
       });
+      setInitialLanguage(storedLanguage);
+      if (i18n.language !== storedLanguage) {
+        void i18n.changeLanguage(storedLanguage);
+      }
     } catch (error) {
-      console.error("加载设置失败:", error);
+      console.error(t("console.loadSettingsFailed"), error);
     }
   };
 
@@ -86,7 +154,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         setConfigPath(path);
       }
     } catch (error) {
-      console.error("获取配置路径失败:", error);
+      console.error(t("console.getConfigPathFailed"), error);
     }
   };
 
@@ -99,12 +167,22 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
       setResolvedClaudeDir(claudeDir || "");
       setResolvedCodexDir(codexDir || "");
     } catch (error) {
-      console.error("获取配置目录失败:", error);
+      console.error(t("console.getConfigDirFailed"), error);
+    }
+  };
+
+  const loadPortableFlag = async () => {
+    try {
+      const portable = await window.api.isPortable();
+      setIsPortable(portable);
+    } catch (error) {
+      console.error(t("console.detectPortableFailed"), error);
     }
   };
 
   const saveSettings = async () => {
     try {
+      const selectedLanguage = settings.language === "en" ? "en" : "zh";
       const payload: Settings = {
         ...settings,
         claudeConfigDir:
@@ -115,17 +193,58 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
           settings.codexConfigDir && settings.codexConfigDir.trim() !== ""
             ? settings.codexConfigDir.trim()
             : undefined,
+        language: selectedLanguage,
       };
       await window.api.saveSettings(payload);
+      // 立即生效：根据开关无条件写入/移除 ~/.claude/config.json
+      try {
+        if (payload.enableClaudePluginIntegration) {
+          await window.api.applyClaudePluginConfig({ official: false });
+        } else {
+          await window.api.applyClaudePluginConfig({ official: true });
+        }
+      } catch (e) {
+        console.warn("[Settings] Apply Claude plugin config on save failed", e);
+      }
       setSettings(payload);
+      try {
+        window.localStorage.setItem("language", selectedLanguage);
+      } catch (error) {
+        console.warn("[Settings] Failed to persist language preference", error);
+      }
+      setInitialLanguage(selectedLanguage);
+      if (i18n.language !== selectedLanguage) {
+        void i18n.changeLanguage(selectedLanguage);
+      }
       onClose();
     } catch (error) {
-      console.error("保存设置失败:", error);
+      console.error(t("console.saveSettingsFailed"), error);
     }
+  };
+
+  const handleLanguageChange = (lang: "zh" | "en") => {
+    setSettings((prev) => ({ ...prev, language: lang }));
+    if (i18n.language !== lang) {
+      void i18n.changeLanguage(lang);
+    }
+  };
+
+  const handleCancel = () => {
+    if (settings.language !== initialLanguage) {
+      setSettings((prev) => ({ ...prev, language: initialLanguage }));
+      if (i18n.language !== initialLanguage) {
+        void i18n.changeLanguage(initialLanguage);
+      }
+    }
+    onClose();
   };
 
   const handleCheckUpdate = async () => {
     if (hasUpdate && updateHandle) {
+      if (isPortable) {
+        await window.api.checkForUpdates();
+        return;
+      }
       // 已检测到更新：直接复用 updateHandle 下载并安装，避免重复检查
       setIsDownloading(true);
       try {
@@ -133,7 +252,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         await updateHandle.downloadAndInstall();
         await relaunchApp();
       } catch (error) {
-        console.error("更新失败:", error);
+        console.error(t("console.updateFailed"), error);
         // 更新失败时回退到打开 Releases 页面
         await window.api.checkForUpdates();
       } finally {
@@ -154,7 +273,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
           }, 3000);
         }
       } catch (error) {
-        console.error("检查更新失败:", error);
+        console.error(t("console.checkUpdateFailed"), error);
         // 在开发模式下，模拟已是最新版本的响应
         if (import.meta.env.DEV) {
           setShowUpToDate(true);
@@ -175,7 +294,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     try {
       await window.api.openAppConfigFolder();
     } catch (error) {
-      console.error("打开配置文件夹失败:", error);
+      console.error(t("console.openConfigFolderFailed"), error);
     }
   };
 
@@ -206,7 +325,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         setResolvedCodexDir(sanitized);
       }
     } catch (error) {
-      console.error("选择配置目录失败:", error);
+      console.error(t("console.selectConfigDirFailed"), error);
     }
   };
 
@@ -216,7 +335,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
       const folder = app === "claude" ? ".claude" : ".codex";
       return await join(home, folder);
     } catch (error) {
-      console.error("获取默认配置目录失败:", error);
+      console.error(t("console.getDefaultConfigDirFailed"), error);
       return "";
     }
   };
@@ -244,10 +363,11 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const handleOpenReleaseNotes = async () => {
     try {
       const targetVersion = updateInfo?.availableVersion || version;
+      const unknownLabel = t("common.unknown");
       // 如果未知或为空，回退到 releases 首页
-      if (!targetVersion || targetVersion === "未知") {
+      if (!targetVersion || targetVersion === unknownLabel) {
         await window.api.openExternal(
-          "https://github.com/farion1231/cc-switch/releases"
+          "https://github.com/farion1231/cc-switch/releases",
         );
         return;
       }
@@ -255,10 +375,89 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         ? targetVersion
         : `v${targetVersion}`;
       await window.api.openExternal(
-        `https://github.com/farion1231/cc-switch/releases/tag/${tag}`
+        `https://github.com/farion1231/cc-switch/releases/tag/${tag}`,
       );
     } catch (error) {
-      console.error("打开更新日志失败:", error);
+      console.error(t("console.openReleaseNotesFailed"), error);
+    }
+  };
+
+  // 导出配置处理函数
+  const handleExportConfig = async () => {
+    try {
+      const defaultName = `cc-switch-config-${new Date().toISOString().split("T")[0]}.json`;
+      const filePath = await window.api.saveFileDialog(defaultName);
+
+      if (!filePath) {
+        onNotify?.(
+          `${t("settings.exportFailed")}: ${t("settings.selectFileFailed")}`,
+          "error",
+          4000,
+        );
+        return;
+      }
+
+      const result = await window.api.exportConfigToFile(filePath);
+
+      if (result.success) {
+        onNotify?.(
+          `${t("settings.configExported")}\n${result.filePath}`,
+          "success",
+          4000,
+        );
+      }
+    } catch (error) {
+      console.error(t("settings.exportFailedError"), error);
+      onNotify?.(
+        `${t("settings.exportFailed")}: ${String(error)}`,
+        "error",
+        5000,
+      );
+    }
+  };
+
+  // 选择要导入的文件
+  const handleSelectImportFile = async () => {
+    try {
+      const filePath = await window.api.openFileDialog();
+      if (filePath) {
+        setSelectedImportFile(filePath);
+        setImportStatus("idle"); // 重置状态
+        setImportError("");
+      }
+    } catch (error) {
+      console.error(t("settings.selectFileFailed") + ":", error);
+      onNotify?.(
+        `${t("settings.selectFileFailed")}: ${String(error)}`,
+        "error",
+        5000,
+      );
+    }
+  };
+
+  // 执行导入
+  const handleExecuteImport = async () => {
+    if (!selectedImportFile || isImporting) return;
+
+    setIsImporting(true);
+    setImportStatus("importing");
+
+    try {
+      const result = await window.api.importConfigFromFile(selectedImportFile);
+
+      if (result.success) {
+        setImportBackupId(result.backupId || "");
+        setImportStatus("success");
+        // ImportProgressModal 会在2秒后触发数据刷新回调
+      } else {
+        setImportError(result.message || t("settings.configCorrupted"));
+        setImportStatus("error");
+      }
+    } catch (error) {
+      setImportError(String(error));
+      setImportStatus("error");
+    } finally {
+      setIsImporting(false);
     }
   };
 
@@ -266,7 +465,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     <div
       className="fixed inset-0 z-50 flex items-center justify-center"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) handleCancel();
       }}
     >
       <div
@@ -274,14 +473,14 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
           isLinux() ? "" : " backdrop-blur-sm"
         }`}
       />
-      <div className="relative bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-[500px] overflow-hidden">
+      <div className="relative bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-[500px] max-h-[90vh] flex flex-col overflow-hidden">
         {/* 标题栏 */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-800">
           <h2 className="text-lg font-semibold text-blue-500 dark:text-blue-400">
-            设置
+            {t("settings.title")}
           </h2>
           <button
-            onClick={onClose}
+            onClick={handleCancel}
             className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors"
           >
             <X size={20} className="text-gray-500 dark:text-gray-400" />
@@ -289,45 +488,105 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         </div>
 
         {/* 设置内容 */}
-        <div className="px-6 py-4 space-y-6">
-          {/* 系统托盘设置（未实现）
-              说明：此开关用于控制是否在系统托盘/菜单栏显示应用图标。 */}
-          {/* <div>
+        <div className="px-6 py-4 space-y-6 overflow-y-auto flex-1">
+          {/* 语言设置 */}
+          <div>
             <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
-              显示设置（系统托盘）
+              {t("settings.language")}
             </h3>
-            <label className="flex items-center justify-between">
-              <span className="text-sm text-gray-500">
-                在菜单栏显示图标（系统托盘）
-              </span>
-              <input
-                type="checkbox"
-                checked={settings.showInTray}
-                onChange={(e) =>
-                  setSettings({ ...settings, showInTray: e.target.checked })
-                }
-                className="w-4 h-4 text-blue-500 rounded focus:ring-blue-500/20"
-              />
-            </label>
-          </div> */}
+            <div className="inline-flex p-0.5 bg-gray-100 dark:bg-gray-800 rounded-lg">
+              <button
+                type="button"
+                onClick={() => handleLanguageChange("zh")}
+                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all min-w-[80px] ${
+                  (settings.language ?? "zh") === "zh"
+                    ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm"
+                    : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+                }`}
+              >
+                {t("settings.languageOptionChinese")}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleLanguageChange("en")}
+                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all min-w-[80px] ${
+                  settings.language === "en"
+                    ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm"
+                    : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+                }`}
+              >
+                {t("settings.languageOptionEnglish")}
+              </button>
+            </div>
+          </div>
 
-          {/* VS Code 自动同步设置已移除 */}
+          {/* 窗口行为设置 */}
+          <div>
+            <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
+              {t("settings.windowBehavior")}
+            </h3>
+            <div className="space-y-3">
+              <label className="flex items-center justify-between">
+                <div>
+                  <span className="text-sm text-gray-900 dark:text-gray-100">
+                    {t("settings.minimizeToTray")}
+                  </span>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    {t("settings.minimizeToTrayDescription")}
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={settings.minimizeToTrayOnClose}
+                  onChange={(e) =>
+                    setSettings((prev) => ({
+                      ...prev,
+                      minimizeToTrayOnClose: e.target.checked,
+                    }))
+                  }
+                  className="w-4 h-4 text-blue-500 rounded focus:ring-blue-500/20"
+                />
+              </label>
+              {/* Claude 插件联动开关 */}
+              <label className="flex items-center justify-between">
+                <div>
+                  <span className="text-sm text-gray-900 dark:text-gray-100">
+                    {t("settings.enableClaudePluginIntegration")}
+                  </span>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 max-w-[34rem]">
+                    {t("settings.enableClaudePluginIntegrationDescription")}
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={!!settings.enableClaudePluginIntegration}
+                  onChange={(e) =>
+                    setSettings((prev) => ({
+                      ...prev,
+                      enableClaudePluginIntegration: e.target.checked,
+                    }))
+                  }
+                  className="w-4 h-4 text-blue-500 rounded focus:ring-blue-500/20"
+                />
+              </label>
+            </div>
+          </div>
 
           {/* 配置文件位置 */}
           <div>
             <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
-              配置文件位置
+              {t("settings.configFileLocation")}
             </h3>
             <div className="flex items-center gap-2">
               <div className="flex-1 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg">
                 <span className="text-xs font-mono text-gray-500 dark:text-gray-400">
-                  {configPath || "加载中..."}
+                  {configPath || t("common.loading")}
                 </span>
               </div>
               <button
                 onClick={handleOpenConfigFolder}
                 className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                title="打开文件夹"
+                title={t("settings.openFolder")}
               >
                 <FolderOpen
                   size={18}
@@ -340,16 +599,15 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
           {/* 配置目录覆盖 */}
           <div>
             <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
-              配置目录覆盖（高级）
+              {t("settings.configDirectoryOverride")}
             </h3>
             <p className="text-xs text-gray-500 dark:text-gray-400 mb-3 leading-relaxed">
-              在 WSL 等环境使用 Claude Code 或 Codex 的时候，可手动指定 WSL
-              里的配置目录，供应商数据与主环境保持一致。
+              {t("settings.configDirectoryDescription")}
             </p>
             <div className="space-y-3">
               <div>
                 <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  Claude Code 配置目录
+                  {t("settings.claudeConfigDir")}
                 </label>
                 <div className="flex gap-2">
                   <input
@@ -361,14 +619,14 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                         claudeConfigDir: e.target.value,
                       })
                     }
-                    placeholder="例如：/home/<你的用户名>/.claude"
+                    placeholder={t("settings.browsePlaceholderClaude")}
                     className="flex-1 px-3 py-2 text-xs font-mono bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/40"
                   />
                   <button
                     type="button"
                     onClick={() => handleBrowseConfigDir("claude")}
                     className="px-2 py-2 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                    title="浏览目录"
+                    title={t("settings.browseDirectory")}
                   >
                     <FolderSearch size={16} />
                   </button>
@@ -376,7 +634,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                     type="button"
                     onClick={() => handleResetConfigDir("claude")}
                     className="px-2 py-2 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                    title="恢复默认目录（需保存后生效）"
+                    title={t("settings.resetDefault")}
                   >
                     <Undo2 size={16} />
                   </button>
@@ -385,7 +643,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
 
               <div>
                 <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  Codex 配置目录
+                  {t("settings.codexConfigDir")}
                 </label>
                 <div className="flex gap-2">
                   <input
@@ -397,14 +655,14 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                         codexConfigDir: e.target.value,
                       })
                     }
-                    placeholder="例如：/home/<你的用户名>/.codex"
+                    placeholder={t("settings.browsePlaceholderCodex")}
                     className="flex-1 px-3 py-2 text-xs font-mono bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/40"
                   />
                   <button
                     type="button"
                     onClick={() => handleBrowseConfigDir("codex")}
                     className="px-2 py-2 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                    title="浏览目录"
+                    title={t("settings.browseDirectory")}
                   >
                     <FolderSearch size={16} />
                   </button>
@@ -412,7 +670,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                     type="button"
                     onClick={() => handleResetConfigDir("codex")}
                     className="px-2 py-2 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                    title="恢复默认目录（需保存后生效）"
+                    title={t("settings.resetDefault")}
                   >
                     <Undo2 size={16} />
                   </button>
@@ -421,10 +679,64 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
             </div>
           </div>
 
+          {/* 导入导出 */}
+          <div>
+            <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
+              {t("settings.importExport")}
+            </h3>
+            <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
+              <div className="space-y-3">
+                {/* 导出按钮 */}
+                <button
+                  onClick={handleExportConfig}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium rounded-lg transition-colors bg-gray-500 hover:bg-gray-600 dark:bg-gray-600 dark:hover:bg-gray-700 text-white"
+                >
+                  <Save size={12} />
+                  {t("settings.exportConfig")}
+                </button>
+
+                {/* 导入区域 */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleSelectImportFile}
+                      className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium rounded-lg transition-colors bg-gray-500 hover:bg-gray-600 dark:bg-gray-600 dark:hover:bg-gray-700 text-white"
+                    >
+                      <FolderOpen size={12} />
+                      {t("settings.selectConfigFile")}
+                    </button>
+                    <button
+                      onClick={handleExecuteImport}
+                      disabled={!selectedImportFile || isImporting}
+                      className={`px-3 py-2 text-xs font-medium rounded-lg transition-colors text-white ${
+                        !selectedImportFile || isImporting
+                          ? "bg-gray-400 cursor-not-allowed"
+                          : "bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700"
+                      }`}
+                    >
+                      {isImporting
+                        ? t("settings.importing")
+                        : t("settings.import")}
+                    </button>
+                  </div>
+
+                  {/* 显示选择的文件 */}
+                  {selectedImportFile && (
+                    <div className="text-xs text-gray-600 dark:text-gray-400 px-2 py-1 bg-gray-50 dark:bg-gray-900 rounded break-all">
+                      {selectedImportFile.split("/").pop() ||
+                        selectedImportFile.split("\\").pop() ||
+                        selectedImportFile}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* 关于 */}
           <div>
             <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
-              关于
+              {t("common.about")}
             </h3>
             <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
               <div className="flex items-start justify-between">
@@ -434,7 +746,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                       CC Switch
                     </p>
                     <p className="mt-1 text-gray-500 dark:text-gray-400">
-                      版本 {version}
+                      {t("common.version")} {version}
                     </p>
                   </div>
                 </div>
@@ -443,12 +755,14 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                     onClick={handleOpenReleaseNotes}
                     className="px-2 py-1 text-xs font-medium text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 rounded-lg hover:bg-blue-500/10 transition-colors"
                     title={
-                      hasUpdate ? "查看该版本更新日志" : "查看当前版本更新日志"
+                      hasUpdate
+                        ? t("settings.viewReleaseNotes")
+                        : t("settings.viewCurrentReleaseNotes")
                     }
                   >
                     <span className="inline-flex items-center gap-1">
                       <ExternalLink size={12} />
-                      更新日志
+                      {t("settings.releaseNotes")}
                     </span>
                   </button>
                   <button
@@ -467,25 +781,27 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                     {isDownloading ? (
                       <span className="flex items-center gap-1">
                         <Download size={12} className="animate-pulse" />
-                        更新中...
+                        {t("settings.updating")}
                       </span>
                     ) : isCheckingUpdate ? (
                       <span className="flex items-center gap-1">
                         <RefreshCw size={12} className="animate-spin" />
-                        检查中...
+                        {t("settings.checking")}
                       </span>
                     ) : hasUpdate ? (
                       <span className="flex items-center gap-1">
                         <Download size={12} />
-                        更新到 v{updateInfo?.availableVersion}
+                        {t("settings.updateTo", {
+                          version: updateInfo?.availableVersion ?? "",
+                        })}
                       </span>
                     ) : showUpToDate ? (
                       <span className="flex items-center gap-1">
                         <Check size={12} />
-                        已是最新
+                        {t("settings.upToDate")}
                       </span>
                     ) : (
-                      "检查更新"
+                      t("settings.checkForUpdates")
                     )}
                   </button>
                 </div>
@@ -497,19 +813,47 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         {/* 底部按钮 */}
         <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-800">
           <button
-            onClick={onClose}
+            onClick={handleCancel}
             className="px-4 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
           >
-            取消
+            {t("common.cancel")}
           </button>
           <button
             onClick={saveSettings}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700 rounded-lg transition-colors"
+            className="px-4 py-2 text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700 rounded-lg transition-colors flex items-center gap-2"
           >
-            保存
+            <Save size={16} />
+            {t("common.save")}
           </button>
         </div>
       </div>
+
+      {/* Import Progress Modal */}
+      {importStatus !== "idle" && (
+        <ImportProgressModal
+          status={importStatus}
+          message={importError}
+          backupId={importBackupId}
+          onComplete={() => {
+            setImportStatus("idle");
+            setImportError("");
+            setSelectedImportFile("");
+          }}
+          onSuccess={() => {
+            if (onImportSuccess) {
+              void onImportSuccess();
+            }
+            void window.api
+              .updateTrayMenu()
+              .catch((error) =>
+                console.error(
+                  "[SettingsModal] Failed to refresh tray menu",
+                  error,
+                ),
+              );
+          }}
+        />
+      )}
     </div>
   );
 }

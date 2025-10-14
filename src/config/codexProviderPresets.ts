@@ -6,11 +6,15 @@ import { ProviderCategory } from "../types";
 export interface CodexProviderPreset {
   name: string;
   websiteUrl: string;
+  // 第三方供应商可提供单独的获取 API Key 链接
+  apiKeyUrl?: string;
   auth: Record<string, any>; // 将写入 ~/.codex/auth.json
   config: string; // 将写入 ~/.codex/config.toml（TOML 字符串）
   isOfficial?: boolean; // 标识是否为官方预设
   category?: ProviderCategory; // 新增：分类
   isCustomTemplate?: boolean; // 标识是否为自定义模板
+  // 新增：请求地址候选列表（用于地址管理/测速）
+  endpointCandidates?: string[];
 }
 
 /**
@@ -18,7 +22,7 @@ export interface CodexProviderPreset {
  */
 export function generateThirdPartyAuth(apiKey: string): Record<string, any> {
   return {
-    OPENAI_API_KEY: apiKey || "sk-your-api-key-here"
+    OPENAI_API_KEY: apiKey || "sk-your-api-key-here",
   };
 }
 
@@ -28,14 +32,15 @@ export function generateThirdPartyAuth(apiKey: string): Record<string, any> {
 export function generateThirdPartyConfig(
   providerName: string,
   baseUrl: string,
-  modelName = "gpt-5-codex"
+  modelName = "gpt-5-codex",
 ): string {
   // 清理供应商名称，确保符合TOML键名规范
-  const cleanProviderName = providerName
-    .toLowerCase()
-    .replace(/[^a-z0-9_]/g, '_')
-    .replace(/^_+|_+$/g, '') || 'custom';
-  
+  const cleanProviderName =
+    providerName
+      .toLowerCase()
+      .replace(/[^a-z0-9_]/g, "_")
+      .replace(/^_+|_+$/g, "") || "custom";
+
   return `model_provider = "${cleanProviderName}"
 model = "${modelName}"
 model_reasoning_effort = "high"
@@ -45,13 +50,12 @@ disable_response_storage = true
 name = "${cleanProviderName}"
 base_url = "${baseUrl}"
 wire_api = "responses"
-env_key = "${cleanProviderName}"
 requires_openai_auth = true`;
 }
 
 export const codexProviderPresets: CodexProviderPreset[] = [
   {
-    name: "Codex官方",
+    name: "Codex Official",
     websiteUrl: "https://chatgpt.com/codex",
     isOfficial: true,
     category: "official",
@@ -70,5 +74,25 @@ export const codexProviderPresets: CodexProviderPreset[] = [
       "https://codez.zwenooo.link/v1",
       "gpt-5-codex"
     ),
+    endpointCandidates: [
+      "https://codez.zwenooo.link/v1",
+    ],
+  },
+  {
+    name: "PackyCode",
+    websiteUrl: "https://www.packycode.com",
+    category: "third_party",
+    auth: generateThirdPartyAuth("sk-your-api-key-here"),
+    config: generateThirdPartyConfig(
+      "packycode",
+      "https://codex-api.packycode.com/v1",
+      "gpt-5-codex",
+    ),
+    // Codex 请求地址候选（用于地址管理/测速）
+    endpointCandidates: [
+      "https://codex-api.packycode.com/v1",
+      "https://codex-api-hk-cn2.packycode.com/v1",
+      "https://codex-api-hk-cdn.packycode.com/v1",
+    ],
   },
 ];

@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { Zap } from "lucide-react";
 import { ProviderCategory } from "../../types";
 import { ClaudeIcon, CodexIcon } from "../BrandIcons";
@@ -20,14 +21,16 @@ interface PresetSelectorProps {
 }
 
 const PresetSelector: React.FC<PresetSelectorProps> = ({
-  title = "选择配置类型",
+  title,
   presets,
   selectedIndex,
   onSelectPreset,
   onCustomClick,
-  customLabel = "自定义",
+  customLabel,
   renderCustomDescription,
 }) => {
+  const { t } = useTranslation();
+
   const getButtonClass = (index: number, preset?: Preset) => {
     const isSelected = selectedIndex === index;
     const baseClass =
@@ -54,14 +57,14 @@ const PresetSelector: React.FC<PresetSelectorProps> = ({
       if (renderCustomDescription) {
         return renderCustomDescription();
       }
-      return "手动配置供应商，需要填写完整的配置信息";
+      return t("presetSelector.customDescription");
     }
 
     if (selectedIndex !== null && selectedIndex >= 0) {
       const preset = presets[selectedIndex];
       return preset?.isOfficial || preset?.category === "official"
-        ? "官方登录，不需要填写 API Key"
-        : "使用预设配置，只需填写 API Key";
+        ? t("presetSelector.officialDescription")
+        : t("presetSelector.presetDescription");
     }
 
     return null;
@@ -71,7 +74,7 @@ const PresetSelector: React.FC<PresetSelectorProps> = ({
     <div className="space-y-4">
       <div>
         <label className="block text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
-          {title}
+          {title || t("presetSelector.title")}
         </label>
         <div className="flex flex-wrap gap-2">
           <button
@@ -79,7 +82,7 @@ const PresetSelector: React.FC<PresetSelectorProps> = ({
             className={`${getButtonClass(-1)} ${selectedIndex === -1 ? "" : ""}`}
             onClick={onCustomClick}
           >
-            {customLabel}
+            {customLabel || t("presetSelector.custom")}
           </button>
           {presets.map((preset, index) => (
             <button

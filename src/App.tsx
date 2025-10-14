@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { Provider } from "./types";
 import { AppType } from "./lib/tauri-api";
 import ProviderList from "./components/ProviderList";
@@ -9,16 +10,14 @@ import { AppSwitcher } from "./components/AppSwitcher";
 import SettingsModal from "./components/SettingsModal";
 import { UpdateBadge } from "./components/UpdateBadge";
 import { Plus, Settings, Moon, Sun } from "lucide-react";
+import McpPanel from "./components/mcp/McpPanel";
 import { buttonStyles } from "./lib/styles";
 import { useDarkMode } from "./hooks/useDarkMode";
 import { extractErrorMessage } from "./utils/errorUtils";
-import { applyProviderToVSCode } from "./utils/vscodeSettings";
-import { getCodexBaseUrl } from "./utils/providerConfigUtils";
-import { useVSCodeAutoSync } from "./hooks/useVSCodeAutoSync";
 
 function App() {
+  const { t } = useTranslation();
   const { isDarkMode, toggleDarkMode } = useDarkMode();
-  const { isAutoSyncEnabled } = useVSCodeAutoSync();
   const [activeApp, setActiveApp] = useState<AppType>("claude");
   const [providers, setProviders] = useState<Record<string, Provider>>({});
   const [currentProviderId, setCurrentProviderId] = useState<string>("");
@@ -38,6 +37,7 @@ function App() {
     onConfirm: () => void;
   } | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isMcpOpen, setIsMcpOpen] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 设置通知的辅助函数
@@ -88,7 +88,7 @@ function App() {
       try {
         unlisten = await window.api.onProviderSwitched(async (data) => {
           if (import.meta.env.DEV) {
-            console.log("收到供应商切换事件:", data);
+            console.log(t("console.providerSwitchReceived"), data);
           }
 
           // 如果当前应用类型匹配，则重新加载数据
@@ -96,13 +96,13 @@ function App() {
             await loadProviders();
           }
 
-          // 若为 Codex 且开启自动同步，则静默同步到 VS Code（覆盖）
-          if (data.appType === "codex" && isAutoSyncEnabled) {
-            await syncCodexToVSCode(data.providerId, true);
+          // 若为 Claude，则同步插件配置
+          if (data.appType === "claude") {
+            await syncClaudePlugin(data.providerId, true);
           }
         });
       } catch (error) {
-        console.error("设置供应商切换监听器失败:", error);
+        console.error(t("console.setupListenerFailed"), error);
       }
     };
 
@@ -114,7 +114,7 @@ function App() {
         unlisten();
       }
     };
-  }, [activeApp, isAutoSyncEnabled]);
+  }, [activeApp]);
 
   const loadProviders = async () => {
     const loadedProviders = await window.api.getProviders(activeApp);
@@ -152,16 +152,16 @@ function App() {
       await loadProviders();
       setEditingProviderId(null);
       // 显示编辑成功提示
-      showNotification("供应商配置已保存", "success", 2000);
+      showNotification(t("notifications.providerSaved"), "success", 2000);
       // 更新托盘菜单
       await window.api.updateTrayMenu();
     } catch (error) {
-      console.error("更新供应商失败:", error);
+      console.error(t("console.updateProviderFailed"), error);
       setEditingProviderId(null);
       const errorMessage = extractErrorMessage(error);
       const message = errorMessage
-        ? `保存失败：${errorMessage}`
-        : "保存失败，请重试";
+        ? t("notifications.saveFailed", { error: errorMessage })
+        : t("notifications.saveFailedGeneric");
       showNotification(message, "error", errorMessage ? 6000 : 3000);
     }
   };
@@ -170,97 +170,87 @@ function App() {
     const provider = providers[id];
     setConfirmDialog({
       isOpen: true,
-      title: "删除供应商",
-      message: `确定要删除供应商 "${provider?.name}" 吗？此操作无法撤销。`,
+      title: t("confirm.deleteProvider"),
+      message: t("confirm.deleteProviderMessage", { name: provider?.name }),
       onConfirm: async () => {
         await window.api.deleteProvider(id, activeApp);
         await loadProviders();
         setConfirmDialog(null);
-        showNotification("供应商删除成功", "success");
+        showNotification(t("notifications.providerDeleted"), "success");
         // 更新托盘菜单
         await window.api.updateTrayMenu();
       },
     });
   };
 
-  // 同步Codex供应商到VS Code设置（静默覆盖）
-  const syncCodexToVSCode = async (providerId: string, silent = false) => {
+  // 同步 Claude 插件配置（按设置决定是否联动；开启时：非官方写入，官方移除）
+  const syncClaudePlugin = async (providerId: string, silent = false) => {
     try {
-      const status = await window.api.getVSCodeSettingsStatus();
-      if (!status.exists) {
-        if (!silent) {
-          showNotification(
-            "未找到 VS Code 用户设置文件 (settings.json)",
-            "error",
-            3000,
-          );
-        }
+      const settings = await window.api.getSettings();
+      if (!(settings as any)?.enableClaudePluginIntegration) {
+        // 未开启联动：不执行写入/移除
         return;
       }
-
-      const raw = await window.api.readVSCodeSettings();
       const provider = providers[providerId];
-      const isOfficial = provider?.category === "official";
-
-      // 非官方供应商需要解析 base_url（使用公共工具函数）
-      let baseUrl: string | undefined = undefined;
-      if (!isOfficial) {
-        const parsed = getCodexBaseUrl(provider);
-        if (!parsed) {
-          if (!silent) {
-            showNotification(
-              "当前配置缺少 base_url，无法写入 VS Code",
-              "error",
-              4000,
-            );
-          }
-          return;
-        }
-        baseUrl = parsed;
-      }
-
-      const updatedSettings = applyProviderToVSCode(raw, {
-        baseUrl,
-        isOfficial,
-      });
-      if (updatedSettings !== raw) {
-        await window.api.writeVSCodeSettings(updatedSettings);
-        if (!silent) {
-          showNotification("已同步到 VS Code", "success", 1500);
-        }
-      }
-
-      // 触发providers重新加载，以更新VS Code按钮状态
-      await loadProviders();
-    } catch (error: any) {
-      console.error("同步到VS Code失败:", error);
+      if (!provider) return;
+      const isOfficial = provider.category === "official";
+      await window.api.applyClaudePluginConfig({ official: isOfficial });
       if (!silent) {
-        const errorMessage = error?.message || "同步 VS Code 失败";
-        showNotification(errorMessage, "error", 5000);
+        showNotification(
+          isOfficial
+            ? t("notifications.removedFromClaudePlugin")
+            : t("notifications.appliedToClaudePlugin"),
+          "success",
+          2000,
+        );
+      }
+    } catch (error: any) {
+      console.error("同步 Claude 插件失败:", error);
+      if (!silent) {
+        const message =
+          error?.message || t("notifications.syncClaudePluginFailed");
+        showNotification(message, "error", 5000);
       }
     }
   };
 
   const handleSwitchProvider = async (id: string) => {
-    const success = await window.api.switchProvider(id, activeApp);
-    if (success) {
-      setCurrentProviderId(id);
-      // 显示重启提示
-      const appName = activeApp === "claude" ? "Claude Code" : "Codex";
-      showNotification(
-        `切换成功！请重启 ${appName} 终端以生效`,
-        "success",
-        2000,
-      );
-      // 更新托盘菜单
-      await window.api.updateTrayMenu();
+    try {
+      const success = await window.api.switchProvider(id, activeApp);
+      if (success) {
+        setCurrentProviderId(id);
+        // 显示重启提示
+        const appName = t(`apps.${activeApp}`);
+        showNotification(
+          t("notifications.switchSuccess", { appName }),
+          "success",
+          2000,
+        );
+        // 更新托盘菜单
+        await window.api.updateTrayMenu();
 
-      // Codex: 切换供应商后，只在自动同步启用时同步到 VS Code
-      if (activeApp === "codex" && isAutoSyncEnabled) {
-        await syncCodexToVSCode(id, true); // silent模式，不显示通知
+        if (activeApp === "claude") {
+          await syncClaudePlugin(id, true);
+        }
+      } else {
+        showNotification(t("notifications.switchFailed"), "error");
       }
-    } else {
-      showNotification("切换失败，请检查配置", "error");
+    } catch (error) {
+      const detail = extractErrorMessage(error);
+      const msg = detail
+        ? `${t("notifications.switchFailed")}: ${detail}`
+        : t("notifications.switchFailed");
+      // 详细错误展示稍长时间，便于用户阅读
+      showNotification(msg, "error", detail ? 6000 : 3000);
+    }
+  };
+
+  const handleImportSuccess = async () => {
+    await loadProviders();
+    try {
+      await window.api.updateTrayMenu();
+    } catch (error) {
+      console.error("[App] Failed to refresh tray menu after import", error);
     }
   };
 
@@ -271,13 +261,13 @@ function App() {
 
       if (result.success) {
         await loadProviders();
-        showNotification("已从现有配置创建默认供应商", "success", 3000);
+        showNotification(t("notifications.autoImported"), "success", 3000);
         // 更新托盘菜单
         await window.api.updateTrayMenu();
       }
       // 如果导入失败（比如没有现有配置），静默处理，不显示错误
     } catch (error) {
-      console.error("自动导入默认配置失败:", error);
+      console.error(t("console.autoImportFailed"), error);
       // 静默处理，不影响用户体验
     }
   };
@@ -293,14 +283,18 @@ function App() {
               target="_blank"
               rel="noopener noreferrer"
               className="text-xl font-semibold text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 transition-colors"
-              title="在 GitHub 上查看"
+              title={t("header.viewOnGithub")}
             >
               CC Switch
             </a>
             <button
               onClick={toggleDarkMode}
               className={buttonStyles.icon}
-              title={isDarkMode ? "切换到亮色模式" : "切换到暗色模式"}
+              title={
+                isDarkMode
+                  ? t("header.toggleLightMode")
+                  : t("header.toggleDarkMode")
+              }
             >
               {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
             </button>
@@ -308,7 +302,7 @@ function App() {
               <button
                 onClick={() => setIsSettingsOpen(true)}
                 className={buttonStyles.icon}
-                title="设置"
+                title={t("common.settings")}
               >
                 <Settings size={18} />
               </button>
@@ -320,11 +314,18 @@ function App() {
             <AppSwitcher activeApp={activeApp} onSwitch={setActiveApp} />
 
             <button
+              onClick={() => setIsMcpOpen(true)}
+              className="inline-flex items-center gap-2 px-7 py-2 text-sm font-medium rounded-lg transition-colors bg-emerald-500 text-white hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-700"
+            >
+              MCP
+            </button>
+
+            <button
               onClick={() => setIsAddModalOpen(true)}
               className={`inline-flex items-center gap-2 ${buttonStyles.primary}`}
             >
               <Plus size={16} />
-              添加供应商
+              {t("header.addProvider")}
             </button>
           </div>
         </div>
@@ -337,7 +338,7 @@ function App() {
             {/* 通知组件 - 相对于视窗定位 */}
             {notification && (
               <div
-                className={`fixed top-20 left-1/2 transform -translate-x-1/2 z-50 px-4 py-3 rounded-lg shadow-lg transition-all duration-300 ${
+                className={`fixed top-20 left-1/2 transform -translate-x-1/2 z-[80] px-4 py-3 rounded-lg shadow-lg transition-all duration-300 ${
                   notification.type === "error"
                     ? "bg-red-500 text-white"
                     : "bg-green-500 text-white"
@@ -353,7 +354,6 @@ function App() {
               onSwitch={handleSwitchProvider}
               onDelete={handleDeleteProvider}
               onEdit={setEditingProviderId}
-              appType={activeApp}
               onNotify={showNotification}
             />
           </div>
@@ -388,7 +388,19 @@ function App() {
       )}
 
       {isSettingsOpen && (
-        <SettingsModal onClose={() => setIsSettingsOpen(false)} />
+        <SettingsModal
+          onClose={() => setIsSettingsOpen(false)}
+          onImportSuccess={handleImportSuccess}
+          onNotify={showNotification}
+        />
+      )}
+
+      {isMcpOpen && (
+        <McpPanel
+          appType={activeApp}
+          onClose={() => setIsMcpOpen(false)}
+          onNotify={showNotification}
+        />
       )}
     </div>
   );

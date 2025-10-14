@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { ChevronDown, RefreshCw, AlertCircle } from "lucide-react";
 
 interface KimiModel {
@@ -26,6 +27,7 @@ const KimiModelSelector: React.FC<KimiModelSelectorProps> = ({
   onModelChange,
   disabled = false,
 }) => {
+  const { t } = useTranslation();
   const [models, setModels] = useState<KimiModel[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -34,7 +36,7 @@ const KimiModelSelector: React.FC<KimiModelSelectorProps> = ({
   // 获取模型列表
   const fetchModelsWithKey = async (key: string) => {
     if (!key) {
-      setError("请先填写 API Key");
+      setError(t("kimiSelector.fillApiKeyFirst"));
       return;
     }
 
@@ -50,7 +52,11 @@ const KimiModelSelector: React.FC<KimiModelSelectorProps> = ({
       });
 
       if (!response.ok) {
-        throw new Error(`请求失败: ${response.status} ${response.statusText}`);
+        throw new Error(
+          t("kimiSelector.requestFailed", {
+            error: `${response.status} ${response.statusText}`,
+          }),
+        );
       }
 
       const data = await response.json();
@@ -58,11 +64,15 @@ const KimiModelSelector: React.FC<KimiModelSelectorProps> = ({
       if (data.data && Array.isArray(data.data)) {
         setModels(data.data);
       } else {
-        throw new Error("返回数据格式错误");
+        throw new Error(t("kimiSelector.invalidData"));
       }
     } catch (err) {
-      console.error("获取模型列表失败:", err);
-      setError(err instanceof Error ? err.message : "获取模型列表失败");
+      console.error(t("kimiSelector.fetchModelsFailed") + ":", err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : t("kimiSelector.fetchModelsFailed"),
+      );
     } finally {
       setLoading(false);
     }
@@ -110,10 +120,10 @@ const KimiModelSelector: React.FC<KimiModelSelectorProps> = ({
         >
           <option value="">
             {loading
-              ? "加载中..."
+              ? t("common.loading")
               : models.length === 0
-                ? "暂无模型"
-                : "请选择模型"}
+                ? t("kimiSelector.noModels")
+                : t("kimiSelector.pleaseSelectModel")}
           </option>
           {models.map((model) => (
             <option key={model.id} value={model.id}>
@@ -133,7 +143,7 @@ const KimiModelSelector: React.FC<KimiModelSelectorProps> = ({
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">
-          模型配置
+          {t("kimiSelector.modelConfig")}
         </h3>
         <button
           type="button"
@@ -142,7 +152,7 @@ const KimiModelSelector: React.FC<KimiModelSelectorProps> = ({
           className="inline-flex items-center gap-1 px-2 py-1 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
-          刷新模型列表
+          {t("kimiSelector.refreshModels")}
         </button>
       </div>
 
@@ -158,12 +168,12 @@ const KimiModelSelector: React.FC<KimiModelSelectorProps> = ({
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <ModelSelect
-          label="主模型"
+          label={t("kimiSelector.mainModel")}
           value={anthropicModel}
           onChange={(value) => onModelChange("ANTHROPIC_MODEL", value)}
         />
         <ModelSelect
-          label="快速模型"
+          label={t("kimiSelector.fastModel")}
           value={anthropicSmallFastModel}
           onChange={(value) =>
             onModelChange("ANTHROPIC_SMALL_FAST_MODEL", value)
@@ -174,7 +184,7 @@ const KimiModelSelector: React.FC<KimiModelSelectorProps> = ({
       {!apiKey.trim() && (
         <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg">
           <p className="text-xs text-amber-600 dark:text-amber-400">
-            💡 填写 API Key 后将自动获取可用模型列表
+            {t("kimiSelector.apiKeyHint")}
           </p>
         </div>
       )}

@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { Provider } from "../types";
 import { AppType } from "../lib/tauri-api";
 import ProviderForm from "./ProviderForm";
@@ -14,11 +15,18 @@ const AddProviderModal: React.FC<AddProviderModalProps> = ({
   onAdd,
   onClose,
 }) => {
+  const { t } = useTranslation();
+
+  const title =
+    appType === "claude"
+      ? t("provider.addClaudeProvider")
+      : t("provider.addCodexProvider");
+
   return (
     <ProviderForm
       appType={appType}
-      title="添加新供应商"
-      submitText="添加"
+      title={title}
+      submitText={t("common.add")}
       showPresets={true}
       onSubmit={onAdd}
       onClose={onClose}

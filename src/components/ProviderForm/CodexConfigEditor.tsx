@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { X, Save } from "lucide-react";
 
 import { isLinux } from "../../lib/platform";
+import { useTranslation } from "react-i18next";
 
 import {
   generateThirdPartyAuth,
@@ -74,6 +75,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
 
   setIsTemplateModalOpen: externalSetTemplateModalOpen,
 }) => {
+  const { t } = useTranslation();
   const [isCommonConfigModalOpen, setIsCommonConfigModalOpen] = useState(false);
 
   // 使用内部状态或外部状态
@@ -168,7 +170,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
 
       trimmedBaseUrl,
 
-      trimmedModel
+      trimmedModel,
     );
 
     onAuthChange(JSON.stringify(auth, null, 2));
@@ -206,7 +208,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
   };
 
   const handleTemplateInputKeyDown = (
-    e: React.KeyboardEvent<HTMLInputElement>
+    e: React.KeyboardEvent<HTMLInputElement>,
   ) => {
     if (e.key === "Enter") {
       e.preventDefault();
@@ -236,7 +238,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
           htmlFor="codexAuth"
           className="block text-sm font-medium text-gray-900 dark:text-gray-100"
         >
-          auth.json (JSON) *
+          {t("codexConfig.authJson")}
         </label>
 
         <textarea
@@ -244,9 +246,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
           value={authValue}
           onChange={(e) => handleAuthChange(e.target.value)}
           onBlur={onAuthBlur}
-          placeholder={`{
-  "OPENAI_API_KEY": "sk-your-api-key-here"
-}`}
+          placeholder={t("codexConfig.authJsonPlaceholder")}
           rows={6}
           required
           className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:focus:ring-blue-400/20 focus:border-blue-500 dark:focus:border-blue-400 transition-colors resize-y min-h-[8rem]"
@@ -266,7 +266,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
         )}
 
         <p className="text-xs text-gray-500 dark:text-gray-400">
-          Codex auth.json 配置内容
+          {t("codexConfig.authJsonHint")}
         </p>
       </div>
 
@@ -276,7 +276,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
             htmlFor="codexConfig"
             className="block text-sm font-medium text-gray-900 dark:text-gray-100"
           >
-            config.toml (TOML)
+            {t("codexConfig.configToml")}
           </label>
 
           <label className="inline-flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 cursor-pointer">
@@ -286,7 +286,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
               onChange={(e) => onCommonConfigToggle(e.target.checked)}
               className="w-4 h-4 text-blue-500 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 rounded focus:ring-blue-500 dark:focus:ring-blue-400 focus:ring-2"
             />
-            写入通用配置
+            {t("codexConfig.writeCommonConfig")}
           </label>
         </div>
 
@@ -296,7 +296,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
             onClick={() => setIsCommonConfigModalOpen(true)}
             className="text-xs text-blue-500 dark:text-blue-400 hover:underline"
           >
-            编辑通用配置
+            {t("codexConfig.editCommonConfig")}
           </button>
         </div>
 
@@ -325,7 +325,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
         />
 
         <p className="text-xs text-gray-500 dark:text-gray-400">
-          Codex config.toml 配置内容
+          {t("codexConfig.configTomlHint")}
         </p>
       </div>
 
@@ -348,14 +348,14 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
             <div className="flex h-full min-h-0 flex-col" role="form">
               <div className="flex items-center justify-between border-b border-gray-200 p-6 dark:border-gray-800">
                 <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                  快速配置向导
+                  {t("codexConfig.quickWizard")}
                 </h2>
 
                 <button
                   type="button"
                   onClick={closeTemplateModal}
                   className="rounded-md p-1 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
-                  aria-label="关闭"
+                  aria-label={t("common.close")}
                 >
                   <X size={18} />
                 </button>
@@ -364,15 +364,14 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
               <div className="flex-1 min-h-0 space-y-4 overflow-auto p-6">
                 <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/20">
                   <p className="text-sm text-blue-800 dark:text-blue-200">
-                    输入关键参数，系统将自动生成标准的 auth.json 和 config.toml
-                    配置。
+                    {t("codexConfig.wizardHint")}
                   </p>
                 </div>
 
                 <div className="space-y-4">
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">
-                      API 密钥 *
+                      {t("codexConfig.apiKeyLabel")}
                     </label>
 
                     <input
@@ -382,8 +381,8 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
                       onChange={(e) => setTemplateApiKey(e.target.value)}
                       onKeyDown={handleTemplateInputKeyDown}
                       pattern=".*\S.*"
-                      title="请输入有效的内容"
-                      placeholder="sk-your-api-key-here"
+                      title={t("common.enterValidValue")}
+                      placeholder={t("codexConfig.apiKeyPlaceholder")}
                       required
                       className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                     />
@@ -391,7 +390,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
 
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">
-                      供应商名称 *
+                      {t("codexConfig.supplierNameLabel")}
                     </label>
 
                     <input
@@ -405,21 +404,21 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
                         }
                       }}
                       onKeyDown={handleTemplateInputKeyDown}
-                      placeholder="例如：Codex 官方"
+                      placeholder={t("codexConfig.supplierNamePlaceholder")}
                       required
                       pattern=".*\S.*"
-                      title="请输入有效的内容"
+                      title={t("common.enterValidValue")}
                       className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                     />
 
                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      将显示在供应商列表中，可使用中文
+                      {t("codexConfig.supplierNameHint")}
                     </p>
                   </div>
 
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">
-                      供应商代号（英文）
+                      {t("codexConfig.supplierCodeLabel")}
                     </label>
 
                     <input
@@ -427,18 +426,18 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
                       value={templateProviderName}
                       onChange={(e) => setTemplateProviderName(e.target.value)}
                       onKeyDown={handleTemplateInputKeyDown}
-                      placeholder="custom（可选）"
+                      placeholder={t("codexConfig.supplierCodePlaceholder")}
                       className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                     />
 
                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      将用作配置文件中的标识符，默认为 custom
+                      {t("codexConfig.supplierCodeHint")}
                     </p>
                   </div>
 
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">
-                      API 请求地址 *
+                      {t("codexConfig.apiUrlLabel")}
                     </label>
 
                     <input
@@ -447,7 +446,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
                       ref={baseUrlInputRef}
                       onChange={(e) => setTemplateBaseUrl(e.target.value)}
                       onKeyDown={handleTemplateInputKeyDown}
-                      placeholder="https://your-api-endpoint.com/v1"
+                      placeholder={t("codexConfig.apiUrlPlaceholder")}
                       required
                       className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                     />
@@ -455,7 +454,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
 
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">
-                      官网地址
+                      {t("codexConfig.websiteLabel")}
                     </label>
 
                     <input
@@ -463,18 +462,18 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
                       value={templateWebsiteUrl}
                       onChange={(e) => setTemplateWebsiteUrl(e.target.value)}
                       onKeyDown={handleTemplateInputKeyDown}
-                      placeholder="https://example.com"
+                      placeholder={t("codexConfig.websitePlaceholder")}
                       className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                     />
 
                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      官方网站地址（可选）
+                      {t("codexConfig.websiteHint")}
                     </p>
                   </div>
 
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-900 dark:text-gray-100">
-                      模型名称 *
+                      {t("codexConfig.modelNameLabel")}
                     </label>
 
                     <input
@@ -484,8 +483,8 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
                       onChange={(e) => setTemplateModelName(e.target.value)}
                       onKeyDown={handleTemplateInputKeyDown}
                       pattern=".*\S.*"
-                      title="请输入有效的内容"
-                      placeholder="gpt-5-codex"
+                      title={t("common.enterValidValue")}
+                      placeholder={t("codexConfig.modelNamePlaceholder")}
                       required
                       className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                     />
@@ -497,7 +496,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
                   templateBaseUrl) && (
                   <div className="space-y-2 border-t border-gray-200 pt-4 dark:border-gray-700">
                     <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                      配置预览
+                      {t("codexConfig.configPreview")}
                     </h3>
 
                     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -510,7 +509,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
                           {JSON.stringify(
                             generateThirdPartyAuth(templateApiKey),
                             null,
-                            2
+                            2,
                           )}
                         </pre>
                       </div>
@@ -527,7 +526,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
 
                                 templateBaseUrl,
 
-                                templateModelName
+                                templateModelName,
                               )
                             : ""}
                         </pre>
@@ -543,7 +542,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
                   onClick={closeTemplateModal}
                   className="rounded-lg px-4 py-2 text-sm font-medium text-gray-500 transition-colors hover:bg-white hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-100"
                 >
-                  取消
+                  {t("common.cancel")}
                 </button>
 
                 <button
@@ -558,7 +557,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
                   className="flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700"
                 >
                   <Save className="h-4 w-4" />
-                  应用配置
+                  {t("codexConfig.applyConfig")}
                 </button>
               </div>
             </div>
@@ -588,14 +587,14 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
 
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-800">
               <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                编辑 Codex 通用配置片段
+                {t("codexConfig.editCommonConfigTitle")}
               </h2>
 
               <button
                 type="button"
                 onClick={closeModal}
                 className="p-1 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors"
-                aria-label="关闭"
+                aria-label={t("common.close")}
               >
                 <X size={18} />
               </button>
@@ -605,7 +604,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
 
             <div className="flex-1 overflow-auto p-6 space-y-4">
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                该片段会在勾选"写入通用配置"时追加到 config.toml 末尾
+                {t("codexConfig.commonConfigHint")}
               </p>
 
               <textarea
@@ -646,7 +645,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
                 onClick={closeModal}
                 className="px-4 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-white dark:hover:bg-gray-700 rounded-lg transition-colors"
               >
-                取消
+                {t("common.cancel")}
               </button>
 
               <button
@@ -655,7 +654,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
                 className="px-4 py-2 bg-blue-500 dark:bg-blue-600 text-white rounded-lg hover:bg-blue-600 dark:hover:bg-blue-700 transition-colors text-sm font-medium flex items-center gap-2"
               >
                 <Save className="w-4 h-4" />
-                保存
+                {t("common.save")}
               </button>
             </div>
           </div>

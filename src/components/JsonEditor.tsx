@@ -5,6 +5,7 @@ import { oneDark } from "@codemirror/theme-one-dark";
 import { EditorState } from "@codemirror/state";
 import { placeholder } from "@codemirror/view";
 import { linter, Diagnostic } from "@codemirror/lint";
+import { useTranslation } from "react-i18next";
 
 interface JsonEditorProps {
   value: string;
@@ -23,6 +24,7 @@ const JsonEditor: React.FC<JsonEditorProps> = ({
   rows = 12,
   showValidation = true,
 }) => {
+  const { t } = useTranslation();
   const editorRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
 
@@ -46,12 +48,13 @@ const JsonEditor: React.FC<JsonEditorProps> = ({
               from: 0,
               to: doc.length,
               severity: "error",
-              message: "配置必须是JSON对象，不能是数组或其他类型",
+              message: t("jsonEditor.mustBeObject"),
             });
           }
         } catch (e) {
           // 简单处理JSON解析错误
-          const message = e instanceof SyntaxError ? e.message : "JSON格式错误";
+          const message =
+            e instanceof SyntaxError ? e.message : t("jsonEditor.invalidJson");
           diagnostics.push({
             from: 0,
             to: doc.length,
@@ -62,7 +65,7 @@ const JsonEditor: React.FC<JsonEditorProps> = ({
 
         return diagnostics;
       }),
-    [showValidation],
+    [showValidation, t],
   );
 
   useEffect(() => {
