@@ -18,7 +18,16 @@ import { extractErrorMessage } from "./utils/errorUtils";
 function App() {
   const { t } = useTranslation();
   const { isDarkMode, toggleDarkMode } = useDarkMode();
-  const [activeApp, setActiveApp] = useState<AppType>("claude");
+  const defaultApp: AppType = (() => {
+    const v = (import.meta as any)?.env?.VITE_HIDE_CLAUDE;
+    if (typeof v === "string") {
+      const s = v.toLowerCase();
+      const hide = s === "1" || s === "true" || s === "yes";
+      return hide ? "codex" : "claude";
+    }
+    return "claude";
+  })();
+  const [activeApp, setActiveApp] = useState<AppType>(defaultApp);
   const [providers, setProviders] = useState<Record<string, Provider>>({});
   const [currentProviderId, setCurrentProviderId] = useState<string>("");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
