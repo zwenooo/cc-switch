@@ -72,6 +72,10 @@ interface CodexFormFieldsProps {
 
   // Speed Test Endpoints
   speedTestEndpoints: EndpointCandidate[];
+
+  // Local proxy User-Agent override
+  customUserAgent: string;
+  onCustomUserAgentChange: (value: string) => void;
 }
 
 type CodexCatalogRow = CodexCatalogModel & { rowId: string };
@@ -128,6 +132,8 @@ export function CodexFormFields({
   catalogModels = [],
   onCatalogModelsChange,
   speedTestEndpoints,
+  customUserAgent,
+  onCustomUserAgentChange,
 }: CodexFormFieldsProps) {
   const { t } = useTranslation();
 
@@ -581,6 +587,33 @@ export function CodexFormFields({
           onAutoSelectChange={onAutoSelectChange}
           onCustomEndpointsChange={onCustomEndpointsChange}
         />
+      )}
+
+      {category !== "official" && (
+        <div className="space-y-2">
+          <label
+            htmlFor="codex-custom-user-agent"
+            className="block text-sm font-medium text-foreground"
+          >
+            {t("providerForm.customUserAgent", {
+              defaultValue: "自定义 User-Agent",
+            })}
+          </label>
+          <Input
+            id="codex-custom-user-agent"
+            type="text"
+            value={customUserAgent}
+            onChange={(e) => onCustomUserAgentChange(e.target.value)}
+            placeholder="Mozilla/5.0 ..."
+            autoComplete="off"
+          />
+          <p className="text-xs text-muted-foreground">
+            {t("providerForm.customUserAgentHint", {
+              defaultValue:
+                "仅在开启本地路由/代理接管后生效，会替换转发到供应商 API 请求中的 User-Agent。",
+            })}
+          </p>
+        </div>
       )}
     </>
   );
