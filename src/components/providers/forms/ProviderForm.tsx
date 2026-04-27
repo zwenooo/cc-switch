@@ -1391,7 +1391,7 @@ function ProviderFormFull({
           ? normalizeCodexChatReasoningForSave(codexChatReasoning)
           : undefined,
       customUserAgent:
-        appId === "claude" || appId === "codex"
+        (appId === "claude" || appId === "codex") && category !== "official"
           ? customUserAgent.trim() || undefined
           : undefined,
       testConfig: testConfig.enabled ? testConfig : undefined,
