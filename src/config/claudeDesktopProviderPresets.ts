@@ -818,18 +818,6 @@ export const claudeDesktopProviderPresets: ClaudeDesktopProviderPreset[] = [
     iconColor: "#000000",
   },
   {
-    name: "LionCCAPI",
-    websiteUrl: "https://vibecodingapi.ai",
-    category: "third_party",
-    baseUrl: "https://vibecodingapi.ai",
-    mode: "direct",
-    apiFormat: "anthropic",
-    modelRoutes: passthroughRoutes(),
-    isPartner: true,
-    partnerPromotionKey: "lionccapi",
-    icon: "lioncc",
-  },
-  {
     name: "OpenRouter",
     websiteUrl: "https://openrouter.ai",
     apiKeyUrl: "https://openrouter.ai/keys",
