@@ -32,6 +32,8 @@ use std::sync::Arc;
 use tauri::Manager;
 use tokio::sync::RwLock;
 
+const PROXY_AUTH_PLACEHOLDER: &str = "PROXY_MANAGED";
+
 pub struct ForwardResult {
     pub response: ProxyResponse,
     pub provider: Provider,
@@ -1562,6 +1564,8 @@ impl RequestForwarder {
             );
         }
 
+        reject_proxy_placeholder_for_managed_account_upstream(&url, &ordered_headers)?;
+
         // 输出请求信息日志
         let tag = adapter.name();
         let request_model = filtered_body
@@ -2153,6 +2157,43 @@ fn build_codex_oauth_session_headers(
     headers
 }
 
+fn reject_proxy_placeholder_for_managed_account_upstream(
+    url: &str,
+    headers: &http::HeaderMap,
+) -> Result<(), ProxyError> {
+    if !is_managed_account_upstream_url(url) || !headers_contain_proxy_placeholder(headers) {
+        return Ok(());
+    }
+
+    Err(ProxyError::AuthError(
+        "Managed account proxy auth was not resolved; PROXY_MANAGED must not be sent upstream"
+            .to_string(),
+    ))
+}
+
+fn is_managed_account_upstream_url(url: &str) -> bool {
+    let Ok(uri) = url.parse::<http::Uri>() else {
+        return false;
+    };
+
+    let Some(host) = uri.host().map(str::to_ascii_lowercase) else {
+        return false;
+    };
+
+    host == "githubcopilot.com"
+        || host.ends_with(".githubcopilot.com")
+        || (host == "chatgpt.com" && uri.path().starts_with("/backend-api/codex"))
+}
+
+fn headers_contain_proxy_placeholder(headers: &http::HeaderMap) -> bool {
+    headers.values().any(|value| {
+        value
+            .to_str()
+            .map(|value| value.contains(PROXY_AUTH_PLACEHOLDER))
+            .unwrap_or(false)
+    })
+}
+
 fn should_preserve_exact_header_case(
     adapter_name: &str,
     provider: &Provider,
@@ -2593,6 +2634,61 @@ mod tests {
             map.get("x-codex-window-id"),
             Some(&HeaderValue::from_static("session-123:0"))
         );
+    }
+
+    #[test]
+    fn managed_account_upstream_rejects_proxy_managed_placeholder_header() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "authorization",
+            HeaderValue::from_static("Bearer PROXY_MANAGED"),
+        );
+
+        let err = reject_proxy_placeholder_for_managed_account_upstream(
+            "https://api.githubcopilot.com/chat/completions",
+            &headers,
+        )
+        .expect_err("placeholder should be rejected before upstream");
+
+        assert!(matches!(
+            err,
+            ProxyError::AuthError(message) if message.contains("PROXY_MANAGED")
+        ));
+    }
+
+    #[test]
+    fn codex_oauth_upstream_rejects_proxy_managed_placeholder_header() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "authorization",
+            HeaderValue::from_static("Bearer PROXY_MANAGED"),
+        );
+
+        let err = reject_proxy_placeholder_for_managed_account_upstream(
+            "https://chatgpt.com/backend-api/codex/responses",
+            &headers,
+        )
+        .expect_err("placeholder should be rejected before upstream");
+
+        assert!(matches!(
+            err,
+            ProxyError::AuthError(message) if message.contains("PROXY_MANAGED")
+        ));
+    }
+
+    #[test]
+    fn non_managed_upstream_allows_proxy_managed_placeholder_guard() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "authorization",
+            HeaderValue::from_static("Bearer PROXY_MANAGED"),
+        );
+
+        reject_proxy_placeholder_for_managed_account_upstream(
+            "https://api.example.com/v1/messages",
+            &headers,
+        )
+        .expect("guard is scoped to managed-account upstreams");
     }
 
     #[test]
