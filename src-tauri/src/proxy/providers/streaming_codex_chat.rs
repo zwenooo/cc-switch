@@ -19,6 +19,15 @@ struct TextItemState {
 }
 
 #[derive(Debug, Default)]
+struct ReasoningItemState {
+    output_index: Option<u32>,
+    item_id: String,
+    text: String,
+    added: bool,
+    done: bool,
+}
+
+#[derive(Debug, Default)]
 struct ToolCallState {
     output_index: Option<u32>,
     item_id: String,
@@ -38,8 +47,9 @@ struct ChatToResponsesState {
     created_at: u64,
     next_output_index: u32,
     text: TextItemState,
+    reasoning: ReasoningItemState,
     tools: BTreeMap<usize, ToolCallState>,
-    output_items: Vec<Value>,
+    output_items: Vec<(u32, Value)>,
     latest_usage: Option<Value>,
     finish_reason: Option<String>,
 }
@@ -54,6 +64,7 @@ impl Default for ChatToResponsesState {
             created_at: 0,
             next_output_index: 0,
             text: TextItemState::default(),
+            reasoning: ReasoningItemState::default(),
             tools: BTreeMap::new(),
             output_items: Vec::new(),
             latest_usage: None,
@@ -93,13 +104,19 @@ impl ChatToResponsesState {
         };
 
         if let Some(delta) = choice.get("delta") {
+            if let Some(reasoning) = chat_delta_reasoning_text(delta) {
+                events.extend(self.push_reasoning_delta(&reasoning));
+            }
+
             if let Some(content) = delta.get("content").and_then(|v| v.as_str()) {
                 if !content.is_empty() {
+                    events.extend(self.finalize_reasoning());
                     events.extend(self.push_text_delta(content));
                 }
             }
 
             if let Some(tool_calls) = delta.get("tool_calls").and_then(|v| v.as_array()) {
+                events.extend(self.finalize_reasoning());
                 for tool_call in tool_calls {
                     events.extend(self.push_tool_call_delta(tool_call));
                 }
@@ -137,6 +154,60 @@ impl ChatToResponsesState {
                 }),
             ),
         ]
+    }
+
+    fn push_reasoning_delta(&mut self, delta: &str) -> Vec<Bytes> {
+        let mut events = Vec::new();
+
+        if !self.reasoning.added {
+            let output_index = self.next_output_index();
+            let item_id = format!("rs_{}", self.response_id);
+            self.reasoning.output_index = Some(output_index);
+            self.reasoning.item_id = item_id.clone();
+            self.reasoning.added = true;
+
+            events.push(sse_event(
+                "response.output_item.added",
+                json!({
+                    "type": "response.output_item.added",
+                    "output_index": output_index,
+                    "item": {
+                        "id": item_id,
+                        "type": "reasoning",
+                        "status": "in_progress",
+                        "summary": []
+                    }
+                }),
+            ));
+            events.push(sse_event(
+                "response.reasoning_summary_part.added",
+                json!({
+                    "type": "response.reasoning_summary_part.added",
+                    "item_id": self.reasoning.item_id,
+                    "output_index": output_index,
+                    "summary_index": 0,
+                    "part": {
+                        "type": "summary_text",
+                        "text": ""
+                    }
+                }),
+            ));
+        }
+
+        self.reasoning.text.push_str(delta);
+        let output_index = self.reasoning.output_index.unwrap_or(0);
+        events.push(sse_event(
+            "response.reasoning_summary_text.delta",
+            json!({
+                "type": "response.reasoning_summary_text.delta",
+                "item_id": self.reasoning.item_id,
+                "output_index": output_index,
+                "summary_index": 0,
+                "delta": delta
+            }),
+        ));
+
+        events
     }
 
     fn push_text_delta(&mut self, delta: &str) -> Vec<Bytes> {
@@ -304,11 +375,12 @@ impl ChatToResponsesState {
         }
 
         let mut events = self.ensure_response_started();
+        events.extend(self.finalize_reasoning());
         events.extend(self.finalize_text());
         events.extend(self.finalize_tools());
 
         let status = response_status_from_finish_reason(self.finish_reason.as_deref());
-        let mut response = self.base_response(status, self.output_items.clone());
+        let mut response = self.base_response(status, self.completed_output_items());
         if status == "incomplete" {
             response["incomplete_details"] = json!({ "reason": "max_output_tokens" });
         }
@@ -322,6 +394,60 @@ impl ChatToResponsesState {
         ));
         self.completed = true;
         events
+    }
+
+    fn finalize_reasoning(&mut self) -> Vec<Bytes> {
+        if !self.reasoning.added || self.reasoning.done {
+            return Vec::new();
+        }
+
+        let output_index = self.reasoning.output_index.unwrap_or(0);
+        let item_id = self.reasoning.item_id.clone();
+        let text = self.reasoning.text.clone();
+        let item = json!({
+            "id": item_id,
+            "type": "reasoning",
+            "summary": [{
+                "type": "summary_text",
+                "text": text
+            }]
+        });
+        self.output_items.push((output_index, item.clone()));
+        self.reasoning.done = true;
+
+        vec![
+            sse_event(
+                "response.reasoning_summary_text.done",
+                json!({
+                    "type": "response.reasoning_summary_text.done",
+                    "item_id": self.reasoning.item_id,
+                    "output_index": output_index,
+                    "summary_index": 0,
+                    "text": self.reasoning.text
+                }),
+            ),
+            sse_event(
+                "response.reasoning_summary_part.done",
+                json!({
+                    "type": "response.reasoning_summary_part.done",
+                    "item_id": self.reasoning.item_id,
+                    "output_index": output_index,
+                    "summary_index": 0,
+                    "part": {
+                        "type": "summary_text",
+                        "text": self.reasoning.text
+                    }
+                }),
+            ),
+            sse_event(
+                "response.output_item.done",
+                json!({
+                    "type": "response.output_item.done",
+                    "output_index": output_index,
+                    "item": item
+                }),
+            ),
+        ]
     }
 
     fn finalize_text(&mut self) -> Vec<Bytes> {
@@ -341,7 +467,7 @@ impl ChatToResponsesState {
                 "annotations": []
             }]
         });
-        self.output_items.push(item.clone());
+        self.output_items.push((output_index, item.clone()));
         self.text.done = true;
 
         vec![
@@ -439,7 +565,7 @@ impl ChatToResponsesState {
                 "arguments": state.arguments
             });
             state.done = true;
-            self.output_items.push(item.clone());
+            self.output_items.push((output_index, item.clone()));
 
             events.push(sse_event(
                 "response.function_call_arguments.done",
@@ -461,6 +587,15 @@ impl ChatToResponsesState {
         }
 
         events
+    }
+
+    fn completed_output_items(&self) -> Vec<Value> {
+        let mut output_items = self.output_items.clone();
+        output_items.sort_by_key(|(output_index, _)| *output_index);
+        output_items
+            .into_iter()
+            .map(|(_, item)| item)
+            .collect::<Vec<_>>()
     }
 
     fn base_response(&self, status: &str, output: Vec<Value>) -> Value {
@@ -494,7 +629,7 @@ impl ChatToResponsesState {
             error["type"] = json!(error_type);
         }
 
-        let mut response = self.base_response("failed", self.output_items.clone());
+        let mut response = self.base_response("failed", self.completed_output_items());
         response["error"] = error;
 
         sse_event(
@@ -505,6 +640,27 @@ impl ChatToResponsesState {
             }),
         )
     }
+}
+
+fn chat_delta_reasoning_text(delta: &Value) -> Option<String> {
+    for key in ["reasoning_content", "reasoning"] {
+        if let Some(text) = delta.get(key).and_then(|v| v.as_str()) {
+            if !text.is_empty() {
+                return Some(text.to_string());
+            }
+        }
+    }
+
+    let reasoning = delta.get("reasoning")?;
+    for key in ["content", "text", "summary"] {
+        if let Some(text) = reasoning.get(key).and_then(|v| v.as_str()) {
+            if !text.is_empty() {
+                return Some(text.to_string());
+            }
+        }
+    }
+
+    None
 }
 
 /// Create a stream that converts Chat Completions SSE chunks into Responses SSE events.
@@ -654,6 +810,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn converts_reasoning_content_chat_sse_to_responses_reasoning_events() {
+        let output = collect(vec![
+            "data: {\"id\":\"chatcmpl_reason\",\"created\":123,\"model\":\"deepseek-reasoner\",\"choices\":[{\"delta\":{\"reasoning_content\":\"Need context. \"}}]}\n\n",
+            "data: {\"id\":\"chatcmpl_reason\",\"created\":123,\"model\":\"deepseek-reasoner\",\"choices\":[{\"delta\":{\"reasoning\":\"Now answer. \"}}]}\n\n",
+            "data: {\"id\":\"chatcmpl_reason\",\"created\":123,\"model\":\"deepseek-reasoner\",\"choices\":[{\"delta\":{\"content\":\"Done\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":4,\"completion_tokens\":6,\"total_tokens\":10,\"completion_tokens_details\":{\"reasoning_tokens\":3}}}\n\n",
+            "data: [DONE]\n\n",
+        ])
+        .await;
+
+        assert!(output.contains("event: response.reasoning_summary_part.added"));
+        assert!(output.contains("event: response.reasoning_summary_text.delta"));
+        assert!(output.contains("event: response.reasoning_summary_text.done"));
+        assert!(output.contains("Need context. Now answer. "));
+        assert!(output.contains("\"type\":\"reasoning\""));
+        assert!(output.contains("\"text\":\"Done\""));
+        assert!(output.contains("\"reasoning_tokens\":3"));
+
+        let reasoning_pos = output.find("\"type\":\"reasoning\"").unwrap();
+        let message_pos = output.find("\"type\":\"message\"").unwrap();
+        assert!(reasoning_pos < message_pos);
+    }
+
+    #[tokio::test]
     async fn converts_tool_call_chat_sse_to_responses_sse() {
         let output = collect(vec![
             "data: {\"id\":\"chatcmpl_2\",\"model\":\"gpt-5.4\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\"}}]}}]}\n\n",
@@ -692,6 +871,20 @@ mod tests {
         assert!(output.contains("event: response.failed"));
         assert!(output.contains("bad request"));
         assert!(output.contains("invalid_request_error"));
+        assert!(!output.contains("event: response.completed"));
+    }
+
+    #[tokio::test]
+    async fn chat_sse_data_only_error_emits_failed_without_completed() {
+        let output = collect(vec![
+            "data: {\"error\":{\"message\":\"quota exceeded\",\"code\":\"rate_limit_exceeded\"}}\n\n",
+            "data: [DONE]\n\n",
+        ])
+        .await;
+
+        assert!(output.contains("event: response.failed"));
+        assert!(output.contains("quota exceeded"));
+        assert!(output.contains("rate_limit_exceeded"));
         assert!(!output.contains("event: response.completed"));
     }
 }

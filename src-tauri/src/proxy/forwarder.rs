@@ -2794,6 +2794,15 @@ mod tests {
     }
 
     #[test]
+    fn rewrite_codex_responses_compact_endpoint_to_chat_preserves_query() {
+        let (endpoint, passthrough_query) =
+            rewrite_codex_responses_endpoint_to_chat("/v1/responses/compact?foo=bar");
+
+        assert_eq!(endpoint, "/chat/completions?foo=bar");
+        assert_eq!(passthrough_query.as_deref(), Some("foo=bar"));
+    }
+
+    #[test]
     fn rewrite_claude_transform_endpoint_uses_copilot_path() {
         let (endpoint, passthrough_query) = rewrite_claude_transform_endpoint(
             "/v1/messages?beta=true&x-id=1",

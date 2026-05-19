@@ -464,4 +464,21 @@ wire_api = "chat"
             "/v1/responses/compact"
         ));
     }
+
+    #[test]
+    fn test_codex_provider_uses_chat_completions_from_meta_api_format_for_compact() {
+        let mut provider = create_provider(json!({
+            "base_url": "https://example.com/v1"
+        }));
+        provider.meta = Some(crate::provider::ProviderMeta {
+            api_format: Some("openai_chat".to_string()),
+            ..Default::default()
+        });
+
+        assert!(codex_provider_uses_chat_completions(&provider));
+        assert!(should_convert_codex_responses_to_chat(
+            &provider,
+            "/responses/compact?stream=true"
+        ));
+    }
 }

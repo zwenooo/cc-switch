@@ -371,6 +371,9 @@ pub fn chat_completion_to_response(body: Value) -> Result<Value, ProxyError> {
     let finish_reason = choice.get("finish_reason").and_then(|v| v.as_str());
 
     let mut output = Vec::new();
+    if let Some(reasoning_item) = chat_reasoning_to_response_output_item(message, &response_id) {
+        output.push(reasoning_item);
+    }
     if let Some(message_item) = chat_message_to_response_output_item(message, &response_id) {
         output.push(message_item);
     }
@@ -391,6 +394,43 @@ pub fn chat_completion_to_response(body: Value) -> Result<Value, ProxyError> {
     }
 
     Ok(response)
+}
+
+fn chat_reasoning_to_response_output_item(message: &Value, response_id: &str) -> Option<Value> {
+    let reasoning = chat_reasoning_text(message)?;
+    if reasoning.is_empty() {
+        return None;
+    }
+
+    Some(json!({
+        "id": format!("rs_{response_id}"),
+        "type": "reasoning",
+        "summary": [{
+            "type": "summary_text",
+            "text": reasoning
+        }]
+    }))
+}
+
+fn chat_reasoning_text(message: &Value) -> Option<String> {
+    for key in ["reasoning_content", "reasoning"] {
+        if let Some(text) = message.get(key).and_then(|v| v.as_str()) {
+            if !text.is_empty() {
+                return Some(text.to_string());
+            }
+        }
+    }
+
+    let reasoning = message.get("reasoning")?;
+    for key in ["content", "text", "summary"] {
+        if let Some(text) = reasoning.get(key).and_then(|v| v.as_str()) {
+            if !text.is_empty() {
+                return Some(text.to_string());
+            }
+        }
+    }
+
+    None
 }
 
 fn chat_message_to_response_output_item(message: &Value, response_id: &str) -> Option<Value> {
@@ -651,6 +691,55 @@ mod tests {
     }
 
     #[test]
+    fn responses_request_to_chat_keeps_multiple_tool_calls_adjacent_to_outputs() {
+        let input = json!({
+            "model": "gpt-5.4",
+            "input": [
+                {
+                    "type": "function_call",
+                    "call_id": "call_1",
+                    "name": "read_file",
+                    "arguments": "{\"path\":\"README.md\"}"
+                },
+                {
+                    "type": "function_call",
+                    "call_id": "call_2",
+                    "name": "list_files",
+                    "arguments": "{\"path\":\"src\"}"
+                },
+                {
+                    "type": "function_call_output",
+                    "call_id": "call_1",
+                    "output": "Readme content"
+                },
+                {
+                    "type": "function_call_output",
+                    "call_id": "call_2",
+                    "output": ["main.rs", "lib.rs"]
+                },
+                {
+                    "role": "user",
+                    "content": "Continue"
+                }
+            ]
+        });
+
+        let result = responses_to_chat_completions(input).unwrap();
+        let messages = result["messages"].as_array().unwrap();
+
+        assert_eq!(messages.len(), 4);
+        assert_eq!(messages[0]["role"], "assistant");
+        assert_eq!(messages[0]["tool_calls"][0]["id"], "call_1");
+        assert_eq!(messages[0]["tool_calls"][1]["id"], "call_2");
+        assert_eq!(messages[1]["role"], "tool");
+        assert_eq!(messages[1]["tool_call_id"], "call_1");
+        assert_eq!(messages[2]["role"], "tool");
+        assert_eq!(messages[2]["tool_call_id"], "call_2");
+        assert_eq!(messages[2]["content"], "[\"main.rs\",\"lib.rs\"]");
+        assert_eq!(messages[3]["role"], "user");
+    }
+
+    #[test]
     fn chat_response_to_responses_maps_text_tool_calls_and_usage() {
         let input = json!({
             "id": "chatcmpl_1",
@@ -660,6 +749,7 @@ mod tests {
             "choices": [{
                 "message": {
                     "role": "assistant",
+                    "reasoning_content": "I should check the weather before answering.",
                     "content": "Let me check.",
                     "tool_calls": [{
                         "id": "call_1",
@@ -684,10 +774,15 @@ mod tests {
 
         assert_eq!(result["id"], "resp_chatcmpl_1");
         assert_eq!(result["status"], "completed");
-        assert_eq!(result["output"][0]["type"], "message");
-        assert_eq!(result["output"][0]["content"][0]["text"], "Let me check.");
-        assert_eq!(result["output"][1]["type"], "function_call");
-        assert_eq!(result["output"][1]["call_id"], "call_1");
+        assert_eq!(result["output"][0]["type"], "reasoning");
+        assert_eq!(
+            result["output"][0]["summary"][0]["text"],
+            "I should check the weather before answering."
+        );
+        assert_eq!(result["output"][1]["type"], "message");
+        assert_eq!(result["output"][1]["content"][0]["text"], "Let me check.");
+        assert_eq!(result["output"][2]["type"], "function_call");
+        assert_eq!(result["output"][2]["call_id"], "call_1");
         assert_eq!(result["usage"]["input_tokens"], 10);
         assert_eq!(result["usage"]["output_tokens"], 5);
         assert_eq!(result["usage"]["input_tokens_details"]["cached_tokens"], 3);
