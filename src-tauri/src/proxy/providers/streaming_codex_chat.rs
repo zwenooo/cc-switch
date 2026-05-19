@@ -1,8 +1,13 @@
 //! OpenAI Chat Completions SSE → OpenAI Responses SSE conversion.
 
-use super::transform_codex_chat::{
-    chat_usage_to_responses_usage, response_id_from_chat_id, response_status_from_finish_reason,
-    split_leading_think_block, strip_leading_think_open_tag,
+use super::{
+    codex_chat_common::{
+        extract_reasoning_field_text, response_function_call_item, split_leading_think_block,
+        strip_leading_think_open_tag,
+    },
+    transform_codex_chat::{
+        chat_usage_to_responses_usage, response_id_from_chat_id, response_status_from_finish_reason,
+    },
 };
 use crate::proxy::sse::{strip_sse_field, take_sse_block};
 use bytes::Bytes;
@@ -49,6 +54,7 @@ struct ToolCallState {
     call_id: String,
     name: String,
     arguments: String,
+    reasoning_content: String,
     added: bool,
     done: bool,
 }
@@ -133,9 +139,12 @@ impl ChatToResponsesState {
 
             if let Some(tool_calls) = delta.get("tool_calls").and_then(|v| v.as_array()) {
                 events.extend(self.flush_inline_think_at_boundary());
+                let reasoning_for_tool_call = self.current_reasoning_text();
                 events.extend(self.finalize_reasoning());
                 for tool_call in tool_calls {
-                    events.extend(self.push_tool_call_delta(tool_call));
+                    events.extend(
+                        self.push_tool_call_delta(tool_call, reasoning_for_tool_call.as_deref()),
+                    );
                 }
             }
         }
@@ -375,7 +384,11 @@ impl ChatToResponsesState {
         events
     }
 
-    fn push_tool_call_delta(&mut self, tool_call: &Value) -> Vec<Bytes> {
+    fn current_reasoning_text(&self) -> Option<String> {
+        (!self.reasoning.text.trim().is_empty()).then(|| self.reasoning.text.trim().to_string())
+    }
+
+    fn push_tool_call_delta(&mut self, tool_call: &Value, reasoning: Option<&str>) -> Vec<Bytes> {
         let chat_index = tool_call.get("index").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
         let id_delta = tool_call
             .get("id")
@@ -408,6 +421,12 @@ impl ChatToResponsesState {
             if !args_delta.is_empty() {
                 state.arguments.push_str(&args_delta);
             }
+            if state.reasoning_content.is_empty() {
+                if let Some(reasoning) = reasoning.map(str::trim).filter(|value| !value.is_empty())
+                {
+                    state.reasoning_content = reasoning.to_string();
+                }
+            }
 
             if !state.added && (!state.call_id.is_empty() || !state.name.is_empty()) {
                 should_add = true;
@@ -434,19 +453,21 @@ impl ChatToResponsesState {
             state.item_id = format!("fc_{}", state.call_id);
             item_id = state.item_id.clone();
 
+            let item = response_function_call_item(
+                &item_id,
+                "in_progress",
+                &state.call_id,
+                &state.name,
+                "",
+                Some(&state.reasoning_content),
+            );
+
             events.push(sse_event(
                 "response.output_item.added",
                 json!({
                     "type": "response.output_item.added",
                     "output_index": assigned,
-                    "item": {
-                        "id": item_id,
-                        "type": "function_call",
-                        "status": "in_progress",
-                        "call_id": state.call_id,
-                        "name": state.name,
-                        "arguments": ""
-                    }
+                    "item": item
                 }),
             ));
 
@@ -643,19 +664,20 @@ impl ChatToResponsesState {
                 }
                 state.output_index = Some(assigned);
                 state.item_id = format!("fc_{}", state.call_id);
+                let item = response_function_call_item(
+                    &state.item_id,
+                    "in_progress",
+                    &state.call_id,
+                    &state.name,
+                    "",
+                    Some(&state.reasoning_content),
+                );
                 add_event = Some(sse_event(
                     "response.output_item.added",
                     json!({
                         "type": "response.output_item.added",
                         "output_index": assigned,
-                        "item": {
-                            "id": state.item_id,
-                            "type": "function_call",
-                            "status": "in_progress",
-                            "call_id": state.call_id,
-                            "name": state.name,
-                            "arguments": ""
-                        }
+                        "item": item
                     }),
                 ));
             }
@@ -666,14 +688,14 @@ impl ChatToResponsesState {
 
             let state = self.tools.get_mut(&key).expect("tool state exists");
             let output_index = state.output_index.unwrap_or(0);
-            let item = json!({
-                "id": state.item_id,
-                "type": "function_call",
-                "status": "completed",
-                "call_id": state.call_id,
-                "name": state.name,
-                "arguments": state.arguments
-            });
+            let item = response_function_call_item(
+                &state.item_id,
+                "completed",
+                &state.call_id,
+                &state.name,
+                &state.arguments,
+                Some(&state.reasoning_content),
+            );
             state.done = true;
             self.output_items.push((output_index, item.clone()));
 
@@ -753,24 +775,7 @@ impl ChatToResponsesState {
 }
 
 fn chat_delta_reasoning_text(delta: &Value) -> Option<String> {
-    for key in ["reasoning_content", "reasoning"] {
-        if let Some(text) = delta.get(key).and_then(|v| v.as_str()) {
-            if !text.is_empty() {
-                return Some(text.to_string());
-            }
-        }
-    }
-
-    let reasoning = delta.get("reasoning")?;
-    for key in ["content", "text", "summary"] {
-        if let Some(text) = reasoning.get(key).and_then(|v| v.as_str()) {
-            if !text.is_empty() {
-                return Some(text.to_string());
-            }
-        }
-    }
-
-    None
+    extract_reasoning_field_text(delta)
 }
 
 enum ThinkPrefixDecision {
@@ -996,6 +1001,21 @@ mod tests {
         assert!(output.contains("event: response.function_call_arguments.done"));
         assert!(output.contains("\"type\":\"function_call\""));
         assert!(output.contains("\"call_id\":\"call_1\""));
+    }
+
+    #[tokio::test]
+    async fn preserves_reasoning_content_on_streamed_tool_call_items() {
+        let output = collect(vec![
+            "data: {\"id\":\"chatcmpl_tool_reasoning\",\"model\":\"deepseek-v4-flash\",\"choices\":[{\"delta\":{\"reasoning_content\":\"Need file.\"}}]}\n\n",
+            "data: {\"id\":\"chatcmpl_tool_reasoning\",\"model\":\"deepseek-v4-flash\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"read_file\"}}]}}]}\n\n",
+            "data: {\"id\":\"chatcmpl_tool_reasoning\",\"model\":\"deepseek-v4-flash\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"path\\\":\\\"README.md\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\n",
+            "data: [DONE]\n\n",
+        ])
+        .await;
+
+        assert!(output.contains("event: response.output_item.done"));
+        assert!(output.contains("\"type\":\"function_call\""));
+        assert!(output.contains("\"reasoning_content\":\"Need file.\""));
     }
 
     #[tokio::test]

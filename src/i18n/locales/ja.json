@@ -1080,6 +1080,8 @@
     "saveFailed": "保存に失敗しました: {{error}}",
     "modelNameHint": "使用するモデルを指定します。config.toml に自動更新されます",
     "modelName": "モデル名",
+    "upstreamModelName": "上流モデル名",
+    "upstreamModelNameHint": "Chat 形式ではここに実際の上流モデルを入力します。接管時は Codex 互換のローカルモデルを書き込み、ルーティングでこのモデルに戻します。",
     "modelNamePlaceholder": "例: gpt-5-codex",
     "contextWindow1M": "1M コンテキストウィンドウ",
     "autoCompactLimit": "自動圧縮しきい値",

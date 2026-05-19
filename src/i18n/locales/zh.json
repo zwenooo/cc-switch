@@ -1080,6 +1080,8 @@
     "saveFailed": "保存失败: {{error}}",
     "modelNameHint": "指定使用的模型，将自动更新到 config.toml 中",
     "modelName": "模型名称",
+    "upstreamModelName": "上游模型名称",
+    "upstreamModelNameHint": "Chat 格式下这里填写真实上游模型；接管时 Codex 本地会使用兼容模型，并由路由映射回该模型。",
     "modelNamePlaceholder": "例如: gpt-5-codex",
     "contextWindow1M": "1M 上下文窗口",
     "autoCompactLimit": "压缩阈值",

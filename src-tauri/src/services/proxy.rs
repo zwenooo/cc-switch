@@ -283,6 +283,48 @@ impl ProxyService {
         Ok(())
     }
 
+    pub async fn sync_codex_live_from_provider_while_proxy_active(
+        &self,
+        provider: &Provider,
+    ) -> Result<(), String> {
+        let mut effective_settings = match self.read_codex_live() {
+            Ok(config) => config,
+            Err(_) => build_effective_settings_with_common_config(
+                self.db.as_ref(),
+                &AppType::Codex,
+                provider,
+            )
+            .map_err(|e| format!("构建 codex 有效配置失败: {e}"))?,
+        };
+        let (_, proxy_codex_base_url) = self.build_proxy_urls().await?;
+
+        if let Some(auth) = effective_settings
+            .get_mut("auth")
+            .and_then(|v| v.as_object_mut())
+        {
+            auth.insert("OPENAI_API_KEY".to_string(), json!(PROXY_TOKEN_PLACEHOLDER));
+        } else if let Some(root) = effective_settings.as_object_mut() {
+            root.insert(
+                "auth".to_string(),
+                json!({ "OPENAI_API_KEY": PROXY_TOKEN_PLACEHOLDER }),
+            );
+        }
+
+        let config_str = effective_settings
+            .get("config")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let updated_config = Self::apply_codex_proxy_toml_config_for_provider(
+            config_str,
+            &proxy_codex_base_url,
+            Some(provider),
+        );
+        effective_settings["config"] = json!(updated_config);
+
+        self.write_codex_live(&effective_settings)?;
+        Ok(())
+    }
+
     fn get_current_provider_for_app(&self, app_type: &AppType) -> Result<Option<Provider>, String> {
         let Some(current_id) = crate::settings::get_effective_current_provider(&self.db, app_type)
             .map_err(|e| format!("获取 {app_type:?} 当前供应商失败: {e}"))?
@@ -1096,8 +1138,15 @@ impl ProxyService {
                 .get("config")
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
-            let updated_config =
-                Self::apply_codex_proxy_toml_config(config_str, &proxy_codex_base_url);
+            let codex_provider = self
+                .get_current_provider_for_app(&AppType::Codex)
+                .ok()
+                .flatten();
+            let updated_config = Self::apply_codex_proxy_toml_config_for_provider(
+                config_str,
+                &proxy_codex_base_url,
+                codex_provider.as_ref(),
+            );
             live_config["config"] = json!(updated_config);
 
             self.write_codex_live(&live_config)?;
@@ -1150,8 +1199,15 @@ impl ProxyService {
                     .get("config")
                     .and_then(|v| v.as_str())
                     .unwrap_or("");
-                let updated_config =
-                    Self::apply_codex_proxy_toml_config(config_str, &proxy_codex_base_url);
+                let codex_provider = self
+                    .get_current_provider_for_app(&AppType::Codex)
+                    .ok()
+                    .flatten();
+                let updated_config = Self::apply_codex_proxy_toml_config_for_provider(
+                    config_str,
+                    &proxy_codex_base_url,
+                    codex_provider.as_ref(),
+                );
                 live_config["config"] = json!(updated_config);
 
                 self.write_codex_live(&live_config)?;
@@ -1217,8 +1273,15 @@ impl ProxyService {
                         .get("config")
                         .and_then(|v| v.as_str())
                         .unwrap_or("");
-                    let updated_config =
-                        Self::apply_codex_proxy_toml_config(config_str, &proxy_codex_base_url);
+                    let codex_provider = self
+                        .get_current_provider_for_app(&AppType::Codex)
+                        .ok()
+                        .flatten();
+                    let updated_config = Self::apply_codex_proxy_toml_config_for_provider(
+                        config_str,
+                        &proxy_codex_base_url,
+                        codex_provider.as_ref(),
+                    );
                     live_config["config"] = json!(updated_config);
 
                     let _ = self.write_codex_live(&live_config);
@@ -1748,6 +1811,9 @@ impl ProxyService {
             if matches!(app_type_enum, AppType::Claude) {
                 self.sync_claude_live_from_provider_while_proxy_active(&provider)
                     .await?;
+            } else if live_taken_over && matches!(app_type_enum, AppType::Codex) {
+                self.sync_codex_live_from_provider_while_proxy_active(&provider)
+                    .await?;
             }
         }
 
@@ -1854,10 +1920,35 @@ impl ProxyService {
 
     /// 接管 Codex 时，本地客户端必须继续以 Responses wire API 访问代理。
     /// 真实上游是否走 Chat Completions 由 provider 配置决定，并在代理内部转换。
-    fn apply_codex_proxy_toml_config(toml_str: &str, proxy_url: &str) -> String {
+    fn apply_codex_proxy_toml_config_for_provider(
+        toml_str: &str,
+        proxy_url: &str,
+        provider: Option<&Provider>,
+    ) -> String {
         let updated = Self::update_toml_base_url(toml_str, proxy_url);
-        crate::codex_config::update_codex_toml_field(&updated, "wire_api", "responses")
-            .unwrap_or(updated)
+        let mut updated =
+            crate::codex_config::update_codex_toml_field(&updated, "wire_api", "responses")
+                .unwrap_or(updated);
+
+        if provider
+            .map(crate::proxy::providers::codex_provider_uses_chat_completions)
+            .unwrap_or(false)
+        {
+            updated = crate::codex_config::update_codex_toml_field(
+                &updated,
+                "model",
+                crate::proxy::providers::CODEX_CHAT_CLIENT_MODEL,
+            )
+            .unwrap_or(updated);
+        } else if let Some(upstream_model) =
+            provider.and_then(crate::proxy::providers::codex_provider_upstream_model)
+        {
+            updated =
+                crate::codex_config::update_codex_toml_field(&updated, "model", &upstream_model)
+                    .unwrap_or(updated);
+        }
+
+        updated
     }
 
     fn read_claude_live(&self) -> Result<Value, String> {
@@ -2308,7 +2399,8 @@ wire_api = "chat"
 "#;
 
         let proxy_url = "http://127.0.0.1:5000/v1";
-        let output = ProxyService::apply_codex_proxy_toml_config(input, proxy_url);
+        let output =
+            ProxyService::apply_codex_proxy_toml_config_for_provider(input, proxy_url, None);
         let parsed: toml::Value =
             toml::from_str(&output).expect("updated config should be valid TOML");
 
@@ -2324,6 +2416,136 @@ wire_api = "chat"
         assert_eq!(
             provider.get("wire_api").and_then(|v| v.as_str()),
             Some("responses")
+        );
+    }
+
+    #[test]
+    fn apply_codex_proxy_toml_config_uses_safe_client_model_for_chat_provider() {
+        let input = r#"
+model_provider = "deepseek"
+model = "deepseek-v4-flash"
+
+[model_providers.deepseek]
+name = "DeepSeek"
+base_url = "https://api.deepseek.com/v1"
+wire_api = "responses"
+"#;
+        let mut provider = Provider::with_id(
+            "deepseek".to_string(),
+            "DeepSeek".to_string(),
+            json!({
+                "config": input
+            }),
+            None,
+        );
+        provider.meta = Some(ProviderMeta {
+            api_format: Some("openai_chat".to_string()),
+            ..Default::default()
+        });
+
+        let proxy_url = "http://127.0.0.1:5000/v1";
+        let output = ProxyService::apply_codex_proxy_toml_config_for_provider(
+            input,
+            proxy_url,
+            Some(&provider),
+        );
+        let parsed: toml::Value =
+            toml::from_str(&output).expect("updated config should be valid TOML");
+
+        assert_eq!(
+            parsed.get("model").and_then(|v| v.as_str()),
+            Some(crate::proxy::providers::CODEX_CHAT_CLIENT_MODEL)
+        );
+        assert_eq!(
+            parsed
+                .get("model_providers")
+                .and_then(|v| v.get("deepseek"))
+                .and_then(|v| v.get("base_url"))
+                .and_then(|v| v.as_str()),
+            Some(proxy_url)
+        );
+    }
+
+    #[test]
+    fn apply_codex_proxy_toml_config_preserves_model_for_responses_provider() {
+        let input = r#"
+model_provider = "responses"
+model = "upstream-responses-model"
+
+[model_providers.responses]
+name = "Responses"
+base_url = "https://responses.example/v1"
+wire_api = "responses"
+"#;
+        let mut provider = Provider::with_id(
+            "responses".to_string(),
+            "Responses".to_string(),
+            json!({
+                "config": input
+            }),
+            None,
+        );
+        provider.meta = Some(ProviderMeta {
+            api_format: Some("openai_responses".to_string()),
+            ..Default::default()
+        });
+
+        let output = ProxyService::apply_codex_proxy_toml_config_for_provider(
+            input,
+            "http://127.0.0.1:5000/v1",
+            Some(&provider),
+        );
+        let parsed: toml::Value =
+            toml::from_str(&output).expect("updated config should be valid TOML");
+
+        assert_eq!(
+            parsed.get("model").and_then(|v| v.as_str()),
+            Some("upstream-responses-model")
+        );
+    }
+
+    #[test]
+    fn apply_codex_proxy_toml_config_restores_upstream_model_for_responses_provider() {
+        let input = r#"
+model_provider = "responses"
+model = "gpt-5.4"
+
+[model_providers.responses]
+name = "Responses"
+base_url = "http://127.0.0.1:5000/v1"
+wire_api = "responses"
+"#;
+        let mut provider = Provider::with_id(
+            "responses".to_string(),
+            "Responses".to_string(),
+            json!({
+                "config": r#"model_provider = "responses"
+model = "upstream-responses-model"
+
+[model_providers.responses]
+name = "Responses"
+base_url = "https://responses.example/v1"
+wire_api = "responses"
+"#
+            }),
+            None,
+        );
+        provider.meta = Some(ProviderMeta {
+            api_format: Some("openai_responses".to_string()),
+            ..Default::default()
+        });
+
+        let output = ProxyService::apply_codex_proxy_toml_config_for_provider(
+            input,
+            "http://127.0.0.1:5000/v1",
+            Some(&provider),
+        );
+        let parsed: toml::Value =
+            toml::from_str(&output).expect("updated config should be valid TOML");
+
+        assert_eq!(
+            parsed.get("model").and_then(|v| v.as_str()),
+            Some("upstream-responses-model")
         );
     }
 
@@ -3182,6 +3404,117 @@ requires_openai_auth = true
                 .and_then(|v| v.as_str()),
             Some("aihubmix-key"),
             "restore should still use the hot-switched provider auth"
+        );
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn hot_switch_codex_chat_provider_uses_safe_model_without_changing_live_provider() {
+        let _home = TempHome::new();
+        crate::settings::reload_settings().expect("reload settings");
+
+        let db = Arc::new(Database::memory().expect("init db"));
+        let service = ProxyService::new(db.clone());
+
+        let provider_a = Provider::with_id(
+            "a".to_string(),
+            "Responses".to_string(),
+            json!({
+                "auth": {
+                    "OPENAI_API_KEY": "responses-key"
+                },
+                "config": r#"model_provider = "stable"
+model = "responses-model"
+
+[model_providers.stable]
+name = "Stable"
+base_url = "https://responses.example/v1"
+wire_api = "responses"
+requires_openai_auth = true
+"#
+            }),
+            None,
+        );
+        let mut provider_b = Provider::with_id(
+            "b".to_string(),
+            "DeepSeek".to_string(),
+            json!({
+                "auth": {
+                    "OPENAI_API_KEY": "deepseek-key"
+                },
+                "config": r#"model_provider = "deepseek"
+model = "deepseek-v4-flash"
+
+[model_providers.deepseek]
+name = "DeepSeek"
+base_url = "https://api.deepseek.com/v1"
+wire_api = "responses"
+requires_openai_auth = true
+"#
+            }),
+            None,
+        );
+        provider_b.meta = Some(ProviderMeta {
+            api_format: Some("openai_chat".to_string()),
+            ..Default::default()
+        });
+
+        db.save_provider("codex", &provider_a)
+            .expect("save provider a");
+        db.save_provider("codex", &provider_b)
+            .expect("save provider b");
+        db.set_current_provider("codex", "a")
+            .expect("set current provider");
+        crate::settings::set_current_provider(&AppType::Codex, Some("a"))
+            .expect("set local current provider");
+        db.save_live_backup(
+            "codex",
+            &serde_json::to_string(&provider_a.settings_config).expect("serialize provider a"),
+        )
+        .await
+        .expect("seed live backup");
+        service
+            .write_codex_live(&json!({
+                "auth": {
+                    "OPENAI_API_KEY": PROXY_TOKEN_PLACEHOLDER
+                },
+                "config": r#"model_provider = "stable"
+model = "responses-model"
+
+[model_providers.stable]
+name = "Stable"
+base_url = "http://127.0.0.1:15721/v1"
+wire_api = "responses"
+requires_openai_auth = true
+"#
+            }))
+            .expect("seed taken-over Codex live config");
+
+        service
+            .hot_switch_provider("codex", "b")
+            .await
+            .expect("hot switch Codex provider");
+
+        let live = service.read_codex_live().expect("read Codex live config");
+        let live_config = live
+            .get("config")
+            .and_then(|v| v.as_str())
+            .expect("live config string");
+        let parsed_live: toml::Value = toml::from_str(live_config).expect("parse live config");
+
+        assert_eq!(
+            parsed_live.get("model_provider").and_then(|v| v.as_str()),
+            Some("stable")
+        );
+        assert_eq!(
+            parsed_live.get("model").and_then(|v| v.as_str()),
+            Some(crate::proxy::providers::CODEX_CHAT_CLIENT_MODEL)
+        );
+        assert_eq!(
+            live.get("auth")
+                .and_then(|auth| auth.get("OPENAI_API_KEY"))
+                .and_then(|v| v.as_str()),
+            Some(PROXY_TOKEN_PLACEHOLDER)
         );
     }
 

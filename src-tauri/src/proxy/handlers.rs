@@ -16,7 +16,8 @@ use super::{
     },
     handler_context::RequestContext,
     providers::{
-        get_adapter, get_claude_api_format, streaming::create_anthropic_sse_stream,
+        codex_chat_history::record_responses_sse_stream, get_adapter, get_claude_api_format,
+        streaming::create_anthropic_sse_stream,
         streaming_codex_chat::create_responses_sse_stream_from_chat,
         streaming_gemini::create_anthropic_sse_stream_from_gemini,
         streaming_responses::create_anthropic_sse_stream_from_responses, transform,
@@ -701,6 +702,7 @@ async fn handle_codex_chat_to_responses_transform(
     if is_stream || response.is_sse() {
         let stream = response.bytes_stream();
         let sse_stream = create_responses_sse_stream_from_chat(stream);
+        let sse_stream = record_responses_sse_stream(sse_stream, state.codex_chat_history.clone());
 
         let usage_collector = if usage_logging_enabled(state) {
             let state = state.clone();
@@ -786,6 +788,10 @@ async fn handle_codex_chat_to_responses_transform(
             log::error!("[Codex] Chat → Responses 响应转换失败: {e}");
             e
         })?;
+    state
+        .codex_chat_history
+        .record_response(&responses_response)
+        .await;
 
     if let Some(usage) = TokenUsage::from_codex_response_auto(&responses_response) {
         let model = responses_response

@@ -4,6 +4,10 @@
 //! Responses API, while the selected upstream provider only exposes an
 //! OpenAI-compatible Chat Completions endpoint.
 
+use super::codex_chat_common::{
+    append_reasoning_content, extract_reasoning_field_text, extract_reasoning_summary_text,
+    response_function_call_item, split_leading_think_block,
+};
 use crate::proxy::{error::ProxyError, json_canonical::canonical_json_string};
 use serde_json::{json, Value};
 
@@ -23,9 +27,6 @@ const EXTRA_CHAT_PASSTHROUGH_FIELDS: &[&str] = &[
     "top_logprobs",
     "user",
 ];
-const THINK_OPEN_TAG: &str = "<think>";
-const THINK_CLOSE_TAG: &str = "</think>";
-
 /// Convert an OpenAI Responses request into an OpenAI Chat Completions request.
 pub fn responses_to_chat_completions(body: Value) -> Result<Value, ProxyError> {
     let mut result = json!({});
@@ -122,6 +123,8 @@ fn append_responses_input_as_chat_messages(
     messages: &mut Vec<Value>,
 ) -> Result<(), ProxyError> {
     let mut pending_tool_calls = Vec::new();
+    let mut pending_reasoning: Option<String> = None;
+    let mut last_assistant_index: Option<usize> = None;
 
     match input {
         Value::String(text) => {
@@ -132,16 +135,33 @@ fn append_responses_input_as_chat_messages(
         }
         Value::Array(items) => {
             for item in items {
-                append_responses_item_as_chat_message(item, messages, &mut pending_tool_calls)?;
+                append_responses_item_as_chat_message(
+                    item,
+                    messages,
+                    &mut pending_tool_calls,
+                    &mut pending_reasoning,
+                    &mut last_assistant_index,
+                )?;
             }
         }
         Value::Object(_) => {
-            append_responses_item_as_chat_message(input, messages, &mut pending_tool_calls)?;
+            append_responses_item_as_chat_message(
+                input,
+                messages,
+                &mut pending_tool_calls,
+                &mut pending_reasoning,
+                &mut last_assistant_index,
+            )?;
         }
         _ => {}
     }
 
-    flush_pending_tool_calls(messages, &mut pending_tool_calls);
+    flush_pending_tool_calls(
+        messages,
+        &mut pending_tool_calls,
+        &mut pending_reasoning,
+        &mut last_assistant_index,
+    );
     Ok(())
 }
 
@@ -149,14 +169,22 @@ fn append_responses_item_as_chat_message(
     item: &Value,
     messages: &mut Vec<Value>,
     pending_tool_calls: &mut Vec<Value>,
+    pending_reasoning: &mut Option<String>,
+    last_assistant_index: &mut Option<usize>,
 ) -> Result<(), ProxyError> {
     let item_type = item.get("type").and_then(|v| v.as_str());
     match item_type {
         Some("function_call") => {
+            append_unique_pending_reasoning(pending_reasoning, responses_item_reasoning_text(item));
             pending_tool_calls.push(responses_function_call_to_chat_tool_call(item));
         }
         Some("function_call_output") => {
-            flush_pending_tool_calls(messages, pending_tool_calls);
+            flush_pending_tool_calls(
+                messages,
+                pending_tool_calls,
+                pending_reasoning,
+                last_assistant_index,
+            );
             let call_id = item.get("call_id").and_then(|v| v.as_str()).unwrap_or("");
             let output = match item.get("output") {
                 Some(Value::String(s)) => s.clone(),
@@ -170,19 +198,37 @@ fn append_responses_item_as_chat_message(
             }));
         }
         Some("reasoning") => {
-            // Reasoning items are Responses-specific context. Chat-only providers
-            // cannot consume encrypted reasoning state, so omit it.
+            let reasoning = responses_reasoning_item_text(item);
+            let attached_to_previous = pending_tool_calls.is_empty()
+                && attach_reasoning_to_last_assistant(messages, *last_assistant_index, &reasoning);
+            if !attached_to_previous {
+                append_pending_reasoning(pending_reasoning, reasoning);
+            }
         }
         Some("message") | None => {
-            flush_pending_tool_calls(messages, pending_tool_calls);
+            flush_pending_tool_calls(
+                messages,
+                pending_tool_calls,
+                pending_reasoning,
+                last_assistant_index,
+            );
             if item.get("role").is_some() || item.get("content").is_some() {
-                messages.push(responses_message_item_to_chat_message(item));
+                let message = responses_message_item_to_chat_message(item, pending_reasoning);
+                update_last_assistant_index(messages, &message, last_assistant_index);
+                messages.push(message);
             }
         }
         _ => {
-            flush_pending_tool_calls(messages, pending_tool_calls);
+            flush_pending_tool_calls(
+                messages,
+                pending_tool_calls,
+                pending_reasoning,
+                last_assistant_index,
+            );
             if item.get("role").is_some() || item.get("content").is_some() {
-                messages.push(responses_message_item_to_chat_message(item));
+                let message = responses_message_item_to_chat_message(item, pending_reasoning);
+                update_last_assistant_index(messages, &message, last_assistant_index);
+                messages.push(message);
             }
         }
     }
@@ -190,29 +236,178 @@ fn append_responses_item_as_chat_message(
     Ok(())
 }
 
-fn flush_pending_tool_calls(messages: &mut Vec<Value>, pending_tool_calls: &mut Vec<Value>) {
+fn flush_pending_tool_calls(
+    messages: &mut Vec<Value>,
+    pending_tool_calls: &mut Vec<Value>,
+    pending_reasoning: &mut Option<String>,
+    last_assistant_index: &mut Option<usize>,
+) {
     if pending_tool_calls.is_empty() {
         return;
     }
 
-    messages.push(json!({
+    let mut message = json!({
         "role": "assistant",
         "content": null,
         "tool_calls": std::mem::take(pending_tool_calls)
-    }));
+    });
+    attach_pending_reasoning_to_assistant(&mut message, pending_reasoning);
+    *last_assistant_index = Some(messages.len());
+    messages.push(message);
 }
 
-fn responses_message_item_to_chat_message(item: &Value) -> Value {
+fn responses_message_item_to_chat_message(
+    item: &Value,
+    pending_reasoning: &mut Option<String>,
+) -> Value {
     let role = item.get("role").and_then(|v| v.as_str()).unwrap_or("user");
+    let chat_role = responses_role_to_chat_role(role);
     let content = item
         .get("content")
-        .map(|value| responses_content_to_chat_content(role, value))
+        .map(|value| responses_content_to_chat_content(chat_role, value))
         .unwrap_or(Value::Null);
 
-    json!({
-        "role": role,
+    let mut message = json!({
+        "role": chat_role,
         "content": content
-    })
+    });
+
+    if chat_role == "assistant" {
+        append_pending_reasoning(pending_reasoning, responses_message_reasoning_text(item));
+        attach_pending_reasoning_to_assistant(&mut message, pending_reasoning);
+    } else if pending_reasoning.is_some() {
+        pending_reasoning.take();
+    }
+
+    message
+}
+
+fn responses_role_to_chat_role(role: &str) -> &'static str {
+    match role {
+        "system" | "developer" => "system",
+        "assistant" => "assistant",
+        "tool" => "tool",
+        "user" | "latest_reminder" => "user",
+        _ => "user",
+    }
+}
+
+fn update_last_assistant_index(
+    messages: &[Value],
+    message: &Value,
+    last_assistant_index: &mut Option<usize>,
+) {
+    match message.get("role").and_then(|v| v.as_str()) {
+        Some("assistant") => {
+            *last_assistant_index = Some(messages.len());
+        }
+        Some("tool") => {}
+        _ => {
+            *last_assistant_index = None;
+        }
+    }
+}
+
+fn append_pending_reasoning(pending_reasoning: &mut Option<String>, reasoning: Option<String>) {
+    let Some(reasoning) = reasoning else {
+        return;
+    };
+    let reasoning = reasoning.trim();
+    if reasoning.is_empty() {
+        return;
+    }
+
+    match pending_reasoning {
+        Some(existing) if !existing.is_empty() => {
+            existing.push_str("\n\n");
+            existing.push_str(reasoning);
+        }
+        _ => {
+            *pending_reasoning = Some(reasoning.to_string());
+        }
+    }
+}
+
+fn append_unique_pending_reasoning(
+    pending_reasoning: &mut Option<String>,
+    reasoning: Option<String>,
+) {
+    let Some(reasoning) = reasoning else {
+        return;
+    };
+    let reasoning = reasoning.trim();
+    if reasoning.is_empty() {
+        return;
+    }
+
+    match pending_reasoning {
+        Some(existing) if existing.contains(reasoning) => {}
+        Some(existing) if !existing.is_empty() => {
+            existing.push_str("\n\n");
+            existing.push_str(reasoning);
+        }
+        _ => {
+            *pending_reasoning = Some(reasoning.to_string());
+        }
+    }
+}
+
+fn attach_pending_reasoning_to_assistant(
+    message: &mut Value,
+    pending_reasoning: &mut Option<String>,
+) {
+    let Some(reasoning) = pending_reasoning.take() else {
+        return;
+    };
+    if reasoning.trim().is_empty() {
+        return;
+    }
+
+    if let Some(obj) = message.as_object_mut() {
+        append_reasoning_content(obj, &reasoning);
+    }
+}
+
+fn attach_reasoning_to_last_assistant(
+    messages: &mut [Value],
+    last_assistant_index: Option<usize>,
+    reasoning: &Option<String>,
+) -> bool {
+    let Some(reasoning) = reasoning
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    else {
+        return true;
+    };
+    let Some(index) = last_assistant_index else {
+        return false;
+    };
+    let Some(message) = messages.get_mut(index) else {
+        return false;
+    };
+    if message.get("role").and_then(|v| v.as_str()) != Some("assistant") {
+        return false;
+    }
+
+    if let Some(obj) = message.as_object_mut() {
+        append_reasoning_content(obj, reasoning);
+        return true;
+    }
+
+    false
+}
+
+fn responses_message_reasoning_text(item: &Value) -> Option<String> {
+    responses_item_reasoning_text(item)
+}
+
+fn responses_item_reasoning_text(item: &Value) -> Option<String> {
+    extract_reasoning_field_text(item)
+}
+
+fn responses_reasoning_item_text(item: &Value) -> Option<String> {
+    extract_reasoning_summary_text(item)
 }
 
 fn responses_content_to_chat_content(_role: &str, content: &Value) -> Value {
@@ -372,14 +567,20 @@ pub fn chat_completion_to_response(body: Value) -> Result<Value, ProxyError> {
     let created_at = body.get("created").and_then(|v| v.as_u64()).unwrap_or(0);
     let finish_reason = choice.get("finish_reason").and_then(|v| v.as_str());
 
+    let reasoning = chat_reasoning_text(message);
     let mut output = Vec::new();
-    if let Some(reasoning_item) = chat_reasoning_to_response_output_item(message, &response_id) {
+    if let Some(reasoning_item) =
+        chat_reasoning_to_response_output_item(reasoning.as_deref(), &response_id)
+    {
         output.push(reasoning_item);
     }
     if let Some(message_item) = chat_message_to_response_output_item(message, &response_id) {
         output.push(message_item);
     }
-    output.extend(chat_tool_calls_to_response_output_items(message));
+    output.extend(chat_tool_calls_to_response_output_items(
+        message,
+        reasoning.as_deref(),
+    ));
 
     let mut response = json!({
         "id": response_id,
@@ -398,8 +599,11 @@ pub fn chat_completion_to_response(body: Value) -> Result<Value, ProxyError> {
     Ok(response)
 }
 
-fn chat_reasoning_to_response_output_item(message: &Value, response_id: &str) -> Option<Value> {
-    let reasoning = chat_reasoning_text(message)?;
+fn chat_reasoning_to_response_output_item(
+    reasoning: Option<&str>,
+    response_id: &str,
+) -> Option<Value> {
+    let reasoning = reasoning?;
     if reasoning.is_empty() {
         return None;
     }
@@ -415,22 +619,8 @@ fn chat_reasoning_to_response_output_item(message: &Value, response_id: &str) ->
 }
 
 fn chat_reasoning_text(message: &Value) -> Option<String> {
-    for key in ["reasoning_content", "reasoning"] {
-        if let Some(text) = message.get(key).and_then(|v| v.as_str()) {
-            if !text.is_empty() {
-                return Some(text.to_string());
-            }
-        }
-    }
-
-    if let Some(reasoning) = message.get("reasoning") {
-        for key in ["content", "text", "summary"] {
-            if let Some(text) = reasoning.get(key).and_then(|v| v.as_str()) {
-                if !text.is_empty() {
-                    return Some(text.to_string());
-                }
-            }
-        }
+    if let Some(reasoning) = extract_reasoning_field_text(message) {
+        return Some(reasoning);
     }
 
     if let Some(content) = message.get("content").and_then(|v| v.as_str()) {
@@ -510,51 +700,31 @@ fn chat_message_to_response_output_item(message: &Value, response_id: &str) -> O
     }))
 }
 
-pub(crate) fn split_leading_think_block(text: &str) -> Option<(String, String)> {
-    let leading_ws_len = text.len() - text.trim_start().len();
-    let after_ws = &text[leading_ws_len..];
-    if !after_ws.starts_with(THINK_OPEN_TAG) {
-        return None;
-    }
-
-    let body_start = leading_ws_len + THINK_OPEN_TAG.len();
-    let close_relative = text[body_start..].find(THINK_CLOSE_TAG)?;
-    let close_start = body_start + close_relative;
-    let answer_start = close_start + THINK_CLOSE_TAG.len();
-
-    Some((
-        text[body_start..close_start].trim().to_string(),
-        strip_think_answer_separator(&text[answer_start..]).to_string(),
-    ))
-}
-
-pub(crate) fn strip_leading_think_open_tag(text: &str) -> Option<String> {
-    let leading_ws_len = text.len() - text.trim_start().len();
-    let after_ws = &text[leading_ws_len..];
-    after_ws
-        .strip_prefix(THINK_OPEN_TAG)
-        .map(|value| value.trim().to_string())
-}
-
-fn strip_think_answer_separator(text: &str) -> &str {
-    text.trim_start_matches(['\r', '\n', '\t', ' '])
-}
-
-fn chat_tool_calls_to_response_output_items(message: &Value) -> Vec<Value> {
+fn chat_tool_calls_to_response_output_items(
+    message: &Value,
+    reasoning: Option<&str>,
+) -> Vec<Value> {
     let mut output = Vec::new();
 
     if let Some(tool_calls) = message.get("tool_calls").and_then(|v| v.as_array()) {
         for (index, tool_call) in tool_calls.iter().enumerate() {
-            output.push(chat_tool_call_to_response_item(tool_call, index));
+            output.push(chat_tool_call_to_response_item(tool_call, index, reasoning));
         }
     } else if let Some(function_call) = message.get("function_call") {
-        output.push(chat_legacy_function_call_to_response_item(function_call));
+        output.push(chat_legacy_function_call_to_response_item(
+            function_call,
+            reasoning,
+        ));
     }
 
     output
 }
 
-fn chat_tool_call_to_response_item(tool_call: &Value, index: usize) -> Value {
+fn chat_tool_call_to_response_item(
+    tool_call: &Value,
+    index: usize,
+    reasoning: Option<&str>,
+) -> Value {
     let call_id = tool_call
         .get("id")
         .and_then(|v| v.as_str())
@@ -569,17 +739,14 @@ fn chat_tool_call_to_response_item(tool_call: &Value, index: usize) -> Value {
         None => "{}".to_string(),
     };
 
-    json!({
-        "id": format!("fc_{call_id}"),
-        "type": "function_call",
-        "status": "completed",
-        "call_id": call_id,
-        "name": name,
-        "arguments": arguments
-    })
+    let item_id = format!("fc_{call_id}");
+    response_function_call_item(&item_id, "completed", &call_id, name, &arguments, reasoning)
 }
 
-fn chat_legacy_function_call_to_response_item(function_call: &Value) -> Value {
+fn chat_legacy_function_call_to_response_item(
+    function_call: &Value,
+    reasoning: Option<&str>,
+) -> Value {
     let call_id = function_call
         .get("id")
         .and_then(|v| v.as_str())
@@ -595,14 +762,8 @@ fn chat_legacy_function_call_to_response_item(function_call: &Value) -> Value {
         None => "{}".to_string(),
     };
 
-    json!({
-        "id": format!("fc_{call_id}"),
-        "type": "function_call",
-        "status": "completed",
-        "call_id": call_id,
-        "name": name,
-        "arguments": arguments
-    })
+    let item_id = format!("fc_{call_id}");
+    response_function_call_item(&item_id, "completed", call_id, name, &arguments, reasoning)
 }
 
 pub(crate) fn chat_usage_to_responses_usage(usage: Option<&Value>) -> Value {
@@ -735,6 +896,236 @@ mod tests {
     }
 
     #[test]
+    fn responses_request_to_chat_normalizes_codex_internal_roles() {
+        let input = json!({
+            "model": "gpt-5.4",
+            "input": [
+                {
+                    "type": "message",
+                    "role": "developer",
+                    "content": [
+                        {"type": "input_text", "text": "Follow project instructions."}
+                    ]
+                },
+                {
+                    "type": "message",
+                    "role": "latest_reminder",
+                    "content": "Keep the reply brief."
+                },
+                {
+                    "type": "message",
+                    "role": "unknown_codex_role",
+                    "content": "Fallback content."
+                }
+            ]
+        });
+
+        let result = responses_to_chat_completions(input).unwrap();
+        let messages = result["messages"].as_array().unwrap();
+
+        assert_eq!(messages[0]["role"], "system");
+        assert_eq!(messages[0]["content"], "Follow project instructions.");
+        assert_eq!(messages[1]["role"], "user");
+        assert_eq!(messages[1]["content"], "Keep the reply brief.");
+        assert_eq!(messages[2]["role"], "user");
+        assert_eq!(messages[2]["content"], "Fallback content.");
+    }
+
+    #[test]
+    fn responses_request_to_chat_passes_reasoning_content_back_to_assistant_message() {
+        let input = json!({
+            "model": "gpt-5.4",
+            "input": [
+                {
+                    "type": "reasoning",
+                    "summary": [
+                        {"type": "summary_text", "text": "Need to inspect the repo."}
+                    ]
+                },
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [
+                        {"type": "output_text", "text": "I will check the files."}
+                    ]
+                },
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": "Continue"
+                }
+            ]
+        });
+
+        let result = responses_to_chat_completions(input).unwrap();
+        let messages = result["messages"].as_array().unwrap();
+
+        assert_eq!(messages[0]["role"], "assistant");
+        assert_eq!(messages[0]["content"], "I will check the files.");
+        assert_eq!(
+            messages[0]["reasoning_content"],
+            "Need to inspect the repo."
+        );
+        assert_eq!(messages[1]["role"], "user");
+        assert!(messages[1].get("reasoning_content").is_none());
+    }
+
+    #[test]
+    fn responses_request_to_chat_attaches_trailing_reasoning_to_previous_assistant() {
+        let input = json!({
+            "model": "gpt-5.4",
+            "input": [
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": "I checked the files."
+                },
+                {
+                    "type": "reasoning",
+                    "summary": [
+                        {"type": "summary_text", "text": "The answer came from README."}
+                    ]
+                },
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": "Continue"
+                }
+            ]
+        });
+
+        let result = responses_to_chat_completions(input).unwrap();
+        let messages = result["messages"].as_array().unwrap();
+
+        assert_eq!(messages[0]["role"], "assistant");
+        assert_eq!(messages[0]["content"], "I checked the files.");
+        assert_eq!(
+            messages[0]["reasoning_content"],
+            "The answer came from README."
+        );
+        assert_eq!(messages[1]["role"], "user");
+        assert!(messages[1].get("reasoning_content").is_none());
+    }
+
+    #[test]
+    fn responses_request_to_chat_keeps_embedded_assistant_reasoning() {
+        let input = json!({
+            "model": "gpt-5.4",
+            "input": [
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "reasoning_content": "I need to preserve thinking history.",
+                    "content": "Done."
+                }
+            ]
+        });
+
+        let result = responses_to_chat_completions(input).unwrap();
+        let messages = result["messages"].as_array().unwrap();
+
+        assert_eq!(messages[0]["role"], "assistant");
+        assert_eq!(messages[0]["content"], "Done.");
+        assert_eq!(
+            messages[0]["reasoning_content"],
+            "I need to preserve thinking history."
+        );
+    }
+
+    #[test]
+    fn responses_request_to_chat_attaches_reasoning_to_tool_call_message() {
+        let input = json!({
+            "model": "gpt-5.4",
+            "input": [
+                {
+                    "type": "reasoning",
+                    "summary": "Need to read a file."
+                },
+                {
+                    "type": "function_call",
+                    "call_id": "call_1",
+                    "name": "read_file",
+                    "arguments": "{\"path\":\"README.md\"}"
+                },
+                {
+                    "type": "function_call_output",
+                    "call_id": "call_1",
+                    "output": "Readme content"
+                }
+            ]
+        });
+
+        let result = responses_to_chat_completions(input).unwrap();
+        let messages = result["messages"].as_array().unwrap();
+
+        assert_eq!(messages[0]["role"], "assistant");
+        assert_eq!(messages[0]["reasoning_content"], "Need to read a file.");
+        assert_eq!(messages[0]["tool_calls"][0]["id"], "call_1");
+        assert_eq!(messages[1]["role"], "tool");
+    }
+
+    #[test]
+    fn responses_request_to_chat_recovers_reasoning_from_function_call_item() {
+        let input = json!({
+            "model": "gpt-5.4",
+            "input": [
+                {
+                    "type": "function_call",
+                    "call_id": "call_1",
+                    "name": "read_file",
+                    "arguments": "{\"path\":\"README.md\"}",
+                    "reasoning_content": "Need to read a file."
+                },
+                {
+                    "type": "function_call_output",
+                    "call_id": "call_1",
+                    "output": "Readme content"
+                }
+            ]
+        });
+
+        let result = responses_to_chat_completions(input).unwrap();
+        let messages = result["messages"].as_array().unwrap();
+
+        assert_eq!(messages[0]["role"], "assistant");
+        assert_eq!(messages[0]["tool_calls"][0]["id"], "call_1");
+        assert_eq!(messages[0]["reasoning_content"], "Need to read a file.");
+        assert_eq!(messages[1]["role"], "tool");
+    }
+
+    #[test]
+    fn responses_request_to_chat_attaches_trailing_reasoning_to_tool_call_message() {
+        let input = json!({
+            "model": "gpt-5.4",
+            "input": [
+                {
+                    "type": "function_call",
+                    "call_id": "call_1",
+                    "name": "read_file",
+                    "arguments": "{\"path\":\"README.md\"}"
+                },
+                {
+                    "type": "function_call_output",
+                    "call_id": "call_1",
+                    "output": "Readme content"
+                },
+                {
+                    "type": "reasoning",
+                    "summary": "Need to read a file."
+                }
+            ]
+        });
+
+        let result = responses_to_chat_completions(input).unwrap();
+        let messages = result["messages"].as_array().unwrap();
+
+        assert_eq!(messages[0]["role"], "assistant");
+        assert_eq!(messages[0]["tool_calls"][0]["id"], "call_1");
+        assert_eq!(messages[0]["reasoning_content"], "Need to read a file.");
+        assert_eq!(messages[1]["role"], "tool");
+    }
+
+    #[test]
     fn responses_request_to_chat_keeps_multiple_tool_calls_adjacent_to_outputs() {
         let input = json!({
             "model": "gpt-5.4",
@@ -827,6 +1218,10 @@ mod tests {
         assert_eq!(result["output"][1]["content"][0]["text"], "Let me check.");
         assert_eq!(result["output"][2]["type"], "function_call");
         assert_eq!(result["output"][2]["call_id"], "call_1");
+        assert_eq!(
+            result["output"][2]["reasoning_content"],
+            "I should check the weather before answering."
+        );
         assert_eq!(result["usage"]["input_tokens"], 10);
         assert_eq!(result["usage"]["output_tokens"], 5);
         assert_eq!(result["usage"]["input_tokens_details"]["cached_tokens"], 3);

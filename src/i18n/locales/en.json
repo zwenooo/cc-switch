@@ -1080,6 +1080,8 @@
     "saveFailed": "Save failed: {{error}}",
     "modelNameHint": "Specify the model to use, will be auto-updated in config.toml",
     "modelName": "Model Name",
+    "upstreamModelName": "Upstream Model Name",
+    "upstreamModelNameHint": "For Chat format, enter the real upstream model here; takeover writes a Codex-compatible local model and routing maps it back to this model.",
     "modelNamePlaceholder": "e.g., gpt-5-codex",
     "contextWindow1M": "1M Context Window",
     "autoCompactLimit": "Auto Compact Limit",

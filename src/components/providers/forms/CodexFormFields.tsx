@@ -90,6 +90,7 @@ export function CodexFormFields({
 
   const [fetchedModels, setFetchedModels] = useState<FetchedModel[]>([]);
   const [isFetchingModels, setIsFetchingModels] = useState(false);
+  const isChatApiFormat = apiFormat === "openai_chat";
 
   const handleFetchModels = useCallback(() => {
     if (!codexBaseUrl || !codexApiKey) {
@@ -202,7 +203,11 @@ export function CodexFormFields({
               htmlFor="codexModelName"
               className="block text-sm font-medium text-foreground"
             >
-              {t("codexConfig.modelName", { defaultValue: "模型名称" })}
+              {isChatApiFormat
+                ? t("codexConfig.upstreamModelName", {
+                    defaultValue: "上游模型名称",
+                  })
+                : t("codexConfig.modelName", { defaultValue: "模型名称" })}
             </label>
             <Button
               type="button"
@@ -231,13 +236,18 @@ export function CodexFormFields({
             isLoading={isFetchingModels}
           />
           <p className="text-xs text-muted-foreground">
-            {modelName.trim()
-              ? t("codexConfig.modelNameHint", {
-                  defaultValue: "指定使用的模型，将自动更新到 config.toml 中",
+            {isChatApiFormat
+              ? t("codexConfig.upstreamModelNameHint", {
+                  defaultValue:
+                    "Chat 格式下这里填写真实上游模型；接管时 Codex 本地会使用兼容模型，并由路由映射回该模型。",
                 })
-              : t("providerForm.modelHint", {
-                  defaultValue: "💡 留空将使用供应商的默认模型",
-                })}
+              : modelName.trim()
+                ? t("codexConfig.modelNameHint", {
+                    defaultValue: "指定使用的模型，将自动更新到 config.toml 中",
+                  })
+                : t("providerForm.modelHint", {
+                    defaultValue: "💡 留空将使用供应商的默认模型",
+                  })}
           </p>
         </div>
       )}

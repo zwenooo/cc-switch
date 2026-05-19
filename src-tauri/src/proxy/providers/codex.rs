@@ -9,6 +9,7 @@ use super::{AuthInfo, AuthStrategy, ProviderAdapter};
 use crate::provider::Provider;
 use crate::proxy::error::ProxyError;
 use regex::Regex;
+use serde_json::Value as JsonValue;
 use std::sync::LazyLock;
 use toml::Value as TomlValue;
 
@@ -19,6 +20,13 @@ static CODEX_CLIENT_REGEX: LazyLock<Regex> =
 
 /// Codex 适配器
 pub struct CodexAdapter;
+
+/// Local model written into Codex config.toml for Chat-only upstreams.
+///
+/// Codex itself must see a model it can load metadata for; the real provider
+/// model is restored inside the proxy immediately before Chat Completions
+/// conversion.
+pub const CODEX_CHAT_CLIENT_MODEL: &str = "gpt-5.4";
 
 /// Whether this Codex provider's real upstream should be called through
 /// OpenAI Chat Completions, even if the local Codex client is talking to CC
@@ -82,6 +90,39 @@ pub fn should_convert_codex_responses_to_chat(provider: &Provider, endpoint: &st
     ) && codex_provider_uses_chat_completions(provider)
 }
 
+/// Extract the real upstream model configured for a Codex provider.
+pub fn codex_provider_upstream_model(provider: &Provider) -> Option<String> {
+    provider
+        .settings_config
+        .get("model")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|model| !model.is_empty())
+        .map(ToString::to_string)
+        .or_else(|| {
+            provider
+                .settings_config
+                .get("config")
+                .and_then(|v| v.as_str())
+                .and_then(extract_codex_model_from_toml)
+        })
+}
+
+/// For Codex Chat providers, replace the local Codex-safe model with the real
+/// upstream model before converting the request to Chat Completions.
+pub fn apply_codex_chat_upstream_model(
+    provider: &Provider,
+    body: &mut JsonValue,
+) -> Option<String> {
+    if !codex_provider_uses_chat_completions(provider) {
+        return None;
+    }
+
+    let upstream_model = codex_provider_upstream_model(provider)?;
+    body["model"] = JsonValue::String(upstream_model.clone());
+    Some(upstream_model)
+}
+
 fn is_chat_wire_api(value: &str) -> bool {
     matches!(
         value.trim().to_ascii_lowercase().as_str(),
@@ -117,6 +158,16 @@ fn extract_codex_wire_api_from_toml(config_text: &str) -> Option<String> {
 
     doc.get("wire_api")
         .and_then(|v| v.as_str())
+        .map(ToString::to_string)
+}
+
+fn extract_codex_model_from_toml(config_text: &str) -> Option<String> {
+    let doc = config_text.parse::<TomlValue>().ok()?;
+
+    doc.get("model")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|model| !model.is_empty())
         .map(ToString::to_string)
 }
 
@@ -480,5 +531,52 @@ wire_api = "chat"
             &provider,
             "/responses/compact?stream=true"
         ));
+    }
+
+    #[test]
+    fn test_codex_provider_uses_chat_completions_from_meta_api_format_for_responses() {
+        let mut provider = create_provider(json!({
+            "base_url": "https://api.deepseek.com/v1"
+        }));
+        provider.meta = Some(crate::provider::ProviderMeta {
+            api_format: Some("openai_chat".to_string()),
+            ..Default::default()
+        });
+
+        assert!(should_convert_codex_responses_to_chat(
+            &provider,
+            "/v1/responses"
+        ));
+    }
+
+    #[test]
+    fn test_apply_codex_chat_upstream_model_uses_provider_config_model() {
+        let mut provider = create_provider(json!({
+            "config": r#"
+model_provider = "deepseek"
+model = "deepseek-v4-flash"
+
+[model_providers.deepseek]
+name = "DeepSeek"
+base_url = "https://api.deepseek.com/v1"
+wire_api = "responses"
+"#
+        }));
+        provider.meta = Some(crate::provider::ProviderMeta {
+            api_format: Some("openai_chat".to_string()),
+            ..Default::default()
+        });
+        let mut body = json!({
+            "model": CODEX_CHAT_CLIENT_MODEL,
+            "input": "ping"
+        });
+
+        let upstream_model = apply_codex_chat_upstream_model(&provider, &mut body);
+
+        assert_eq!(upstream_model.as_deref(), Some("deepseek-v4-flash"));
+        assert_eq!(
+            body.get("model").and_then(|v| v.as_str()),
+            Some("deepseek-v4-flash")
+        );
     }
 }
