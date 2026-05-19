@@ -8,7 +8,10 @@ use super::codex_chat_common::{
     append_reasoning_content, extract_reasoning_field_text, extract_reasoning_summary_text,
     response_function_call_item, split_leading_think_block,
 };
-use crate::proxy::{error::ProxyError, json_canonical::canonical_json_string};
+use crate::proxy::{
+    error::ProxyError,
+    json_canonical::{canonical_json_string, canonicalize_json_string_if_parseable},
+};
 use serde_json::{json, Value};
 
 const EXTRA_CHAT_PASSTHROUGH_FIELDS: &[&str] = &[
@@ -187,7 +190,7 @@ fn append_responses_item_as_chat_message(
             );
             let call_id = item.get("call_id").and_then(|v| v.as_str()).unwrap_or("");
             let output = match item.get("output") {
-                Some(Value::String(s)) => s.clone(),
+                Some(Value::String(s)) => canonicalize_json_string_if_parseable(s),
                 Some(v) => canonical_json_string(v),
                 None => String::new(),
             };
@@ -484,7 +487,7 @@ fn responses_function_call_to_chat_tool_call(item: &Value) -> Value {
         .unwrap_or("");
     let name = item.get("name").and_then(|v| v.as_str()).unwrap_or("");
     let arguments = match item.get("arguments") {
-        Some(Value::String(s)) => s.clone(),
+        Some(Value::String(s)) => canonicalize_json_string_if_parseable(s),
         Some(v) => canonical_json_string(v),
         None => "{}".to_string(),
     };
@@ -734,7 +737,7 @@ fn chat_tool_call_to_response_item(
     let function = tool_call.get("function").unwrap_or(&Value::Null);
     let name = function.get("name").and_then(|v| v.as_str()).unwrap_or("");
     let arguments = match function.get("arguments") {
-        Some(Value::String(s)) => s.clone(),
+        Some(Value::String(s)) => canonicalize_json_string_if_parseable(s),
         Some(v) => canonical_json_string(v),
         None => "{}".to_string(),
     };
@@ -757,7 +760,7 @@ fn chat_legacy_function_call_to_response_item(
         .and_then(|v| v.as_str())
         .unwrap_or("");
     let arguments = match function_call.get("arguments") {
-        Some(Value::String(s)) => s.clone(),
+        Some(Value::String(s)) => canonicalize_json_string_if_parseable(s),
         Some(v) => canonical_json_string(v),
         None => "{}".to_string(),
     };
@@ -1175,6 +1178,64 @@ mod tests {
     }
 
     #[test]
+    fn responses_request_to_chat_canonicalizes_json_string_tool_payloads() {
+        let input = json!({
+            "model": "gpt-5.4",
+            "input": [
+                {
+                    "type": "function_call",
+                    "call_id": "call_1",
+                    "name": "lookup",
+                    "arguments": "{ \"b\": 2, \"a\": 1 }"
+                },
+                {
+                    "type": "function_call_output",
+                    "call_id": "call_1",
+                    "output": "{ \"z\": true, \"a\": [2, 1] }"
+                }
+            ]
+        });
+
+        let result = responses_to_chat_completions(input).unwrap();
+        let messages = result["messages"].as_array().unwrap();
+
+        assert_eq!(
+            messages[0]["tool_calls"][0]["function"]["arguments"],
+            r#"{"a":1,"b":2}"#
+        );
+        assert_eq!(messages[1]["content"], r#"{"a":[2,1],"z":true}"#);
+    }
+
+    #[test]
+    fn responses_request_to_chat_preserves_plain_text_tool_output() {
+        let input = json!({
+            "model": "gpt-5.4",
+            "input": [
+                {
+                    "type": "function_call",
+                    "call_id": "call_1",
+                    "name": "read_file",
+                    "arguments": "not json"
+                },
+                {
+                    "type": "function_call_output",
+                    "call_id": "call_1",
+                    "output": "plain text result"
+                }
+            ]
+        });
+
+        let result = responses_to_chat_completions(input).unwrap();
+        let messages = result["messages"].as_array().unwrap();
+
+        assert_eq!(
+            messages[0]["tool_calls"][0]["function"]["arguments"],
+            "not json"
+        );
+        assert_eq!(messages[1]["content"], "plain text result");
+    }
+
+    #[test]
     fn chat_response_to_responses_maps_text_tool_calls_and_usage() {
         let input = json!({
             "id": "chatcmpl_1",
@@ -1225,6 +1286,35 @@ mod tests {
         assert_eq!(result["usage"]["input_tokens"], 10);
         assert_eq!(result["usage"]["output_tokens"], 5);
         assert_eq!(result["usage"]["input_tokens_details"]["cached_tokens"], 3);
+    }
+
+    #[test]
+    fn chat_response_to_responses_canonicalizes_json_string_tool_arguments() {
+        let input = json!({
+            "id": "chatcmpl_args",
+            "object": "chat.completion",
+            "created": 123,
+            "model": "gpt-5.4",
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "tool_calls": [{
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {
+                            "name": "lookup",
+                            "arguments": "{ \"b\": 2, \"a\": 1 }"
+                        }
+                    }]
+                },
+                "finish_reason": "tool_calls"
+            }]
+        });
+
+        let result = chat_completion_to_response(input).unwrap();
+
+        assert_eq!(result["output"][0]["type"], "function_call");
+        assert_eq!(result["output"][0]["arguments"], r#"{"a":1,"b":2}"#);
     }
 
     #[test]

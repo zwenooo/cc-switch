@@ -9,6 +9,7 @@ use super::{
         chat_usage_to_responses_usage, response_id_from_chat_id, response_status_from_finish_reason,
     },
 };
+use crate::proxy::json_canonical::canonicalize_json_string_if_parseable;
 use crate::proxy::sse::{strip_sse_field, take_sse_block};
 use bytes::Bytes;
 use futures::stream::{Stream, StreamExt};
@@ -688,12 +689,13 @@ impl ChatToResponsesState {
 
             let state = self.tools.get_mut(&key).expect("tool state exists");
             let output_index = state.output_index.unwrap_or(0);
+            let arguments = canonicalize_json_string_if_parseable(&state.arguments);
             let item = response_function_call_item(
                 &state.item_id,
                 "completed",
                 &state.call_id,
                 &state.name,
-                &state.arguments,
+                &arguments,
                 Some(&state.reasoning_content),
             );
             state.done = true;
@@ -705,7 +707,7 @@ impl ChatToResponsesState {
                     "type": "response.function_call_arguments.done",
                     "item_id": state.item_id,
                     "output_index": output_index,
-                    "arguments": state.arguments
+                    "arguments": arguments
                 }),
             ));
             events.push(sse_event(
@@ -1001,6 +1003,19 @@ mod tests {
         assert!(output.contains("event: response.function_call_arguments.done"));
         assert!(output.contains("\"type\":\"function_call\""));
         assert!(output.contains("\"call_id\":\"call_1\""));
+    }
+
+    #[tokio::test]
+    async fn canonicalizes_streamed_tool_call_arguments_on_done_events() {
+        let output = collect(vec![
+            "data: {\"id\":\"chatcmpl_args\",\"model\":\"gpt-5.4\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"lookup\"}}]}}]}\n\n",
+            "data: {\"id\":\"chatcmpl_args\",\"model\":\"gpt-5.4\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{ \\\"b\\\": 2,\"}}]}}]}\n\n",
+            "data: {\"id\":\"chatcmpl_args\",\"model\":\"gpt-5.4\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\" \\\"a\\\": 1 }\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\n",
+            "data: [DONE]\n\n",
+        ])
+        .await;
+
+        assert!(output.contains(r#""arguments":"{\"a\":1,\"b\":2}""#));
     }
 
     #[tokio::test]

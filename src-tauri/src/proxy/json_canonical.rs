@@ -48,6 +48,17 @@ pub(crate) fn canonical_json_string(value: &Value) -> String {
     }
 }
 
+pub(crate) fn canonicalize_json_string_if_parseable(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return value.to_string();
+    }
+
+    serde_json::from_str::<Value>(trimmed)
+        .map(|parsed| canonical_json_string(&parsed))
+        .unwrap_or_else(|_| value.to_string())
+}
+
 pub(crate) fn short_value_hash(value: Option<&Value>) -> String {
     let Some(value) = value else {
         return "absent".to_string();
@@ -98,5 +109,21 @@ mod tests {
         let value = canonicalize_value(json!({"b": 2, "a": 1}));
 
         assert_eq!(serde_json::to_string(&value).unwrap(), r#"{"a":1,"b":2}"#);
+    }
+
+    #[test]
+    fn canonicalize_json_string_if_parseable_sorts_keys_and_removes_whitespace() {
+        assert_eq!(
+            canonicalize_json_string_if_parseable(r#"{ "b": 2, "a": 1 }"#),
+            r#"{"a":1,"b":2}"#
+        );
+    }
+
+    #[test]
+    fn canonicalize_json_string_if_parseable_preserves_plain_text() {
+        assert_eq!(
+            canonicalize_json_string_if_parseable("plain text"),
+            "plain text"
+        );
     }
 }
