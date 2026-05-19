@@ -19,11 +19,13 @@ struct CachedResponse {
 struct CodexChatHistoryInner {
     responses: HashMap<String, CachedResponse>,
     response_order: VecDeque<String>,
+    call_index: HashMap<String, VecDeque<String>>,
 }
 
 #[derive(Debug, Clone, Default)]
 struct CachedLookup {
     previous: Option<CachedResponse>,
+    fallback: CachedResponse,
 }
 
 /// Cross-request history needed when Codex Responses is bridged to Chat
@@ -34,6 +36,9 @@ struct CachedLookup {
 /// result. Codex often sends follow-up requests as
 /// `previous_response_id + function_call_output`, so this store restores the
 /// missing function call before the request is converted to Chat messages.
+/// Some Codex flows such as subagents may omit or rewrite
+/// `previous_response_id`, so the store can also fall back to a uniquely
+/// cached `call_id`.
 #[derive(Debug, Default)]
 pub struct CodexChatHistoryStore {
     inner: RwLock<CodexChatHistoryInner>,
@@ -85,9 +90,8 @@ impl CodexChatHistoryStore {
         let previous_response_id = body
             .get("previous_response_id")
             .and_then(|value| value.as_str())
-            .filter(|value| !value.is_empty());
-        let lookup = self.lookup(previous_response_id).await;
-
+            .filter(|value| !value.is_empty())
+            .map(ToString::to_string);
         let Some(input) = body.get_mut("input") else {
             return 0;
         };
@@ -117,27 +121,15 @@ impl CodexChatHistoryStore {
             })
             .filter_map(response_item_call_id)
             .collect::<HashSet<_>>();
+        let requested_call_ids = output_call_ids
+            .union(&existing_call_ids)
+            .cloned()
+            .collect::<HashSet<_>>();
+        let lookup = self
+            .lookup(previous_response_id.as_deref(), &requested_call_ids)
+            .await;
 
-        let restore_group = lookup
-            .previous
-            .as_ref()
-            .map(|previous| {
-                previous
-                    .call_order
-                    .iter()
-                    .filter(|call_id| {
-                        output_call_ids.contains(*call_id) && !existing_call_ids.contains(*call_id)
-                    })
-                    .filter_map(|call_id| {
-                        previous
-                            .calls_by_id
-                            .get(call_id)
-                            .cloned()
-                            .map(|item| (call_id.clone(), item))
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
+        let restore_group = lookup.restore_group(&output_call_ids, &existing_call_ids);
 
         let restore_group_ids = restore_group
             .iter()
@@ -197,11 +189,15 @@ impl CodexChatHistoryStore {
         changed
     }
 
-    async fn lookup(&self, previous_response_id: Option<&str>) -> CachedLookup {
+    async fn lookup(
+        &self,
+        previous_response_id: Option<&str>,
+        requested_call_ids: &HashSet<String>,
+    ) -> CachedLookup {
         let inner = self.inner.read().await;
-        CachedLookup {
-            previous: previous_response_id.and_then(|id| inner.responses.get(id).cloned()),
-        }
+        let previous = previous_response_id.and_then(|id| inner.responses.get(id).cloned());
+        let fallback = inner.unique_fallback_calls(requested_call_ids, previous.as_ref());
+        CachedLookup { previous, fallback }
     }
 }
 
@@ -213,14 +209,17 @@ impl CodexChatHistoryInner {
 
         let cached_response = self.responses.entry(response_id.to_string()).or_default();
         let mut inserted_or_updated = 0usize;
+        let mut indexed_call_ids = Vec::new();
         for (call_id, item) in calls {
             if !cached_response.calls_by_id.contains_key(&call_id) {
                 cached_response.call_order.push(call_id.clone());
             }
-            cached_response
-                .calls_by_id
-                .insert(call_id.clone(), item.clone());
+            cached_response.calls_by_id.insert(call_id.clone(), item);
+            indexed_call_ids.push(call_id);
             inserted_or_updated += 1;
+        }
+        for call_id in indexed_call_ids {
+            self.index_call(&call_id, response_id);
         }
 
         self.prune();
@@ -233,7 +232,75 @@ impl CodexChatHistoryInner {
                 break;
             };
             self.responses.remove(&response_id);
+            self.remove_response_from_call_index(&response_id);
         }
+    }
+
+    fn index_call(&mut self, call_id: &str, response_id: &str) {
+        let response_ids = self.call_index.entry(call_id.to_string()).or_default();
+        if !response_ids
+            .iter()
+            .any(|cached_id| cached_id == response_id)
+        {
+            response_ids.push_back(response_id.to_string());
+        }
+    }
+
+    fn remove_response_from_call_index(&mut self, response_id: &str) {
+        for response_ids in self.call_index.values_mut() {
+            response_ids.retain(|cached_id| cached_id != response_id);
+        }
+        self.call_index
+            .retain(|_, response_ids| !response_ids.is_empty());
+    }
+
+    fn unique_fallback_calls(
+        &self,
+        requested_call_ids: &HashSet<String>,
+        previous: Option<&CachedResponse>,
+    ) -> CachedResponse {
+        let mut selected = HashMap::new();
+        for call_id in requested_call_ids {
+            if previous.is_some_and(|response| response.calls_by_id.contains_key(call_id)) {
+                continue;
+            }
+            if let Some(item) = self.unique_call(call_id) {
+                selected.insert(call_id.clone(), item.clone());
+            }
+        }
+
+        let mut fallback = CachedResponse::default();
+        for response_id in &self.response_order {
+            let Some(response) = self.responses.get(response_id) else {
+                continue;
+            };
+            for call_id in &response.call_order {
+                if let Some(item) = selected.remove(call_id) {
+                    fallback.call_order.push(call_id.clone());
+                    fallback.calls_by_id.insert(call_id.clone(), item);
+                }
+            }
+        }
+        fallback
+    }
+
+    fn unique_call(&self, call_id: &str) -> Option<&Value> {
+        let response_ids = self.call_index.get(call_id)?;
+        let mut found = None;
+        for response_id in response_ids {
+            let Some(item) = self
+                .responses
+                .get(response_id)
+                .and_then(|response| response.calls_by_id.get(call_id))
+            else {
+                continue;
+            };
+            if found.is_some() {
+                return None;
+            }
+            found = Some(item);
+        }
+        found
     }
 }
 
@@ -242,6 +309,54 @@ impl CachedLookup {
         self.previous
             .as_ref()
             .and_then(|previous| previous.calls_by_id.get(call_id))
+            .or_else(|| self.fallback.calls_by_id.get(call_id))
+    }
+
+    fn restore_group(
+        &self,
+        output_call_ids: &HashSet<String>,
+        existing_call_ids: &HashSet<String>,
+    ) -> Vec<(String, Value)> {
+        let mut group = Vec::new();
+        let mut grouped_call_ids = HashSet::new();
+        if let Some(previous) = &self.previous {
+            append_restore_group(
+                previous,
+                output_call_ids,
+                existing_call_ids,
+                &mut grouped_call_ids,
+                &mut group,
+            );
+        }
+        append_restore_group(
+            &self.fallback,
+            output_call_ids,
+            existing_call_ids,
+            &mut grouped_call_ids,
+            &mut group,
+        );
+        group
+    }
+}
+
+fn append_restore_group(
+    response: &CachedResponse,
+    output_call_ids: &HashSet<String>,
+    existing_call_ids: &HashSet<String>,
+    grouped_call_ids: &mut HashSet<String>,
+    group: &mut Vec<(String, Value)>,
+) {
+    for call_id in &response.call_order {
+        if !output_call_ids.contains(call_id)
+            || existing_call_ids.contains(call_id)
+            || grouped_call_ids.contains(call_id)
+        {
+            continue;
+        }
+        if let Some(item) = response.calls_by_id.get(call_id).cloned() {
+            grouped_call_ids.insert(call_id.clone());
+            group.push((call_id.clone(), item));
+        }
     }
 }
 
@@ -389,7 +504,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn does_not_restore_without_matching_previous_response() {
+    async fn restores_unique_call_id_without_matching_previous_response() {
         let history = CodexChatHistoryStore::default();
         history
             .record_response(&json!({
@@ -400,7 +515,7 @@ mod tests {
                         "call_id": "call_1",
                         "name": "read_file",
                         "arguments": "{}",
-                        "reasoning_content": "This belongs to another response."
+                        "reasoning_content": "This is the only cached call."
                     }
                 ]
             }))
@@ -415,11 +530,73 @@ mod tests {
                 }
             ]
         });
+        assert_eq!(history.enrich_request(&mut missing_previous).await, 1);
+        assert_eq!(missing_previous["input"][0]["type"], "function_call");
+        assert_eq!(
+            missing_previous["input"][0]["reasoning_content"],
+            "This is the only cached call."
+        );
+        assert_eq!(missing_previous["input"][1]["type"], "function_call_output");
+
+        let mut different_previous = json!({
+            "previous_response_id": "resp_2",
+            "input": [
+                {
+                    "type": "function_call_output",
+                    "call_id": "call_1",
+                    "output": "ok"
+                }
+            ]
+        });
+        assert_eq!(history.enrich_request(&mut different_previous).await, 1);
+        assert_eq!(different_previous["input"][0]["type"], "function_call");
+        assert_eq!(
+            different_previous["input"][0]["reasoning_content"],
+            "This is the only cached call."
+        );
+        assert_eq!(
+            different_previous["input"][1]["type"],
+            "function_call_output"
+        );
+    }
+
+    #[tokio::test]
+    async fn does_not_restore_ambiguous_call_id_without_previous_response() {
+        let history = CodexChatHistoryStore::default();
+        for (response_id, reasoning) in [
+            ("resp_1", "This belongs to the first response."),
+            ("resp_2", "This belongs to the second response."),
+        ] {
+            history
+                .record_response(&json!({
+                    "id": response_id,
+                    "output": [
+                        {
+                            "type": "function_call",
+                            "call_id": "call_1",
+                            "name": "read_file",
+                            "arguments": "{}",
+                            "reasoning_content": reasoning
+                        }
+                    ]
+                }))
+                .await;
+        }
+
+        let mut missing_previous = json!({
+            "input": [
+                {
+                    "type": "function_call_output",
+                    "call_id": "call_1",
+                    "output": "ok"
+                }
+            ]
+        });
         assert_eq!(history.enrich_request(&mut missing_previous).await, 0);
         assert_eq!(missing_previous["input"][0]["type"], "function_call_output");
 
         let mut different_previous = json!({
-            "previous_response_id": "resp_2",
+            "previous_response_id": "resp_missing",
             "input": [
                 {
                     "type": "function_call_output",
