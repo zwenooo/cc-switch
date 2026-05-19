@@ -23,6 +23,8 @@ const EXTRA_CHAT_PASSTHROUGH_FIELDS: &[&str] = &[
     "top_logprobs",
     "user",
 ];
+const THINK_OPEN_TAG: &str = "<think>";
+const THINK_CLOSE_TAG: &str = "</think>";
 
 /// Convert an OpenAI Responses request into an OpenAI Chat Completions request.
 pub fn responses_to_chat_completions(body: Value) -> Result<Value, ProxyError> {
@@ -421,11 +423,20 @@ fn chat_reasoning_text(message: &Value) -> Option<String> {
         }
     }
 
-    let reasoning = message.get("reasoning")?;
-    for key in ["content", "text", "summary"] {
-        if let Some(text) = reasoning.get(key).and_then(|v| v.as_str()) {
-            if !text.is_empty() {
-                return Some(text.to_string());
+    if let Some(reasoning) = message.get("reasoning") {
+        for key in ["content", "text", "summary"] {
+            if let Some(text) = reasoning.get(key).and_then(|v| v.as_str()) {
+                if !text.is_empty() {
+                    return Some(text.to_string());
+                }
+            }
+        }
+    }
+
+    if let Some(content) = message.get("content").and_then(|v| v.as_str()) {
+        if let Some((reasoning, _answer)) = split_leading_think_block(content) {
+            if !reasoning.is_empty() {
+                return Some(reasoning);
             }
         }
     }
@@ -437,6 +448,9 @@ fn chat_message_to_response_output_item(message: &Value, response_id: &str) -> O
     let mut content = Vec::new();
 
     if let Some(text) = message.get("content").and_then(|v| v.as_str()) {
+        let text = split_leading_think_block(text)
+            .map(|(_reasoning, answer)| answer)
+            .unwrap_or_else(|| text.to_string());
         if !text.is_empty() {
             content.push(json!({
                 "type": "output_text",
@@ -494,6 +508,36 @@ fn chat_message_to_response_output_item(message: &Value, response_id: &str) -> O
         "role": "assistant",
         "content": content
     }))
+}
+
+pub(crate) fn split_leading_think_block(text: &str) -> Option<(String, String)> {
+    let leading_ws_len = text.len() - text.trim_start().len();
+    let after_ws = &text[leading_ws_len..];
+    if !after_ws.starts_with(THINK_OPEN_TAG) {
+        return None;
+    }
+
+    let body_start = leading_ws_len + THINK_OPEN_TAG.len();
+    let close_relative = text[body_start..].find(THINK_CLOSE_TAG)?;
+    let close_start = body_start + close_relative;
+    let answer_start = close_start + THINK_CLOSE_TAG.len();
+
+    Some((
+        text[body_start..close_start].trim().to_string(),
+        strip_think_answer_separator(&text[answer_start..]).to_string(),
+    ))
+}
+
+pub(crate) fn strip_leading_think_open_tag(text: &str) -> Option<String> {
+    let leading_ws_len = text.len() - text.trim_start().len();
+    let after_ws = &text[leading_ws_len..];
+    after_ws
+        .strip_prefix(THINK_OPEN_TAG)
+        .map(|value| value.trim().to_string())
+}
+
+fn strip_think_answer_separator(text: &str) -> &str {
+    text.trim_start_matches(['\r', '\n', '\t', ' '])
 }
 
 fn chat_tool_calls_to_response_output_items(message: &Value) -> Vec<Value> {
@@ -786,6 +830,43 @@ mod tests {
         assert_eq!(result["usage"]["input_tokens"], 10);
         assert_eq!(result["usage"]["output_tokens"], 5);
         assert_eq!(result["usage"]["input_tokens_details"]["cached_tokens"], 3);
+    }
+
+    #[test]
+    fn chat_response_to_responses_splits_inline_think_content() {
+        let input = json!({
+            "id": "chatcmpl_think",
+            "object": "chat.completion",
+            "created": 123,
+            "model": "MiniMax-M2.7",
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": "<think>\nI should answer with pong.\n</think>\n\npong"
+                },
+                "finish_reason": "stop"
+            }],
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 20,
+                "total_tokens": 30,
+                "completion_tokens_details": {"reasoning_tokens": 18}
+            }
+        });
+
+        let result = chat_completion_to_response(input).unwrap();
+
+        assert_eq!(result["output"][0]["type"], "reasoning");
+        assert_eq!(
+            result["output"][0]["summary"][0]["text"],
+            "I should answer with pong."
+        );
+        assert_eq!(result["output"][1]["type"], "message");
+        assert_eq!(result["output"][1]["content"][0]["text"], "pong");
+        assert_eq!(
+            result["usage"]["output_tokens_details"]["reasoning_tokens"],
+            18
+        );
     }
 
     #[test]

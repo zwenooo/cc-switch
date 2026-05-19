@@ -2,6 +2,7 @@
 
 use super::transform_codex_chat::{
     chat_usage_to_responses_usage, response_id_from_chat_id, response_status_from_finish_reason,
+    split_leading_think_block, strip_leading_think_open_tag,
 };
 use crate::proxy::sse::{strip_sse_field, take_sse_block};
 use bytes::Bytes;
@@ -27,6 +28,20 @@ struct ReasoningItemState {
     done: bool,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+enum InlineThinkMode {
+    #[default]
+    Detecting,
+    Reasoning,
+    Text,
+}
+
+#[derive(Debug, Default)]
+struct InlineThinkState {
+    mode: InlineThinkMode,
+    buffer: String,
+}
+
 #[derive(Debug, Default)]
 struct ToolCallState {
     output_index: Option<u32>,
@@ -48,6 +63,7 @@ struct ChatToResponsesState {
     next_output_index: u32,
     text: TextItemState,
     reasoning: ReasoningItemState,
+    inline_think: InlineThinkState,
     tools: BTreeMap<usize, ToolCallState>,
     output_items: Vec<(u32, Value)>,
     latest_usage: Option<Value>,
@@ -65,6 +81,7 @@ impl Default for ChatToResponsesState {
             next_output_index: 0,
             text: TextItemState::default(),
             reasoning: ReasoningItemState::default(),
+            inline_think: InlineThinkState::default(),
             tools: BTreeMap::new(),
             output_items: Vec::new(),
             latest_usage: None,
@@ -110,12 +127,12 @@ impl ChatToResponsesState {
 
             if let Some(content) = delta.get("content").and_then(|v| v.as_str()) {
                 if !content.is_empty() {
-                    events.extend(self.finalize_reasoning());
-                    events.extend(self.push_text_delta(content));
+                    events.extend(self.push_content_delta(content));
                 }
             }
 
             if let Some(tool_calls) = delta.get("tool_calls").and_then(|v| v.as_array()) {
+                events.extend(self.flush_inline_think_at_boundary());
                 events.extend(self.finalize_reasoning());
                 for tool_call in tool_calls {
                     events.extend(self.push_tool_call_delta(tool_call));
@@ -128,6 +145,98 @@ impl ChatToResponsesState {
         }
 
         events
+    }
+
+    fn push_content_delta(&mut self, delta: &str) -> Vec<Bytes> {
+        match self.inline_think.mode {
+            InlineThinkMode::Text => {
+                let mut events = self.finalize_reasoning();
+                events.extend(self.push_text_delta(delta));
+                events
+            }
+            InlineThinkMode::Detecting => {
+                self.inline_think.buffer.push_str(delta);
+                match leading_think_prefix_decision(&self.inline_think.buffer) {
+                    ThinkPrefixDecision::NeedMore => Vec::new(),
+                    ThinkPrefixDecision::Reasoning => {
+                        self.inline_think.mode = InlineThinkMode::Reasoning;
+                        self.drain_complete_inline_think()
+                    }
+                    ThinkPrefixDecision::Text => {
+                        self.inline_think.mode = InlineThinkMode::Text;
+                        let text = std::mem::take(&mut self.inline_think.buffer);
+                        let mut events = self.finalize_reasoning();
+                        events.extend(self.push_text_delta(&text));
+                        events
+                    }
+                }
+            }
+            InlineThinkMode::Reasoning => {
+                self.inline_think.buffer.push_str(delta);
+                self.drain_complete_inline_think()
+            }
+        }
+    }
+
+    fn drain_complete_inline_think(&mut self) -> Vec<Bytes> {
+        let Some((reasoning, answer)) = split_leading_think_block(&self.inline_think.buffer) else {
+            return Vec::new();
+        };
+
+        self.inline_think.mode = InlineThinkMode::Text;
+        self.inline_think.buffer.clear();
+
+        let mut events = Vec::new();
+        if !reasoning.is_empty() {
+            events.extend(self.push_reasoning_delta(&reasoning));
+            events.extend(self.finalize_reasoning());
+        }
+        if !answer.is_empty() {
+            events.extend(self.push_text_delta(&answer));
+        }
+
+        events
+    }
+
+    fn flush_inline_think_at_boundary(&mut self) -> Vec<Bytes> {
+        match self.inline_think.mode {
+            InlineThinkMode::Text => Vec::new(),
+            InlineThinkMode::Detecting => {
+                self.inline_think.mode = InlineThinkMode::Text;
+                let text = std::mem::take(&mut self.inline_think.buffer);
+                if text.is_empty() {
+                    Vec::new()
+                } else {
+                    let mut events = self.finalize_reasoning();
+                    events.extend(self.push_text_delta(&text));
+                    events
+                }
+            }
+            InlineThinkMode::Reasoning => {
+                let buffered = std::mem::take(&mut self.inline_think.buffer);
+                self.inline_think.mode = InlineThinkMode::Text;
+                if let Some((reasoning, answer)) = split_leading_think_block(&buffered) {
+                    let mut events = Vec::new();
+                    if !reasoning.is_empty() {
+                        events.extend(self.push_reasoning_delta(&reasoning));
+                        events.extend(self.finalize_reasoning());
+                    }
+                    if !answer.is_empty() {
+                        events.extend(self.push_text_delta(&answer));
+                    }
+                    return events;
+                }
+
+                let reasoning = strip_leading_think_open_tag(&buffered).unwrap_or(buffered);
+                if reasoning.is_empty() {
+                    Vec::new()
+                } else {
+                    let mut events = self.push_reasoning_delta(&reasoning);
+                    events.extend(self.finalize_reasoning());
+                    events
+                }
+            }
+        }
     }
 
     fn ensure_response_started(&mut self) -> Vec<Bytes> {
@@ -375,6 +484,7 @@ impl ChatToResponsesState {
         }
 
         let mut events = self.ensure_response_started();
+        events.extend(self.flush_inline_think_at_boundary());
         events.extend(self.finalize_reasoning());
         events.extend(self.finalize_text());
         events.extend(self.finalize_tools());
@@ -663,6 +773,29 @@ fn chat_delta_reasoning_text(delta: &Value) -> Option<String> {
     None
 }
 
+enum ThinkPrefixDecision {
+    NeedMore,
+    Reasoning,
+    Text,
+}
+
+fn leading_think_prefix_decision(buffer: &str) -> ThinkPrefixDecision {
+    let trimmed = buffer.trim_start();
+    if trimmed.is_empty() {
+        return ThinkPrefixDecision::NeedMore;
+    }
+
+    if trimmed.starts_with("<think>") {
+        return ThinkPrefixDecision::Reasoning;
+    }
+
+    if "<think>".starts_with(trimmed) {
+        return ThinkPrefixDecision::NeedMore;
+    }
+
+    ThinkPrefixDecision::Text
+}
+
 /// Create a stream that converts Chat Completions SSE chunks into Responses SSE events.
 pub fn create_responses_sse_stream_from_chat<E: std::error::Error + Send + 'static>(
     stream: impl Stream<Item = Result<Bytes, E>> + Send + 'static,
@@ -830,6 +963,24 @@ mod tests {
         let reasoning_pos = output.find("\"type\":\"reasoning\"").unwrap();
         let message_pos = output.find("\"type\":\"message\"").unwrap();
         assert!(reasoning_pos < message_pos);
+    }
+
+    #[tokio::test]
+    async fn converts_inline_think_chat_sse_to_reasoning_without_leaking_tags() {
+        let output = collect(vec![
+            "data: {\"id\":\"chatcmpl_minimax\",\"created\":123,\"model\":\"MiniMax-M2.7\",\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"<think>\\nNeed\"}}]}\n\n",
+            "data: {\"id\":\"chatcmpl_minimax\",\"created\":123,\"model\":\"MiniMax-M2.7\",\"choices\":[{\"delta\":{\"content\":\" context.</think>\\n\\npong\"},\"finish_reason\":\"stop\"}]}\n\n",
+            "data: {\"id\":\"chatcmpl_minimax\",\"created\":123,\"model\":\"MiniMax-M2.7\",\"choices\":[],\"usage\":{\"prompt_tokens\":4,\"completion_tokens\":6,\"total_tokens\":10,\"completion_tokens_details\":{\"reasoning_tokens\":3}}}\n\n",
+        ])
+        .await;
+
+        assert!(output.contains("event: response.reasoning_summary_text.delta"));
+        assert!(output.contains("Need context."));
+        assert!(output.contains("\"text\":\"pong\""));
+        assert!(output.contains("\"reasoning_tokens\":3"));
+        assert!(!output.contains("<think>"));
+        assert!(!output.contains("</think>"));
+        assert!(output.contains("event: response.completed"));
     }
 
     #[tokio::test]
