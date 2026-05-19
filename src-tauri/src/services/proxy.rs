@@ -1096,7 +1096,8 @@ impl ProxyService {
                 .get("config")
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
-            let updated_config = Self::update_toml_base_url(config_str, &proxy_codex_base_url);
+            let updated_config =
+                Self::apply_codex_proxy_toml_config(config_str, &proxy_codex_base_url);
             live_config["config"] = json!(updated_config);
 
             self.write_codex_live(&live_config)?;
@@ -1149,7 +1150,8 @@ impl ProxyService {
                     .get("config")
                     .and_then(|v| v.as_str())
                     .unwrap_or("");
-                let updated_config = Self::update_toml_base_url(config_str, &proxy_codex_base_url);
+                let updated_config =
+                    Self::apply_codex_proxy_toml_config(config_str, &proxy_codex_base_url);
                 live_config["config"] = json!(updated_config);
 
                 self.write_codex_live(&live_config)?;
@@ -1216,7 +1218,7 @@ impl ProxyService {
                         .and_then(|v| v.as_str())
                         .unwrap_or("");
                     let updated_config =
-                        Self::update_toml_base_url(config_str, &proxy_codex_base_url);
+                        Self::apply_codex_proxy_toml_config(config_str, &proxy_codex_base_url);
                     live_config["config"] = json!(updated_config);
 
                     let _ = self.write_codex_live(&live_config);
@@ -1850,6 +1852,14 @@ impl ProxyService {
             .unwrap_or_else(|_| toml_str.to_string())
     }
 
+    /// 接管 Codex 时，本地客户端必须继续以 Responses wire API 访问代理。
+    /// 真实上游是否走 Chat Completions 由 provider 配置决定，并在代理内部转换。
+    fn apply_codex_proxy_toml_config(toml_str: &str, proxy_url: &str) -> String {
+        let updated = Self::update_toml_base_url(toml_str, proxy_url);
+        crate::codex_config::update_codex_toml_field(&updated, "wire_api", "responses")
+            .unwrap_or(updated)
+    }
+
     fn read_claude_live(&self) -> Result<Value, String> {
         let path = get_claude_settings_path();
         if !path.exists() {
@@ -2283,6 +2293,38 @@ requires_openai_auth = true
             .and_then(|v| v.as_str())
             .expect("model_providers.any.wire_api should exist");
         assert_eq!(wire_api, "responses");
+    }
+
+    #[test]
+    fn apply_codex_proxy_toml_config_forces_local_responses_wire_api() {
+        let input = r#"
+model_provider = "chat_only"
+model = "gpt-5.1-codex"
+
+[model_providers.chat_only]
+name = "Chat Only"
+base_url = "https://chat-only.example/v1"
+wire_api = "chat"
+"#;
+
+        let proxy_url = "http://127.0.0.1:5000/v1";
+        let output = ProxyService::apply_codex_proxy_toml_config(input, proxy_url);
+        let parsed: toml::Value =
+            toml::from_str(&output).expect("updated config should be valid TOML");
+
+        let provider = parsed
+            .get("model_providers")
+            .and_then(|v| v.get("chat_only"))
+            .expect("model_providers.chat_only should exist");
+
+        assert_eq!(
+            provider.get("base_url").and_then(|v| v.as_str()),
+            Some(proxy_url)
+        );
+        assert_eq!(
+            provider.get("wire_api").and_then(|v| v.as_str()),
+            Some("responses")
+        );
     }
 
     #[test]
