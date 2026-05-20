@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { FormLabel } from "@/components/ui/form";
@@ -123,6 +123,9 @@ export function CodexFormFields({
     catalogModels.map((m) => createCatalogRow(m)),
   );
 
+  // 记录上次发送给父组件的数据，避免重复触发
+  const lastSentModelsRef = useRef<CodexCatalogModel[]>(catalogModels);
+
   // 父 → 子：仅当 prop 数据真的变化（预设切换 / 编辑加载）时才重建 rowId；
   // 同 shape 时保留现有 rowId，避免编辑过程中焦点丢失。
   useEffect(() => {
@@ -130,17 +133,22 @@ export function CodexFormFields({
       if (catalogRowsMatchModels(current, catalogModels)) return current;
       return catalogModels.map((m) => createCatalogRow(m));
     });
+    // 同步更新 ref，避免父组件传入新数据时子→父 effect 误判为本地修改
+    lastSentModelsRef.current = catalogModels;
   }, [catalogModels]);
 
   // 子 → 父：rowId 是视图层概念，不应进入持久化数据；剥离后再回传。
+  // 注意：依赖数组不包含 catalogModels，避免父→子更新触发子→父回调形成循环。
   useEffect(() => {
     if (!onCatalogModelsChange) return;
-    if (catalogRowsMatchModels(catalogRows, catalogModels)) return;
     const next: CodexCatalogModel[] = catalogRows.map(
       ({ rowId: _rowId, ...rest }) => rest,
     );
+    // 只有当数据真的变化时才通知父组件
+    if (catalogRowsMatchModels(catalogRows, lastSentModelsRef.current)) return;
+    lastSentModelsRef.current = next;
     onCatalogModelsChange(next);
-  }, [catalogRows, catalogModels, onCatalogModelsChange]);
+  }, [catalogRows, onCatalogModelsChange]);
 
   const handleLocalRoutingChange = useCallback(
     (checked: boolean) => {
