@@ -320,6 +320,7 @@ impl ProxyService {
             Some(provider),
         );
         effective_settings["config"] = json!(updated_config);
+        Self::attach_codex_model_catalog_from_provider(&mut effective_settings, Some(provider));
 
         self.write_codex_live(&effective_settings)?;
         Ok(())
@@ -1148,6 +1149,10 @@ impl ProxyService {
                 codex_provider.as_ref(),
             );
             live_config["config"] = json!(updated_config);
+            Self::attach_codex_model_catalog_from_provider(
+                &mut live_config,
+                codex_provider.as_ref(),
+            );
 
             self.write_codex_live(&live_config)?;
             log::info!("Codex Live 配置已接管，代理地址: {proxy_codex_base_url}");
@@ -1209,6 +1214,10 @@ impl ProxyService {
                     codex_provider.as_ref(),
                 );
                 live_config["config"] = json!(updated_config);
+                Self::attach_codex_model_catalog_from_provider(
+                    &mut live_config,
+                    codex_provider.as_ref(),
+                );
 
                 self.write_codex_live(&live_config)?;
                 log::info!("Codex Live 配置已接管，代理地址: {proxy_codex_base_url}");
@@ -1283,6 +1292,10 @@ impl ProxyService {
                         codex_provider.as_ref(),
                     );
                     live_config["config"] = json!(updated_config);
+                    Self::attach_codex_model_catalog_from_provider(
+                        &mut live_config,
+                        codex_provider.as_ref(),
+                    );
 
                     let _ = self.write_codex_live(&live_config);
                 }
@@ -1930,17 +1943,7 @@ impl ProxyService {
             crate::codex_config::update_codex_toml_field(&updated, "wire_api", "responses")
                 .unwrap_or(updated);
 
-        if provider
-            .map(crate::proxy::providers::codex_provider_uses_chat_completions)
-            .unwrap_or(false)
-        {
-            updated = crate::codex_config::update_codex_toml_field(
-                &updated,
-                "model",
-                crate::proxy::providers::CODEX_CHAT_CLIENT_MODEL,
-            )
-            .unwrap_or(updated);
-        } else if let Some(upstream_model) =
+        if let Some(upstream_model) =
             provider.and_then(crate::proxy::providers::codex_provider_upstream_model)
         {
             updated =
@@ -1949,6 +1952,25 @@ impl ProxyService {
         }
 
         updated
+    }
+
+    fn attach_codex_model_catalog_from_provider(
+        live_config: &mut Value,
+        provider: Option<&Provider>,
+    ) {
+        let Some(provider) = provider else {
+            return;
+        };
+
+        let model_catalog = provider
+            .settings_config
+            .get("modelCatalog")
+            .cloned()
+            .unwrap_or_else(|| json!({ "models": [] }));
+
+        if let Some(root) = live_config.as_object_mut() {
+            root.insert("modelCatalog".to_string(), model_catalog);
+        }
     }
 
     fn read_claude_live(&self) -> Result<Value, String> {
@@ -2014,9 +2036,7 @@ impl ProxyService {
     }
 
     fn write_codex_live(&self, config: &Value) -> Result<(), String> {
-        use crate::codex_config::{
-            get_codex_auth_path, get_codex_config_path, write_codex_live_atomic,
-        };
+        use crate::codex_config::{get_codex_auth_path, get_codex_config_path};
 
         let auth = config.get("auth");
         let config_str = config.get("config").and_then(|v| v.as_str());
@@ -2024,8 +2044,11 @@ impl ProxyService {
         // Proxy restore writes saved live backups verbatim. Provider-driven writes go
         // through write_live_with_common_config(), which normalizes Codex provider ids.
         match (auth, config_str) {
-            (Some(auth), Some(cfg)) => write_codex_live_atomic(auth, Some(cfg))
-                .map_err(|e| format!("写入 Codex 配置失败: {e}"))?,
+            (Some(auth), Some(cfg)) => {
+                // Use unified helper to prepare catalog if present
+                crate::codex_config::write_codex_live_with_catalog(config, auth, Some(cfg))
+                    .map_err(|e| format!("写入 Codex 配置失败: {e}"))?;
+            }
             (Some(auth), None) => {
                 let auth_path = get_codex_auth_path();
                 write_json_file(&auth_path, auth)
@@ -2420,7 +2443,7 @@ wire_api = "chat"
     }
 
     #[test]
-    fn apply_codex_proxy_toml_config_uses_safe_client_model_for_chat_provider() {
+    fn apply_codex_proxy_toml_config_keeps_upstream_model_for_chat_provider() {
         let input = r#"
 model_provider = "deepseek"
 model = "deepseek-v4-flash"
@@ -2454,7 +2477,7 @@ wire_api = "responses"
 
         assert_eq!(
             parsed.get("model").and_then(|v| v.as_str()),
-            Some(crate::proxy::providers::CODEX_CHAT_CLIENT_MODEL)
+            Some("deepseek-v4-flash")
         );
         assert_eq!(
             parsed
@@ -3409,7 +3432,7 @@ requires_openai_auth = true
 
     #[tokio::test]
     #[serial]
-    async fn hot_switch_codex_chat_provider_uses_safe_model_without_changing_live_provider() {
+    async fn hot_switch_codex_chat_provider_uses_upstream_model_without_changing_live_provider() {
         let _home = TempHome::new();
         crate::settings::reload_settings().expect("reload settings");
 
@@ -3508,7 +3531,7 @@ requires_openai_auth = true
         );
         assert_eq!(
             parsed_live.get("model").and_then(|v| v.as_str()),
-            Some(crate::proxy::providers::CODEX_CHAT_CLIENT_MODEL)
+            Some("deepseek-v4-flash")
         );
         assert_eq!(
             live.get("auth")

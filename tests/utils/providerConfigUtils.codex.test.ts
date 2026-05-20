@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   extractCodexBaseUrl,
   extractCodexModelName,
+  extractCodexTopLevelInt,
+  removeCodexTopLevelField,
   setCodexBaseUrl,
   setCodexModelName,
+  setCodexTopLevelInt,
 } from "@/utils/providerConfigUtils";
 
 describe("Codex TOML utils", () => {
@@ -147,5 +150,51 @@ describe("Codex TOML utils", () => {
 
     expect(extractCodexBaseUrl(input)).toBe("https://api.example.com/v1");
     expect(extractCodexModelName(input)).toBe("gpt-5");
+  });
+
+  it("reads, writes, and removes top-level integer metadata fields", () => {
+    const input = [
+      'model_provider = "custom"',
+      'model = "deepseek-v4-flash"',
+      "",
+      "[model_providers.custom]",
+      'name = "DeepSeek"',
+      "",
+    ].join("\n");
+
+    const withContext = setCodexTopLevelInt(
+      input,
+      "model_context_window",
+      128000,
+    );
+    const withCompact = setCodexTopLevelInt(
+      withContext,
+      "model_auto_compact_token_limit",
+      90000,
+    );
+
+    expect(extractCodexTopLevelInt(withCompact, "model_context_window")).toBe(
+      128000,
+    );
+    expect(
+      extractCodexTopLevelInt(
+        withCompact,
+        "model_auto_compact_token_limit",
+      ),
+    ).toBe(90000);
+    expect(withCompact).toMatch(/^model_context_window = 128000$/m);
+    expect(withCompact).toMatch(
+      /^model_auto_compact_token_limit = 90000$/m,
+    );
+
+    const removed = removeCodexTopLevelField(
+      withCompact,
+      "model_context_window",
+    );
+
+    expect(
+      extractCodexTopLevelInt(removed, "model_context_window"),
+    ).toBeUndefined();
+    expect(removed).toContain("[model_providers.custom]");
   });
 });

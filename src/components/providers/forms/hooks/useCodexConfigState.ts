@@ -2,10 +2,9 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import {
   extractCodexBaseUrl,
   setCodexBaseUrl as setCodexBaseUrlInConfig,
-  extractCodexModelName,
-  setCodexModelName as setCodexModelNameInConfig,
 } from "@/utils/providerConfigUtils";
 import { normalizeTomlText } from "@/utils/textNormalization";
+import type { CodexCatalogModel } from "@/types";
 
 interface UseCodexConfigStateProps {
   initialData?: {
@@ -22,11 +21,12 @@ export function useCodexConfigState({ initialData }: UseCodexConfigStateProps) {
   const [codexConfig, setCodexConfigState] = useState("");
   const [codexApiKey, setCodexApiKey] = useState("");
   const [codexBaseUrl, setCodexBaseUrl] = useState("");
-  const [codexModelName, setCodexModelName] = useState("");
+  const [codexCatalogModels, setCodexCatalogModels] = useState<
+    CodexCatalogModel[]
+  >([]);
   const [codexAuthError, setCodexAuthError] = useState("");
 
   const isUpdatingCodexBaseUrlRef = useRef(false);
-  const isUpdatingCodexModelNameRef = useRef(false);
 
   // 初始化 Codex 配置（编辑模式）
   useEffect(() => {
@@ -45,16 +45,36 @@ export function useCodexConfigState({ initialData }: UseCodexConfigStateProps) {
           : "";
       setCodexConfigState(configStr);
 
+      const modelCatalog = (config as any).modelCatalog;
+      const rawCatalogModels = Array.isArray(modelCatalog?.models)
+        ? modelCatalog.models
+        : [];
+      setCodexCatalogModels(
+        rawCatalogModels
+          .map((item: any) => ({
+            model: typeof item?.model === "string" ? item.model : "",
+            displayName:
+              typeof item?.displayName === "string"
+                ? item.displayName
+                : typeof item?.display_name === "string"
+                  ? item.display_name
+                  : "",
+            contextWindow:
+              typeof item?.contextWindow === "string" ||
+              typeof item?.contextWindow === "number"
+                ? item.contextWindow
+                : typeof item?.context_window === "string" ||
+                    typeof item?.context_window === "number"
+                  ? item.context_window
+                  : "",
+          }))
+          .filter((item: CodexCatalogModel) => item.model.trim()),
+      );
+
       // 提取 Base URL
       const initialBaseUrl = extractCodexBaseUrl(configStr);
       if (initialBaseUrl) {
         setCodexBaseUrl(initialBaseUrl);
-      }
-
-      // 提取 Model Name
-      const initialModelName = extractCodexModelName(configStr);
-      if (initialModelName) {
-        setCodexModelName(initialModelName);
       }
 
       // 提取 API Key
@@ -75,15 +95,6 @@ export function useCodexConfigState({ initialData }: UseCodexConfigStateProps) {
     }
     const extracted = extractCodexBaseUrl(codexConfig) || "";
     setCodexBaseUrl((prev) => (prev === extracted ? prev : extracted));
-  }, [codexConfig]);
-
-  // 与 TOML 配置保持模型名称同步
-  useEffect(() => {
-    if (isUpdatingCodexModelNameRef.current) {
-      return;
-    }
-    const extracted = extractCodexModelName(codexConfig) || "";
-    setCodexModelName((prev) => (prev === extracted ? prev : extracted));
   }, [codexConfig]);
 
   // 获取 API Key（从 auth JSON）
@@ -170,22 +181,7 @@ export function useCodexConfigState({ initialData }: UseCodexConfigStateProps) {
     [setCodexConfig],
   );
 
-  // 处理 Codex Model Name 变化
-  const handleCodexModelNameChange = useCallback(
-    (modelName: string) => {
-      const trimmed = modelName.trim();
-      setCodexModelName(trimmed);
-
-      isUpdatingCodexModelNameRef.current = true;
-      setCodexConfig((prev) => setCodexModelNameInConfig(prev, trimmed));
-      setTimeout(() => {
-        isUpdatingCodexModelNameRef.current = false;
-      }, 0);
-    },
-    [setCodexConfig],
-  );
-
-  // 处理 config 变化（同步 Base URL 和 Model Name）
+  // 处理 config 变化（同步 Base URL）
   const handleCodexConfigChange = useCallback(
     (value: string) => {
       // 归一化中文/全角/弯引号，避免 TOML 解析报错
@@ -198,35 +194,24 @@ export function useCodexConfigState({ initialData }: UseCodexConfigStateProps) {
           setCodexBaseUrl(extracted);
         }
       }
-
-      if (!isUpdatingCodexModelNameRef.current) {
-        const extractedModel = extractCodexModelName(normalized) || "";
-        if (extractedModel !== codexModelName) {
-          setCodexModelName(extractedModel);
-        }
-      }
     },
-    [setCodexConfig, codexBaseUrl, codexModelName],
+    [setCodexConfig, codexBaseUrl],
   );
 
   // 重置配置（用于预设切换）
   const resetCodexConfig = useCallback(
-    (auth: Record<string, unknown>, config: string) => {
+    (
+      auth: Record<string, unknown>,
+      config: string,
+      modelCatalogModels: CodexCatalogModel[] = [],
+    ) => {
       const authString = JSON.stringify(auth, null, 2);
       setCodexAuth(authString);
       setCodexConfig(config);
+      setCodexCatalogModels(modelCatalogModels);
 
       const baseUrl = extractCodexBaseUrl(config);
-      if (baseUrl) {
-        setCodexBaseUrl(baseUrl);
-      }
-
-      const modelName = extractCodexModelName(config);
-      if (modelName) {
-        setCodexModelName(modelName);
-      } else {
-        setCodexModelName("");
-      }
+      setCodexBaseUrl(baseUrl || "");
 
       // 提取 API Key
       try {
@@ -247,13 +232,13 @@ export function useCodexConfigState({ initialData }: UseCodexConfigStateProps) {
     codexConfig,
     codexApiKey,
     codexBaseUrl,
-    codexModelName,
+    codexCatalogModels,
     codexAuthError,
     setCodexAuth,
     setCodexConfig,
+    setCodexCatalogModels,
     handleCodexApiKeyChange,
     handleCodexBaseUrlChange,
-    handleCodexModelNameChange,
     handleCodexConfigChange,
     resetCodexConfig,
     getCodexAuthApiKey,

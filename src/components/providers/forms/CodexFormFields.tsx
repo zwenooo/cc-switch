@@ -1,24 +1,23 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { FormLabel } from "@/components/ui/form";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { Download, Loader2 } from "lucide-react";
+import { Download, Loader2, Plus, Trash2 } from "lucide-react";
 import EndpointSpeedTest from "./EndpointSpeedTest";
-import { ApiKeySection, EndpointField, ModelInputWithFetch } from "./shared";
+import { ApiKeySection, EndpointField, ModelDropdown } from "./shared";
 import {
   fetchModelsForConfig,
   showFetchModelsError,
   type FetchedModel,
 } from "@/lib/api/model-fetch";
-import type { CodexApiFormat, ProviderCategory } from "@/types";
+import type {
+  CodexApiFormat,
+  CodexCatalogModel,
+  ProviderCategory,
+} from "@/types";
 
 interface EndpointCandidate {
   url: string;
@@ -48,16 +47,44 @@ interface CodexFormFieldsProps {
   onAutoSelectChange: (checked: boolean) => void;
 
   // API Format
+  // Note: wire_api is always "responses" for Codex; apiFormat controls proxy-layer conversion
   apiFormat: CodexApiFormat;
   onApiFormatChange: (format: CodexApiFormat) => void;
 
-  // Model Name
-  shouldShowModelField?: boolean;
-  modelName?: string;
-  onModelNameChange?: (model: string) => void;
+  // Model Catalog
+  catalogModels?: CodexCatalogModel[];
+  onCatalogModelsChange?: (models: CodexCatalogModel[]) => void;
 
   // Speed Test Endpoints
   speedTestEndpoints: EndpointCandidate[];
+}
+
+type CodexCatalogRow = CodexCatalogModel & { rowId: string };
+
+function createCatalogRow(seed?: Partial<CodexCatalogModel>): CodexCatalogRow {
+  return {
+    rowId: crypto.randomUUID(),
+    model: seed?.model ?? "",
+    displayName: seed?.displayName ?? "",
+    contextWindow: seed?.contextWindow ?? "",
+  };
+}
+
+// Compares rows (with rowId) to incoming models (without) by data fields only,
+// so both sync effects can use the same equality definition.
+function catalogRowsMatchModels(
+  rows: Array<Pick<CodexCatalogRow, "model" | "displayName" | "contextWindow">>,
+  models: CodexCatalogModel[],
+): boolean {
+  if (rows.length !== models.length) return false;
+  return rows.every((row, i) => {
+    const incoming = models[i];
+    return (
+      row.model === (incoming.model ?? "") &&
+      (row.displayName ?? "") === (incoming.displayName ?? "") &&
+      String(row.contextWindow ?? "") === String(incoming.contextWindow ?? "")
+    );
+  });
 }
 
 export function CodexFormFields({
@@ -81,16 +108,46 @@ export function CodexFormFields({
   onAutoSelectChange,
   apiFormat,
   onApiFormatChange,
-  shouldShowModelField = true,
-  modelName = "",
-  onModelNameChange,
+  catalogModels = [],
+  onCatalogModelsChange,
   speedTestEndpoints,
 }: CodexFormFieldsProps) {
   const { t } = useTranslation();
 
   const [fetchedModels, setFetchedModels] = useState<FetchedModel[]>([]);
   const [isFetchingModels, setIsFetchingModels] = useState(false);
-  const isChatApiFormat = apiFormat === "openai_chat";
+  const needsLocalRouting = apiFormat === "openai_chat";
+  const canEditCatalog = Boolean(onCatalogModelsChange);
+
+  const [catalogRows, setCatalogRows] = useState<CodexCatalogRow[]>(() =>
+    catalogModels.map((m) => createCatalogRow(m)),
+  );
+
+  // 父 → 子：仅当 prop 数据真的变化（预设切换 / 编辑加载）时才重建 rowId；
+  // 同 shape 时保留现有 rowId，避免编辑过程中焦点丢失。
+  useEffect(() => {
+    setCatalogRows((current) => {
+      if (catalogRowsMatchModels(current, catalogModels)) return current;
+      return catalogModels.map((m) => createCatalogRow(m));
+    });
+  }, [catalogModels]);
+
+  // 子 → 父：rowId 是视图层概念，不应进入持久化数据；剥离后再回传。
+  useEffect(() => {
+    if (!onCatalogModelsChange) return;
+    if (catalogRowsMatchModels(catalogRows, catalogModels)) return;
+    const next: CodexCatalogModel[] = catalogRows.map(
+      ({ rowId: _rowId, ...rest }) => rest,
+    );
+    onCatalogModelsChange(next);
+  }, [catalogRows, catalogModels, onCatalogModelsChange]);
+
+  const handleLocalRoutingChange = useCallback(
+    (checked: boolean) => {
+      onApiFormatChange(checked ? "openai_chat" : "openai_responses");
+    },
+    [onApiFormatChange],
+  );
 
   const handleFetchModels = useCallback(() => {
     if (!codexBaseUrl || !codexApiKey) {
@@ -118,6 +175,54 @@ export function CodexFormFields({
       })
       .finally(() => setIsFetchingModels(false));
   }, [codexBaseUrl, codexApiKey, isFullUrl, t]);
+
+  const handleAddCatalogRow = useCallback(() => {
+    if (!onCatalogModelsChange) return;
+    setCatalogRows((current) => [...current, createCatalogRow()]);
+  }, [onCatalogModelsChange]);
+
+  const handleUpdateCatalogRow = useCallback(
+    (index: number, patch: Partial<CodexCatalogModel>) => {
+      setCatalogRows((current) =>
+        current.map((row, i) => (i === index ? { ...row, ...patch } : row)),
+      );
+    },
+    [],
+  );
+
+  const handleRemoveCatalogRow = useCallback((index: number) => {
+    setCatalogRows((current) => current.filter((_, i) => i !== index));
+  }, []);
+
+  const renderCatalogActionButtons = (onAdd: () => void, addLabel: string) => (
+    <div className="flex gap-1">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={handleFetchModels}
+        disabled={isFetchingModels}
+        className="h-7 gap-1"
+      >
+        {isFetchingModels ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <Download className="h-3.5 w-3.5" />
+        )}
+        {t("providerForm.fetchModels")}
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={onAdd}
+        className="h-7 gap-1"
+      >
+        <Plus className="h-3.5 w-3.5" />
+        {addLabel}
+      </Button>
+    </div>
+  );
 
   return (
     <>
@@ -158,97 +263,168 @@ export function CodexFormFields({
         />
       )}
 
-      {/* Codex API 格式选择 */}
       {shouldShowSpeedTest && (
-        <div className="space-y-2">
-          <FormLabel htmlFor="codexApiFormat">
-            {t("providerForm.apiFormat", { defaultValue: "API 格式" })}
-          </FormLabel>
-          <Select
-            value={apiFormat}
-            onValueChange={(value) =>
-              onApiFormatChange(value as CodexApiFormat)
-            }
-          >
-            <SelectTrigger id="codexApiFormat" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="openai_responses">
-                {t("providerForm.codexApiFormatResponses", {
-                  defaultValue: "OpenAI Responses API (原生)",
+        <div className="space-y-3 rounded-lg border border-border-default bg-muted/20 p-4">
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-1">
+              <FormLabel>
+                {t("codexConfig.localRoutingToggle", {
+                  defaultValue: "需要本地路由映射",
                 })}
-              </SelectItem>
-              <SelectItem value="openai_chat">
-                {t("providerForm.codexApiFormatOpenAIChat", {
-                  defaultValue: "OpenAI Chat Completions (需开启路由)",
-                })}
-              </SelectItem>
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground">
-            {t("providerForm.codexApiFormatHint", {
-              defaultValue:
-                "选择供应商真实支持的 Codex API 格式；Chat Completions 会通过本地路由自动转换为 Responses。",
-            })}
-          </p>
+              </FormLabel>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {needsLocalRouting
+                  ? t("codexConfig.localRoutingOnHint", {
+                      defaultValue:
+                        "适合 DeepSeek、Kimi 等自定义模型或仅支持 Chat Completions 的供应商；使用时请保持本地路由开启。",
+                    })
+                  : t("codexConfig.localRoutingOffHint", {
+                      defaultValue:
+                        "适合供应商原生支持 OpenAI Responses API 且模型在 Codex 中可直接使用的场景，请求可由 Codex 直连供应商。",
+                    })}
+              </p>
+            </div>
+            <Switch
+              checked={needsLocalRouting}
+              onCheckedChange={handleLocalRoutingChange}
+              aria-label={t("codexConfig.localRoutingToggle", {
+                defaultValue: "需要本地路由映射",
+              })}
+            />
+          </div>
         </div>
       )}
 
-      {/* Codex Model Name 输入框 */}
-      {shouldShowModelField && onModelNameChange && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label
-              htmlFor="codexModelName"
-              className="block text-sm font-medium text-foreground"
-            >
-              {isChatApiFormat
-                ? t("codexConfig.upstreamModelName", {
-                    defaultValue: "上游模型名称",
-                  })
-                : t("codexConfig.modelName", { defaultValue: "模型名称" })}
-            </label>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleFetchModels}
-              disabled={isFetchingModels}
-              className="h-7 gap-1"
-            >
-              {isFetchingModels ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Download className="h-3.5 w-3.5" />
+      {/* Codex 模型映射 —— 仅在本地路由 + 可编辑时显示 */}
+      {needsLocalRouting && canEditCatalog && (
+        <div className="space-y-4 rounded-lg border border-border-default p-4">
+          <div className="space-y-1">
+            <div className="flex items-center justify-between gap-3">
+              <FormLabel>
+                {t("codexConfig.modelMappingTitle", {
+                  defaultValue: "模型映射",
+                })}
+              </FormLabel>
+              {renderCatalogActionButtons(
+                handleAddCatalogRow,
+                t("codexConfig.addCatalogModel", {
+                  defaultValue: "添加模型",
+                }),
               )}
-              {t("providerForm.fetchModels")}
-            </Button>
+            </div>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              {t("codexConfig.modelMappingHint", {
+                defaultValue:
+                  "选择模型角色后，CC Switch 会自动生成 Codex 兼容路由；菜单显示名可以填 DeepSeek、Kimi 等品牌模型，实际请求模型按右侧填写内容发送。",
+              })}
+            </p>
           </div>
-          <ModelInputWithFetch
-            id="codexModelName"
-            value={modelName}
-            onChange={(v) => onModelNameChange!(v)}
-            placeholder={t("codexConfig.modelNamePlaceholder", {
-              defaultValue: "例如: gpt-5.4",
-            })}
-            fetchedModels={fetchedModels}
-            isLoading={isFetchingModels}
-          />
-          <p className="text-xs text-muted-foreground">
-            {isChatApiFormat
-              ? t("codexConfig.upstreamModelNameHint", {
-                  defaultValue:
-                    "Chat 格式下这里填写真实上游模型；接管时 Codex 本地会使用兼容模型，并由路由映射回该模型。",
-                })
-              : modelName.trim()
-                ? t("codexConfig.modelNameHint", {
-                    defaultValue: "指定使用的模型，将自动更新到 config.toml 中",
-                  })
-                : t("providerForm.modelHint", {
-                    defaultValue: "💡 留空将使用供应商的默认模型",
+
+          {catalogRows.length > 0 && (
+            <div className="space-y-2">
+              {/* 列头：md+ 显示 */}
+              <div className="hidden grid-cols-[1fr_1fr_140px_36px] gap-2 px-1 text-xs font-medium text-muted-foreground md:grid">
+                <span>
+                  {t("codexConfig.catalogColumnDisplay", {
+                    defaultValue: "菜单显示名",
                   })}
-          </p>
+                </span>
+                <span>
+                  {t("codexConfig.catalogColumnModel", {
+                    defaultValue: "实际请求模型",
+                  })}
+                </span>
+                <span>
+                  {t("codexConfig.catalogColumnContext", {
+                    defaultValue: "上下文窗口",
+                  })}
+                </span>
+                <span />
+              </div>
+
+              {catalogRows.map((row, index) => (
+                <div
+                  key={row.rowId}
+                  className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_1fr_140px_36px]"
+                >
+                  <Input
+                    value={row.displayName ?? ""}
+                    onChange={(event) =>
+                      handleUpdateCatalogRow(index, {
+                        displayName: event.target.value,
+                      })
+                    }
+                    placeholder={t(
+                      "codexConfig.catalogDisplayNamePlaceholder",
+                      {
+                        defaultValue: "例如: DeepSeek V4 Flash",
+                      },
+                    )}
+                    aria-label={t("codexConfig.catalogColumnDisplay", {
+                      defaultValue: "菜单显示名",
+                    })}
+                  />
+                  <div className="flex gap-1">
+                    <Input
+                      value={row.model}
+                      onChange={(event) =>
+                        handleUpdateCatalogRow(index, {
+                          model: event.target.value,
+                        })
+                      }
+                      placeholder={t("codexConfig.catalogModelPlaceholder", {
+                        defaultValue: "例如: deepseek-v4-flash",
+                      })}
+                      aria-label={t("codexConfig.catalogColumnModel", {
+                        defaultValue: "实际请求模型",
+                      })}
+                      className="flex-1"
+                    />
+                    {fetchedModels.length > 0 && (
+                      <ModelDropdown
+                        models={fetchedModels}
+                        onSelect={(id) =>
+                          handleUpdateCatalogRow(index, {
+                            model: id,
+                            displayName: row.displayName?.trim()
+                              ? row.displayName
+                              : id,
+                          })
+                        }
+                      />
+                    )}
+                  </div>
+                  <Input
+                    type="number"
+                    min={1}
+                    inputMode="numeric"
+                    value={row.contextWindow ?? ""}
+                    onChange={(event) =>
+                      handleUpdateCatalogRow(index, {
+                        contextWindow: event.target.value.replace(/[^\d]/g, ""),
+                      })
+                    }
+                    placeholder={t("codexConfig.contextWindowPlaceholder", {
+                      defaultValue: "例如: 128000",
+                    })}
+                    aria-label={t("codexConfig.catalogColumnContext", {
+                      defaultValue: "上下文窗口",
+                    })}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 text-muted-foreground hover:text-destructive"
+                    onClick={() => handleRemoveCatalogRow(index)}
+                    title={t("common.delete", { defaultValue: "删除" })}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

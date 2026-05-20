@@ -6,12 +6,15 @@ use crate::config::{
     write_text_file,
 };
 use crate::error::AppError;
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::fs;
 use std::path::Path;
+use std::process::Command;
 use toml_edit::DocumentMut;
 
 pub const CC_SWITCH_CODEX_MODEL_PROVIDER_ID: &str = "ccswitch";
+pub const CC_SWITCH_CODEX_MODEL_CATALOG_FILENAME: &str = "cc-switch-model-catalog.json";
+const CODEX_MODEL_CATALOG_TEMPLATE_SLUG: &str = "gpt-5.5";
 
 /// Reserved built-in provider IDs from OpenAI Codex's config/model-provider
 /// catalog. Keep in sync with Codex `RESERVED_MODEL_PROVIDER_IDS` and legacy
@@ -42,6 +45,10 @@ pub fn get_codex_auth_path() -> PathBuf {
 /// 获取 Codex config.toml 路径
 pub fn get_codex_config_path() -> PathBuf {
     get_codex_config_dir().join("config.toml")
+}
+
+pub fn get_codex_model_catalog_path() -> PathBuf {
+    get_codex_config_dir().join(CC_SWITCH_CODEX_MODEL_CATALOG_FILENAME)
 }
 
 /// 获取 Codex 供应商配置文件路径
@@ -413,6 +420,264 @@ pub fn write_codex_live_atomic_with_stable_provider(
     }
 }
 
+fn parse_codex_positive_u64(value: Option<&Value>) -> Option<u64> {
+    match value {
+        Some(Value::Number(n)) => n.as_u64().filter(|v| *v > 0),
+        Some(Value::String(s)) => s.trim().parse::<u64>().ok().filter(|v| *v > 0),
+        _ => None,
+    }
+}
+
+fn extract_codex_top_level_u64(config_text: &str, field: &str) -> Option<u64> {
+    let doc = config_text.parse::<toml::Value>().ok()?;
+    doc.get(field)
+        .and_then(|value| value.as_integer())
+        .and_then(|value| u64::try_from(value).ok())
+        .filter(|value| *value > 0)
+}
+
+fn codex_catalog_model_entry(
+    template: &Value,
+    model: &str,
+    display_name: &str,
+    context_window: u64,
+    priority: usize,
+) -> Value {
+    let mut entry = template.clone();
+    let Some(entry_obj) = entry.as_object_mut() else {
+        return json!({});
+    };
+
+    entry_obj.insert("slug".to_string(), json!(model));
+    entry_obj.insert("display_name".to_string(), json!(display_name));
+    entry_obj.insert("description".to_string(), json!(display_name));
+    entry_obj.insert("context_window".to_string(), json!(context_window));
+    entry_obj.insert("max_context_window".to_string(), json!(context_window));
+    entry_obj.insert("priority".to_string(), json!(1000 + priority));
+    entry_obj.insert("additional_speed_tiers".to_string(), json!([]));
+    entry_obj.insert("service_tiers".to_string(), json!([]));
+    entry_obj.insert("availability_nux".to_string(), Value::Null);
+    entry_obj.insert("upgrade".to_string(), Value::Null);
+
+    entry
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CodexCatalogModelSpec {
+    model: String,
+    display_name: String,
+    context_window: u64,
+}
+
+fn codex_catalog_model_specs(settings: &Value, config_text: &str) -> Vec<CodexCatalogModelSpec> {
+    let Some(models) = settings
+        .get("modelCatalog")
+        .and_then(|catalog| catalog.get("models"))
+        .and_then(|models| models.as_array())
+    else {
+        return Vec::new();
+    };
+
+    let default_context_window =
+        extract_codex_top_level_u64(config_text, "model_context_window").unwrap_or(128_000);
+    let mut seen = std::collections::HashSet::new();
+    let mut specs = Vec::new();
+
+    for model_config in models {
+        let Some(model) = model_config
+            .get("model")
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .filter(|model| !model.is_empty())
+        else {
+            continue;
+        };
+
+        if !seen.insert(model.to_string()) {
+            continue;
+        }
+
+        let display_name = model_config
+            .get("displayName")
+            .or_else(|| model_config.get("display_name"))
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .unwrap_or(model);
+        let context_window = parse_codex_positive_u64(
+            model_config
+                .get("contextWindow")
+                .or_else(|| model_config.get("context_window")),
+        )
+        .unwrap_or(default_context_window);
+
+        specs.push(CodexCatalogModelSpec {
+            model: model.to_string(),
+            display_name: display_name.to_string(),
+            context_window,
+        });
+    }
+
+    specs
+}
+
+fn find_codex_model_template(catalog: &Value) -> Option<Value> {
+    catalog
+        .get("models")
+        .and_then(|models| models.as_array())
+        .and_then(|models| {
+            models.iter().find(|model| {
+                model.get("slug").and_then(|slug| slug.as_str())
+                    == Some(CODEX_MODEL_CATALOG_TEMPLATE_SLUG)
+            })
+        })
+        .cloned()
+}
+
+fn load_codex_model_template_from_cache() -> Result<Option<Value>, AppError> {
+    let path = get_codex_config_dir().join("models_cache.json");
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    let text = fs::read_to_string(&path).map_err(|e| AppError::io(&path, e))?;
+    let catalog: Value = serde_json::from_str(&text).map_err(|e| AppError::json(&path, e))?;
+    Ok(find_codex_model_template(&catalog))
+}
+
+fn load_codex_model_template_from_bundled() -> Result<Option<Value>, AppError> {
+    let output = match Command::new("codex")
+        .args(["debug", "models", "--bundled"])
+        .output()
+    {
+        Ok(output) => output,
+        Err(err) => {
+            log::debug!("failed to run `codex debug models --bundled`: {err}");
+            return Ok(None);
+        }
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        log::debug!("`codex debug models --bundled` failed: {stderr}");
+        return Ok(None);
+    }
+
+    let catalog: Value = serde_json::from_slice(&output.stdout).map_err(|e| {
+        AppError::Message(format!(
+            "Failed to parse `codex debug models --bundled` output: {e}"
+        ))
+    })?;
+    Ok(find_codex_model_template(&catalog))
+}
+
+fn load_codex_model_catalog_template() -> Result<Value, AppError> {
+    if let Some(template) = load_codex_model_template_from_cache()? {
+        return Ok(template);
+    }
+    if let Some(template) = load_codex_model_template_from_bundled()? {
+        return Ok(template);
+    }
+
+    Err(AppError::Message(format!(
+        "Codex model catalog template `{CODEX_MODEL_CATALOG_TEMPLATE_SLUG}` not found. Please start Codex once so models_cache.json is available, or ensure the `codex` CLI is on PATH."
+    )))
+}
+
+fn codex_model_catalog_from_specs(specs: &[CodexCatalogModelSpec], template: &Value) -> Value {
+    let entries: Vec<Value> = specs
+        .iter()
+        .enumerate()
+        .map(|(index, spec)| {
+            codex_catalog_model_entry(
+                template,
+                &spec.model,
+                &spec.display_name,
+                spec.context_window,
+                index,
+            )
+        })
+        .collect();
+
+    json!({ "models": entries })
+}
+
+fn codex_model_catalog_from_settings(
+    settings: &Value,
+    config_text: &str,
+) -> Result<Option<Value>, AppError> {
+    let specs = codex_catalog_model_specs(settings, config_text);
+    if specs.is_empty() {
+        return Ok(None);
+    }
+
+    let template = load_codex_model_catalog_template()?;
+    Ok(Some(codex_model_catalog_from_specs(&specs, &template)))
+}
+
+fn set_codex_model_catalog_json_field(
+    config_text: &str,
+    catalog_path: Option<&Path>,
+) -> Result<String, AppError> {
+    let mut doc = config_text
+        .parse::<DocumentMut>()
+        .map_err(|e| AppError::Message(format!("Invalid Codex config.toml: {e}")))?;
+    let generated_path = get_codex_model_catalog_path();
+
+    match catalog_path {
+        Some(path) => {
+            doc["model_catalog_json"] = toml_edit::value(path.to_string_lossy().as_ref());
+        }
+        None => {
+            let should_remove = doc
+                .get("model_catalog_json")
+                .and_then(|item| item.as_str())
+                .map(|path| {
+                    path == generated_path.to_string_lossy().as_ref()
+                        || Path::new(path).file_name().and_then(|name| name.to_str())
+                            == Some(CC_SWITCH_CODEX_MODEL_CATALOG_FILENAME)
+                })
+                .unwrap_or(false);
+            if should_remove {
+                doc.as_table_mut().remove("model_catalog_json");
+            }
+        }
+    }
+
+    Ok(doc.to_string())
+}
+
+/// Generate Codex `model_catalog_json` from provider settings and inject/remove
+/// the top-level TOML field that points Codex to the generated file.
+pub fn prepare_codex_config_text_with_model_catalog(
+    settings: &Value,
+    config_text: &str,
+) -> Result<String, AppError> {
+    let catalog_path = get_codex_model_catalog_path();
+
+    if let Some(catalog) = codex_model_catalog_from_settings(settings, config_text)? {
+        let config_text = set_codex_model_catalog_json_field(config_text, Some(&catalog_path))?;
+        write_json_file(&catalog_path, &catalog)?;
+        Ok(config_text)
+    } else {
+        set_codex_model_catalog_json_field(config_text, None)
+    }
+}
+
+/// Unified helper: write Codex live config with model catalog preparation.
+/// Replaces scattered `prepare_codex_config_text_with_model_catalog` calls.
+pub fn write_codex_live_with_catalog(
+    settings: &Value,
+    auth: &Value,
+    config_text: Option<&str>,
+) -> Result<(), AppError> {
+    let prepared_config = config_text
+        .map(|text| prepare_codex_config_text_with_model_catalog(settings, text))
+        .transpose()?;
+
+    write_codex_live_atomic_with_stable_provider(auth, prepared_config.as_deref())
+}
+
 /// Update a field in Codex config.toml using toml_edit (syntax-preserving).
 ///
 /// Supported fields:
@@ -420,7 +685,7 @@ pub fn write_codex_live_atomic_with_stable_provider(
 ///   otherwise falls back to top-level `base_url`.
 /// - `"wire_api"`: writes to `[model_providers.<current>].wire_api` if `model_provider` exists,
 ///   otherwise falls back to top-level `wire_api`.
-/// - `"model"`: writes to top-level `model` field.
+/// - `"model"` / `"model_catalog_json"`: writes to top-level field.
 ///
 /// Empty value removes the field.
 pub fn update_codex_toml_field(toml_str: &str, field: &str, value: &str) -> Result<String, String> {
@@ -467,11 +732,11 @@ pub fn update_codex_toml_field(toml_str: &str, field: &str, value: &str) -> Resu
                 doc[field] = toml_edit::value(trimmed);
             }
         }
-        "model" => {
+        "model" | "model_catalog_json" => {
             if trimmed.is_empty() {
-                doc.as_table_mut().remove("model");
+                doc.as_table_mut().remove(field);
             } else {
-                doc["model"] = toml_edit::value(trimmed);
+                doc[field] = toml_edit::value(trimmed);
             }
         }
         _ => return Err(format!("unsupported field: {field}")),
@@ -1009,5 +1274,131 @@ base_url = "https://production.api/v1"
             .and_then(|v| v.get("base_url"))
             .and_then(|v| v.as_str());
         assert_eq!(base_url, Some("https://production.api/v1"));
+    }
+
+    #[test]
+    fn codex_model_catalog_uses_provider_models_and_context() {
+        let template = json!({
+            "slug": "gpt-5.5",
+            "display_name": "GPT-5.5",
+            "description": "Frontier model",
+            "base_instructions": "gpt-5.5 base instructions",
+            "model_messages": {
+                "instructions_template": "gpt-5.5 instructions template",
+                "instructions_variables": {
+                    "personality_default": "",
+                    "personality_friendly": "",
+                    "personality_pragmatic": ""
+                }
+            },
+            "additional_speed_tiers": ["fast"],
+            "service_tiers": [
+                {
+                    "id": "priority",
+                    "name": "Fast",
+                    "description": "1.5x speed, increased usage"
+                }
+            ],
+            "availability_nux": {
+                "message": "GPT-5.5 is now available."
+            },
+            "upgrade": {
+                "target": "gpt-5.5"
+            },
+            "context_window": 272000,
+            "max_context_window": 272000
+        });
+        let settings = json!({
+            "modelCatalog": {
+                "models": [
+                    {
+                        "model": "deepseek-v4-flash",
+                        "displayName": "DeepSeek V4 Flash",
+                        "contextWindow": "64000"
+                    },
+                    {
+                        "model": "kimi-k2",
+                        "display_name": "Kimi K2"
+                    }
+                ]
+            }
+        });
+        let specs = codex_catalog_model_specs(&settings, r#"model_context_window = 128000"#);
+        let catalog = codex_model_catalog_from_specs(&specs, &template);
+        let models = catalog
+            .get("models")
+            .and_then(|value| value.as_array())
+            .expect("models should be an array");
+
+        assert_eq!(models.len(), 2);
+        assert_eq!(
+            models[0].get("slug").and_then(|value| value.as_str()),
+            Some("deepseek-v4-flash")
+        );
+        assert_eq!(
+            models[0]
+                .get("context_window")
+                .and_then(|value| value.as_u64()),
+            Some(64_000)
+        );
+        assert_eq!(
+            models[1]
+                .get("context_window")
+                .and_then(|value| value.as_u64()),
+            Some(128_000)
+        );
+        assert!(
+            models[0].get("model_messages").is_some(),
+            "Codex requires model_messages in custom catalogs"
+        );
+        assert_eq!(
+            models[0]
+                .get("base_instructions")
+                .and_then(|value| value.as_str()),
+            Some("gpt-5.5 base instructions")
+        );
+        assert_eq!(
+            models[0].get("model_messages"),
+            template.get("model_messages"),
+            "custom catalog entries should keep the gpt-5.5 agent template"
+        );
+        assert_eq!(
+            models[0].get("additional_speed_tiers"),
+            Some(&json!([])),
+            "generated third-party entries should not inherit OpenAI speed tiers"
+        );
+        assert!(
+            models[0]
+                .get("availability_nux")
+                .is_some_and(|value| value.is_null()),
+            "generated third-party entries should not inherit GPT-5.5 launch messaging"
+        );
+    }
+
+    #[test]
+    fn model_catalog_json_field_operates_on_top_level() {
+        let input = r#"model_provider = "any"
+
+[model_providers.any]
+name = "any"
+"#;
+        let catalog_path = Path::new("/tmp/cc-switch-model-catalog.json");
+
+        let result = set_codex_model_catalog_json_field(input, Some(catalog_path)).unwrap();
+        let parsed: toml::Value = toml::from_str(&result).unwrap();
+        assert_eq!(
+            parsed
+                .get("model_catalog_json")
+                .and_then(|value| value.as_str()),
+            Some("/tmp/cc-switch-model-catalog.json")
+        );
+        assert!(
+            parsed
+                .get("model_providers")
+                .and_then(|value| value.get("any"))
+                .and_then(|value| value.get("model_catalog_json"))
+                .is_none(),
+            "model_catalog_json should stay top-level"
+        );
     }
 }

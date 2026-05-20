@@ -209,6 +209,12 @@ export type ClaudeApiFormat =
 // - "openai_chat": OpenAI Chat Completions 格式，需要本地路由转换
 export type CodexApiFormat = "openai_responses" | "openai_chat";
 
+export interface CodexCatalogModel {
+  model: string;
+  displayName?: string;
+  contextWindow?: string | number;
+}
+
 // Claude 认证字段类型
 export type ClaudeApiKeyField = "ANTHROPIC_AUTH_TOKEN" | "ANTHROPIC_API_KEY";
 
