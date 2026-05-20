@@ -1735,13 +1735,8 @@ impl ProxyService {
                 )?;
             }
 
-            let anchor_config_text = existing_backup_value
-                .as_ref()
-                .and_then(|value| value.get("config"))
-                .and_then(|value| value.as_str());
             crate::codex_config::normalize_codex_settings_config_model_provider(
                 &mut effective_settings,
-                anchor_config_text,
             )
             .map_err(|e| format!("归一化 Codex restore backup 失败: {e}"))?;
         }
@@ -3388,7 +3383,7 @@ requires_openai_auth = true
             toml::from_str(backup_config).expect("parse backup config");
         assert_eq!(
             parsed_backup.get("model_provider").and_then(|v| v.as_str()),
-            Some("rightcode"),
+            Some("custom"),
             "provider-derived restore backup should retain stable Codex model_provider"
         );
         let backup_model_providers = parsed_backup
@@ -3398,7 +3393,7 @@ requires_openai_auth = true
         assert!(backup_model_providers.get("aihubmix").is_none());
         assert_eq!(
             backup_model_providers
-                .get("rightcode")
+                .get("custom")
                 .and_then(|v| v.get("base_url"))
                 .and_then(|v| v.as_str()),
             Some("https://aihubmix.example/v1"),
@@ -3418,7 +3413,7 @@ requires_openai_auth = true
         let parsed_live: toml::Value = toml::from_str(live_config).expect("parse live config");
         assert_eq!(
             parsed_live.get("model_provider").and_then(|v| v.as_str()),
-            Some("rightcode"),
+            Some("custom"),
             "restored Codex live config should not switch history buckets"
         );
         assert_eq!(
@@ -3527,7 +3522,7 @@ requires_openai_auth = true
 
         assert_eq!(
             parsed_live.get("model_provider").and_then(|v| v.as_str()),
-            Some("stable")
+            Some("custom")
         );
         assert_eq!(
             parsed_live.get("model").and_then(|v| v.as_str()),

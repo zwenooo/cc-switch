@@ -354,6 +354,17 @@ export interface Settings {
   // Windows: "cmd" | "powershell" | "wt"
   // Linux: "gnome-terminal" | "konsole" | "xfce4-terminal" | "alacritty" | "kitty" | "ghostty"
   preferredTerminal?: string;
+
+  // ===== 本机自动迁移状态 =====
+  localMigrations?: {
+    codexThirdPartyHistoryProviderBucketV1?: {
+      completedAt: string;
+      targetProviderId: string;
+      sourceProviderIds?: string[];
+      migratedJsonlFiles?: number;
+      migratedStateRows?: number;
+    };
+  };
 }
 
 export interface SessionMeta {

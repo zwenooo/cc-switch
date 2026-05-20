@@ -46,21 +46,16 @@ export function generateThirdPartyConfig(
   baseUrl: string,
   modelName = "gpt-5.4",
 ): string {
-  // 清理供应商名称，确保符合TOML键名规范
-  const cleanProviderName =
-    providerName
-      .toLowerCase()
-      .replace(/[^a-z0-9_]/g, "_")
-      .replace(/^_+|_+$/g, "") || "custom";
+  const tomlString = (value: string) => JSON.stringify(value);
 
-  return `model_provider = "${cleanProviderName}"
-model = "${modelName}"
+  return `model_provider = "custom"
+model = ${tomlString(modelName)}
 model_reasoning_effort = "high"
 disable_response_storage = true
 
-[model_providers.${cleanProviderName}]
-name = "${cleanProviderName}"
-base_url = "${baseUrl}"
+[model_providers.custom]
+name = ${tomlString(providerName)}
+base_url = ${tomlString(baseUrl)}
 wire_api = "responses"
 requires_openai_auth = true`;
 }
@@ -120,12 +115,12 @@ export const codexProviderPresets: CodexProviderPreset[] = [
     category: "third_party",
     isOfficial: true,
     auth: generateThirdPartyAuth(""),
-    config: `model_provider = "azure"
+    config: `model_provider = "custom"
 model = "gpt-5.4"
 model_reasoning_effort = "high"
 disable_response_storage = true
 
-[model_providers.azure]
+[model_providers.custom]
 name = "Azure OpenAI"
 base_url = "https://YOUR_RESOURCE_NAME.openai.azure.com/openai"
 env_key = "OPENAI_API_KEY"
@@ -438,14 +433,14 @@ requires_openai_auth = true`,
     auth: {
       OPENAI_API_KEY: "",
     },
-    config: `model_provider = "e-flowcode"
+    config: `model_provider = "custom"
 model = "gpt-5.4"
 model_reasoning_effort = "high"
 disable_response_storage = true
 personality = "pragmatic"
 
-[model_providers.e-flowcode]
-name = "e-flowcode"
+[model_providers.custom]
+name = "E-FlowCode"
 base_url = "https://e-flowcode.cc/v1"
 wire_api = "responses"
 requires_openai_auth = true
@@ -485,7 +480,7 @@ model_reasoning_effort = "medium"
 disable_response_storage = true
 
 [model_providers.custom]
-name = "custom"
+name = "PIPELLM"
 wire_api = "responses"
 requires_openai_auth = true
 base_url = "https://cc-api.pipellm.ai/v1"`,

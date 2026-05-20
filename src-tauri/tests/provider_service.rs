@@ -309,8 +309,8 @@ requires_openai_auth = true
 
     assert_eq!(
         parsed.get("model_provider").and_then(|v| v.as_str()),
-        Some("rightcode"),
-        "live Codex model_provider should stay stable so resume history remains visible"
+        Some("custom"),
+        "live Codex third-party model_provider should use the CC Switch history bucket"
     );
 
     let model_providers = parsed
@@ -323,7 +323,7 @@ requires_openai_auth = true
     );
     assert_eq!(
         model_providers
-            .get("rightcode")
+            .get("custom")
             .and_then(|v| v.get("base_url"))
             .and_then(|v| v.as_str()),
         Some("https://aihubmix.example/v1"),
