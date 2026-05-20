@@ -52,6 +52,7 @@ pub fn responses_to_chat_completions(body: Value) -> Result<Value, ProxyError> {
     if let Some(input) = body.get("input") {
         append_responses_input_as_chat_messages(input, &mut messages)?;
     }
+    let messages = collapse_system_messages_to_head(messages);
     result["messages"] = json!(messages);
 
     let model = body.get("model").and_then(|v| v.as_str()).unwrap_or("");
@@ -102,6 +103,38 @@ pub fn responses_to_chat_completions(body: Value) -> Result<Value, ProxyError> {
     }
 
     Ok(result)
+}
+
+/// MiniMax 严格要求 messages 中只能首条出现 `role=system`，
+/// 否则返回 `invalid params, chat content has invalid message role: system (2013)`。
+/// 把所有 system 消息合并到首位，避免中间 system（如 Codex 的 `developer` 指令）触发该约束；
+/// 该重排对 OpenAI / DeepSeek 等宽松兼容层也是无损的。
+fn collapse_system_messages_to_head(messages: Vec<Value>) -> Vec<Value> {
+    let mut system_chunks: Vec<String> = Vec::new();
+    let mut rest: Vec<Value> = Vec::with_capacity(messages.len());
+
+    for msg in messages {
+        if msg.get("role").and_then(|v| v.as_str()) == Some("system") {
+            if let Some(text) = msg.get("content").and_then(|v| v.as_str()) {
+                let trimmed = text.trim();
+                if !trimmed.is_empty() {
+                    system_chunks.push(text.to_string());
+                }
+                continue;
+            }
+        }
+        rest.push(msg);
+    }
+
+    let mut out: Vec<Value> = Vec::with_capacity(rest.len() + 1);
+    if !system_chunks.is_empty() {
+        out.push(json!({
+            "role": "system",
+            "content": system_chunks.join("\n\n")
+        }));
+    }
+    out.extend(rest);
+    out
 }
 
 fn instruction_text(value: &Value) -> String {
@@ -932,6 +965,61 @@ mod tests {
         assert_eq!(messages[1]["content"], "Keep the reply brief.");
         assert_eq!(messages[2]["role"], "user");
         assert_eq!(messages[2]["content"], "Fallback content.");
+    }
+
+    #[test]
+    fn responses_request_to_chat_merges_mid_stream_system_into_head() {
+        let input = json!({
+            "model": "MiniMax-M2.7",
+            "instructions": "You are Codex.",
+            "input": [
+                {"type": "message", "role": "developer", "content": [{"type": "input_text", "text": "Permissions block"}]},
+                {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "AGENTS.md"}]},
+                {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "你好"}]},
+                {"type": "message", "role": "developer", "content": [{"type": "input_text", "text": "Collaboration Mode: Default"}]},
+                {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "你好"}]},
+                {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "你好"}]}
+            ]
+        });
+
+        let result = responses_to_chat_completions(input).unwrap();
+        let messages = result["messages"].as_array().unwrap();
+
+        for (idx, msg) in messages.iter().enumerate() {
+            let role = msg.get("role").and_then(|v| v.as_str()).unwrap();
+            if idx == 0 {
+                assert_eq!(role, "system", "first message must be system");
+            } else {
+                assert_ne!(
+                    role, "system",
+                    "no system role allowed past index 0 (got at {idx})"
+                );
+            }
+        }
+
+        let head_content = messages[0]["content"].as_str().unwrap();
+        assert!(head_content.contains("You are Codex."));
+        assert!(head_content.contains("Permissions block"));
+        assert!(head_content.contains("Collaboration Mode: Default"));
+    }
+
+    #[test]
+    fn collapse_system_messages_preserves_non_system_order() {
+        let input = vec![
+            json!({"role": "system", "content": "S1"}),
+            json!({"role": "user", "content": "U1"}),
+            json!({"role": "assistant", "content": "A1"}),
+            json!({"role": "system", "content": "S2"}),
+            json!({"role": "user", "content": "U2"}),
+        ];
+        let out = collapse_system_messages_to_head(input);
+
+        assert_eq!(out.len(), 4);
+        assert_eq!(out[0]["role"], "system");
+        assert_eq!(out[0]["content"], "S1\n\nS2");
+        assert_eq!(out[1]["content"], "U1");
+        assert_eq!(out[2]["content"], "A1");
+        assert_eq!(out[3]["content"], "U2");
     }
 
     #[test]
