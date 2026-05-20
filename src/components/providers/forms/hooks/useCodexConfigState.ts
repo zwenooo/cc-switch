@@ -224,7 +224,7 @@ export function useCodexConfigState({ initialData }: UseCodexConfigStateProps) {
         setCodexApiKey("");
       }
     },
-    [setCodexAuth, setCodexConfig],
+    [setCodexAuth, setCodexConfig, setCodexCatalogModels],
   );
 
   return {
