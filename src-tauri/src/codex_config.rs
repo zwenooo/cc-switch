@@ -651,6 +651,128 @@ pub fn prepare_codex_config_text_with_model_catalog(
     }
 }
 
+/// Reverse of `prepare_codex_config_text_with_model_catalog`: read the
+/// cc-switch–maintained catalog file referenced by `~/.codex/config.toml` and
+/// convert it back into the simplified shape the frontend table uses:
+/// `{ "models": [{ "model", "displayName"?, "contextWindow"? }, ...] }`.
+///
+/// We only reverse-parse catalogs whose `model_catalog_json` path is the
+/// cc-switch–generated file (identified by filename
+/// `cc-switch-model-catalog.json`). A user-managed external catalog file is
+/// left alone — surfacing its richer structure as the simplified table would
+/// be a downgrade we can't safely round-trip.
+///
+/// `displayName` and `contextWindow` are omitted from the returned entry when
+/// the on-disk value matches the fallback that
+/// `codex_model_catalog_from_settings` injects for unset inputs (slug for
+/// display_name, `model_context_window` or 128_000 for context_window). This
+/// preserves the "user left it blank" intent across round-trip; an unavoidable
+/// edge case is that a user-typed value that happens to equal the fallback
+/// will also collapse to blank, but the next save writes the same fallback so
+/// behavior stays consistent.
+///
+/// All failure modes (missing file, parse error, no `model_catalog_json`,
+/// entries without `slug`) collapse to `Ok(None)` so callers can treat this
+/// as best-effort enrichment without making `read_live_settings` brittle.
+pub fn read_codex_model_catalog_simplified_from_live() -> Result<Option<Value>, AppError> {
+    let config_text = read_codex_config_text()?;
+    let generated_path = get_codex_model_catalog_path();
+    let Some(catalog_path) = resolve_cc_switch_catalog_path(&config_text, &generated_path) else {
+        return Ok(None);
+    };
+    if !catalog_path.exists() {
+        return Ok(None);
+    }
+    let Ok(catalog_text) = fs::read_to_string(&catalog_path) else {
+        return Ok(None);
+    };
+    Ok(build_simplified_catalog_from_texts(
+        &config_text,
+        &catalog_text,
+    ))
+}
+
+/// Given `config.toml` text, resolve the on-disk path of the cc-switch–owned
+/// catalog file (returns `None` if `model_catalog_json` is absent or points at
+/// a file we don't own). Relative paths fall back to `generated_path`.
+fn resolve_cc_switch_catalog_path(config_text: &str, generated_path: &Path) -> Option<PathBuf> {
+    if config_text.trim().is_empty() {
+        return None;
+    }
+    let doc = config_text.parse::<DocumentMut>().ok()?;
+    let catalog_path_str = doc
+        .get("model_catalog_json")
+        .and_then(|item| item.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())?;
+
+    let referenced_path = Path::new(catalog_path_str);
+    let is_cc_switch_owned = catalog_path_str == generated_path.to_string_lossy().as_ref()
+        || referenced_path.file_name().and_then(|name| name.to_str())
+            == Some(CC_SWITCH_CODEX_MODEL_CATALOG_FILENAME);
+    if !is_cc_switch_owned {
+        return None;
+    }
+
+    if referenced_path.is_absolute() {
+        Some(referenced_path.to_path_buf())
+    } else {
+        Some(generated_path.to_path_buf())
+    }
+}
+
+/// Pure reverse-parsing core: convert Codex catalog JSON text back into the
+/// frontend's simplified `{ models: [{ model, displayName?, contextWindow? }] }`
+/// shape. Returns `None` when the catalog is unparseable, has no `models`
+/// array, or yields zero valid entries.
+fn build_simplified_catalog_from_texts(config_text: &str, catalog_text: &str) -> Option<Value> {
+    let catalog: Value = serde_json::from_str(catalog_text).ok()?;
+    let models = catalog.get("models").and_then(|m| m.as_array())?;
+
+    let default_context_window =
+        extract_codex_top_level_u64(config_text, "model_context_window").unwrap_or(128_000);
+
+    let mut entries = Vec::with_capacity(models.len());
+    for entry in models {
+        let Some(model) = entry
+            .get("slug")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        else {
+            continue;
+        };
+
+        let mut obj = serde_json::Map::new();
+        obj.insert("model".to_string(), json!(model));
+
+        if let Some(display_name) = entry
+            .get("display_name")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty() && *s != model)
+        {
+            obj.insert("displayName".to_string(), json!(display_name));
+        }
+
+        if let Some(context_window) = entry
+            .get("context_window")
+            .and_then(|v| v.as_u64())
+            .filter(|v| *v > 0 && *v != default_context_window)
+        {
+            obj.insert("contextWindow".to_string(), json!(context_window));
+        }
+
+        entries.push(Value::Object(obj));
+    }
+
+    if entries.is_empty() {
+        return None;
+    }
+
+    Some(json!({ "models": entries }))
+}
+
 /// Unified helper: write Codex live config with model catalog preparation.
 /// Replaces scattered `prepare_codex_config_text_with_model_catalog` calls.
 pub fn write_codex_live_with_catalog(
@@ -1345,6 +1467,125 @@ name = "any"
                 .and_then(|value| value.get("model_catalog_json"))
                 .is_none(),
             "model_catalog_json should stay top-level"
+        );
+    }
+
+    #[test]
+    fn resolve_catalog_path_returns_none_when_config_missing_field() {
+        let generated = PathBuf::from("/tmp/.codex/cc-switch-model-catalog.json");
+        assert!(resolve_cc_switch_catalog_path("", &generated).is_none());
+        assert!(
+            resolve_cc_switch_catalog_path("model = \"gpt-5\"", &generated).is_none(),
+            "no model_catalog_json field should yield None"
+        );
+    }
+
+    #[test]
+    fn resolve_catalog_path_accepts_cc_switch_owned_file() {
+        let generated = PathBuf::from("/tmp/.codex/cc-switch-model-catalog.json");
+        let config = r#"model_catalog_json = "/tmp/.codex/cc-switch-model-catalog.json"
+"#;
+        let resolved = resolve_cc_switch_catalog_path(config, &generated).expect("path resolves");
+        assert_eq!(resolved, generated);
+    }
+
+    #[test]
+    fn resolve_catalog_path_rejects_user_owned_external_file() {
+        let generated = PathBuf::from("/tmp/.codex/cc-switch-model-catalog.json");
+        let config = r#"model_catalog_json = "/Users/me/.codex/my-handwritten-catalog.json"
+"#;
+        assert!(
+            resolve_cc_switch_catalog_path(config, &generated).is_none(),
+            "external catalog files should be left alone"
+        );
+    }
+
+    #[test]
+    fn build_simplified_catalog_round_trips_user_input() {
+        let config = "";
+        let catalog = r#"{
+            "models": [
+                { "slug": "deepseek-v4-pro", "display_name": "deepseek-v4-pro", "context_window": 1000000 },
+                { "slug": "deepseek-v4-flash", "display_name": "DeepSeek Flash", "context_window": 1000000 }
+            ]
+        }"#;
+        let result = build_simplified_catalog_from_texts(config, catalog).expect("entries found");
+        let models = result
+            .get("models")
+            .and_then(|m| m.as_array())
+            .expect("models array");
+        assert_eq!(models.len(), 2);
+
+        // First entry: display_name == slug → displayName squashed; explicit
+        // context_window != default 128_000 → preserved.
+        assert_eq!(
+            models[0].get("model").and_then(|v| v.as_str()),
+            Some("deepseek-v4-pro")
+        );
+        assert!(models[0].get("displayName").is_none());
+        assert_eq!(
+            models[0].get("contextWindow").and_then(|v| v.as_u64()),
+            Some(1_000_000)
+        );
+
+        // Second entry: display_name distinct from slug → preserved.
+        assert_eq!(
+            models[1].get("displayName").and_then(|v| v.as_str()),
+            Some("DeepSeek Flash")
+        );
+    }
+
+    #[test]
+    fn build_simplified_catalog_squashes_default_context_window() {
+        // Default fallback is 128_000 when config.toml has no model_context_window.
+        let catalog = r#"{
+            "models": [{ "slug": "kimi", "display_name": "kimi", "context_window": 128000 }]
+        }"#;
+        let result = build_simplified_catalog_from_texts("", catalog).expect("entry");
+        let entry = &result.get("models").unwrap().as_array().unwrap()[0];
+        assert!(
+            entry.get("contextWindow").is_none(),
+            "default 128_000 should be squashed so the form shows blank, matching the user's blank input"
+        );
+    }
+
+    #[test]
+    fn build_simplified_catalog_respects_explicit_model_context_window() {
+        // When config.toml sets model_context_window, that becomes the default fallback.
+        let config = r#"model_context_window = 200000
+"#;
+        let catalog = r#"{
+            "models": [
+                { "slug": "a", "display_name": "a", "context_window": 200000 },
+                { "slug": "b", "display_name": "b", "context_window": 500000 }
+            ]
+        }"#;
+        let result = build_simplified_catalog_from_texts(config, catalog).expect("entries");
+        let models = result.get("models").unwrap().as_array().unwrap();
+        // Matches default → squashed.
+        assert!(models[0].get("contextWindow").is_none());
+        // Different from default → preserved.
+        assert_eq!(
+            models[1].get("contextWindow").and_then(|v| v.as_u64()),
+            Some(500_000)
+        );
+    }
+
+    #[test]
+    fn build_simplified_catalog_returns_none_when_unparseable() {
+        assert!(build_simplified_catalog_from_texts("", "not json").is_none());
+        assert!(build_simplified_catalog_from_texts("", "{}").is_none());
+        assert!(
+            build_simplified_catalog_from_texts("", r#"{"models": []}"#).is_none(),
+            "empty models array should yield None so the field is not inserted at all"
+        );
+        assert!(
+            build_simplified_catalog_from_texts(
+                "",
+                r#"{"models": [{"display_name": "no slug"}]}"#,
+            )
+            .is_none(),
+            "entries lacking slug are skipped; a fully-skipped catalog yields None"
         );
     }
 }

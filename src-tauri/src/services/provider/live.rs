@@ -961,7 +961,20 @@ pub fn read_live_settings(app_type: AppType) -> Result<Value, AppError> {
             }
             let auth: Value = read_json_file(&auth_path)?;
             let cfg_text = crate::codex_config::read_and_validate_codex_config_text()?;
-            Ok(json!({ "auth": auth, "config": cfg_text }))
+            let mut result = json!({ "auth": auth, "config": cfg_text });
+            // `modelCatalog` is a cc-switch private field that lives only in
+            // the DB SSOT plus the `cc-switch-model-catalog.json` projection
+            // file — it is never inlined into `auth.json` or `config.toml`.
+            // Reverse-parse the projection so the edit form for the active
+            // Codex provider doesn't see an empty mapping table.
+            if let Ok(Some(model_catalog)) =
+                crate::codex_config::read_codex_model_catalog_simplified_from_live()
+            {
+                if let Some(obj) = result.as_object_mut() {
+                    obj.insert("modelCatalog".to_string(), model_catalog);
+                }
+            }
+            Ok(result)
         }
         AppType::Claude => {
             let path = get_claude_settings_path();
