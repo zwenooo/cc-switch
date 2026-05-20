@@ -10,6 +10,7 @@ use crate::provider::Provider;
 use crate::proxy::error::ProxyError;
 use regex::Regex;
 use serde_json::Value as JsonValue;
+use std::collections::HashSet;
 use std::sync::LazyLock;
 use toml::Value as TomlValue;
 
@@ -20,13 +21,6 @@ static CODEX_CLIENT_REGEX: LazyLock<Regex> =
 
 /// Codex 适配器
 pub struct CodexAdapter;
-
-/// Local model written into Codex config.toml for Chat-only upstreams.
-///
-/// Codex itself must see a model it can load metadata for; the real provider
-/// model is restored inside the proxy immediately before Chat Completions
-/// conversion.
-pub const CODEX_CHAT_CLIENT_MODEL: &str = "gpt-5.4";
 
 /// Whether this Codex provider's real upstream should be called through
 /// OpenAI Chat Completions, even if the local Codex client is talking to CC
@@ -108,14 +102,44 @@ pub fn codex_provider_upstream_model(provider: &Provider) -> Option<String> {
         })
 }
 
-/// For Codex Chat providers, replace the local Codex-safe model with the real
-/// upstream model before converting the request to Chat Completions.
+fn codex_provider_catalog_model_ids(provider: &Provider) -> HashSet<String> {
+    provider
+        .settings_config
+        .get("modelCatalog")
+        .and_then(|catalog| catalog.get("models"))
+        .and_then(|models| models.as_array())
+        .map(|models| {
+            models
+                .iter()
+                .filter_map(|model| model.get("model").and_then(|value| value.as_str()))
+                .map(str::trim)
+                .filter(|model| !model.is_empty())
+                .map(ToString::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// For Codex Chat providers, ensure the request uses the configured upstream
+/// model before converting the request to Chat Completions.
 pub fn apply_codex_chat_upstream_model(
     provider: &Provider,
     body: &mut JsonValue,
 ) -> Option<String> {
     if !codex_provider_uses_chat_completions(provider) {
         return None;
+    }
+
+    let catalog_model_ids = codex_provider_catalog_model_ids(provider);
+    if let Some(request_model) = body
+        .get("model")
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|model| !model.is_empty())
+    {
+        if catalog_model_ids.contains(request_model) {
+            return Some(request_model.to_string());
+        }
     }
 
     let upstream_model = codex_provider_upstream_model(provider)?;
@@ -567,7 +591,7 @@ wire_api = "responses"
             ..Default::default()
         });
         let mut body = json!({
-            "model": CODEX_CHAT_CLIENT_MODEL,
+            "model": "placeholder-client-model",
             "input": "ping"
         });
 
@@ -578,5 +602,39 @@ wire_api = "responses"
             body.get("model").and_then(|v| v.as_str()),
             Some("deepseek-v4-flash")
         );
+    }
+
+    #[test]
+    fn test_apply_codex_chat_upstream_model_preserves_catalog_model_selection() {
+        let mut provider = create_provider(json!({
+            "config": r#"
+model_provider = "deepseek"
+model = "deepseek-v4-flash"
+
+[model_providers.deepseek]
+name = "DeepSeek"
+base_url = "https://api.deepseek.com/v1"
+wire_api = "responses"
+"#,
+            "modelCatalog": {
+                "models": [
+                    { "model": "deepseek-v4-flash" },
+                    { "model": "kimi-k2" }
+                ]
+            }
+        }));
+        provider.meta = Some(crate::provider::ProviderMeta {
+            api_format: Some("openai_chat".to_string()),
+            ..Default::default()
+        });
+        let mut body = json!({
+            "model": "kimi-k2",
+            "input": "ping"
+        });
+
+        let upstream_model = apply_codex_chat_upstream_model(&provider, &mut body);
+
+        assert_eq!(upstream_model.as_deref(), Some("kimi-k2"));
+        assert_eq!(body.get("model").and_then(|v| v.as_str()), Some("kimi-k2"));
     }
 }

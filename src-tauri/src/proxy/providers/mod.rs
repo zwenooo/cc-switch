@@ -47,8 +47,7 @@ pub use claude::{
 pub use codex::CodexAdapter;
 pub use codex::{
     apply_codex_chat_upstream_model, codex_provider_upstream_model,
-    codex_provider_uses_chat_completions, should_convert_codex_responses_to_chat,
-    CODEX_CHAT_CLIENT_MODEL,
+    should_convert_codex_responses_to_chat,
 };
 pub use gemini::GeminiAdapter;
 
