@@ -9,7 +9,7 @@ use super::{
         chat_usage_to_responses_usage, response_id_from_chat_id, response_status_from_finish_reason,
     },
 };
-use crate::proxy::json_canonical::canonicalize_json_string_if_parseable;
+use crate::proxy::json_canonical::canonicalize_tool_arguments_str;
 use crate::proxy::sse::{strip_sse_field, take_sse_block};
 use bytes::Bytes;
 use futures::stream::{Stream, StreamExt};
@@ -689,7 +689,7 @@ impl ChatToResponsesState {
 
             let state = self.tools.get_mut(&key).expect("tool state exists");
             let output_index = state.output_index.unwrap_or(0);
-            let arguments = canonicalize_json_string_if_parseable(&state.arguments);
+            let arguments = canonicalize_tool_arguments_str(&state.arguments);
             let item = response_function_call_item(
                 &state.item_id,
                 "completed",

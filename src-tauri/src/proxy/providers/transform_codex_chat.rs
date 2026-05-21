@@ -11,7 +11,9 @@ use super::codex_chat_common::{
 use crate::provider::CodexChatReasoningConfig;
 use crate::proxy::{
     error::ProxyError,
-    json_canonical::{canonical_json_string, canonicalize_json_string_if_parseable},
+    json_canonical::{
+        canonical_json_string, canonicalize_json_string_if_parseable, canonicalize_tool_arguments,
+    },
 };
 use serde_json::{json, Value};
 
@@ -730,11 +732,7 @@ fn responses_function_call_to_chat_tool_call(item: &Value) -> Value {
         .and_then(|v| v.as_str())
         .unwrap_or("");
     let name = item.get("name").and_then(|v| v.as_str()).unwrap_or("");
-    let arguments = match item.get("arguments") {
-        Some(Value::String(s)) => canonicalize_json_string_if_parseable(s),
-        Some(v) => canonical_json_string(v),
-        None => "{}".to_string(),
-    };
+    let arguments = canonicalize_tool_arguments(item.get("arguments"));
 
     json!({
         "id": call_id,
@@ -980,11 +978,7 @@ fn chat_tool_call_to_response_item(
         .unwrap_or_else(|| format!("call_{index}"));
     let function = tool_call.get("function").unwrap_or(&Value::Null);
     let name = function.get("name").and_then(|v| v.as_str()).unwrap_or("");
-    let arguments = match function.get("arguments") {
-        Some(Value::String(s)) => canonicalize_json_string_if_parseable(s),
-        Some(v) => canonical_json_string(v),
-        None => "{}".to_string(),
-    };
+    let arguments = canonicalize_tool_arguments(function.get("arguments"));
 
     let item_id = format!("fc_{call_id}");
     response_function_call_item(&item_id, "completed", &call_id, name, &arguments, reasoning)
@@ -1003,11 +997,7 @@ fn chat_legacy_function_call_to_response_item(
         .get("name")
         .and_then(|v| v.as_str())
         .unwrap_or("");
-    let arguments = match function_call.get("arguments") {
-        Some(Value::String(s)) => canonicalize_json_string_if_parseable(s),
-        Some(v) => canonical_json_string(v),
-        None => "{}".to_string(),
-    };
+    let arguments = canonicalize_tool_arguments(function_call.get("arguments"));
 
     let item_id = format!("fc_{call_id}");
     response_function_call_item(&item_id, "completed", call_id, name, &arguments, reasoning)
