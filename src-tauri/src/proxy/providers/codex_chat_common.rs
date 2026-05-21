@@ -3,6 +3,8 @@ use serde_json::{json, Map, Value};
 const THINK_OPEN_TAG: &str = "<think>";
 const THINK_CLOSE_TAG: &str = "</think>";
 
+// 穷举上游可能的 reasoning 回传字段，优先级：reasoning_content > reasoning(字符串/对象) > reasoning_details。
+// 不依赖 provider meta 的 outputFormat 声明，因此对各家 Chat 兼容接口都能兜底提取。
 pub(crate) fn extract_reasoning_field_text(value: &Value) -> Option<String> {
     for key in ["reasoning_content", "reasoning"] {
         if let Some(text) = value.get(key).and_then(|v| v.as_str()) {
@@ -12,13 +14,59 @@ pub(crate) fn extract_reasoning_field_text(value: &Value) -> Option<String> {
         }
     }
 
-    let reasoning = value.get("reasoning")?;
-    for key in ["content", "text", "summary"] {
-        if let Some(text) = reasoning.get(key).and_then(|v| v.as_str()) {
+    if let Some(reasoning) = value.get("reasoning") {
+        for key in ["content", "text", "summary"] {
+            if let Some(text) = reasoning.get(key).and_then(|v| v.as_str()) {
+                if !text.is_empty() {
+                    return Some(text.to_string());
+                }
+            }
+        }
+    }
+
+    if let Some(details) = value.get("reasoning_details") {
+        if let Some(text) = extract_reasoning_details_text(details) {
+            return Some(text);
+        }
+    }
+
+    None
+}
+
+fn extract_reasoning_details_text(value: &Value) -> Option<String> {
+    match value {
+        Value::String(text) => (!text.is_empty()).then(|| text.to_string()),
+        Value::Array(parts) => {
+            let text = parts
+                .iter()
+                .filter_map(extract_reasoning_detail_part_text)
+                .filter(|text| !text.is_empty())
+                .collect::<Vec<_>>()
+                .join("\n\n");
+            (!text.is_empty()).then_some(text)
+        }
+        Value::Object(_) => extract_reasoning_detail_part_text(value),
+        _ => None,
+    }
+}
+
+fn extract_reasoning_detail_part_text(value: &Value) -> Option<String> {
+    for key in ["text", "content", "summary"] {
+        if let Some(text) = value.get(key).and_then(|v| v.as_str()) {
             if !text.is_empty() {
                 return Some(text.to_string());
             }
         }
+    }
+
+    if let Some(parts) = value.get("parts").and_then(|v| v.as_array()) {
+        let text = parts
+            .iter()
+            .filter_map(extract_reasoning_detail_part_text)
+            .filter(|text| !text.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        return (!text.is_empty()).then_some(text);
     }
 
     None

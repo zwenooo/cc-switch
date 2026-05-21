@@ -1103,7 +1103,13 @@
     "catalogModelPlaceholder": "e.g., deepseek-v4-flash",
     "catalogColumnDisplay": "Menu Display Name",
     "catalogColumnModel": "Actual Request Model",
-    "catalogColumnContext": "Context Window"
+    "catalogColumnContext": "Context Window",
+    "reasoningModeToggle": "Supports Thinking Mode",
+    "reasoningModeHint": "Enable when the upstream Chat Completions API supports toggling thinking on/off. Providers like Kimi, GLM and Qwen usually fall into this category.",
+    "reasoningEffortToggle": "Supports Reasoning Effort",
+    "reasoningEffortHint": "Enable when the upstream supports thinking-depth control such as low/high/max. Enabling this also turns on thinking mode and converts Codex's reasoning.effort into the upstream Chat parameter.",
+    "reasoningSectionToggle": "Reasoning Capability (Advanced · usually auto-detected)",
+    "reasoningSectionHint": "Preset providers are configured automatically; custom providers are inferred from name/URL. Expand to override manually only when auto-detection is wrong."
   },
   "geminiConfig": {
     "envFile": "Environment Variables (.env)",

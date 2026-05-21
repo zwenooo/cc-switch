@@ -8,6 +8,7 @@ use super::codex_chat_common::{
     append_reasoning_content, extract_reasoning_field_text, extract_reasoning_summary_text,
     response_function_call_item, split_leading_think_block,
 };
+use crate::provider::CodexChatReasoningConfig;
 use crate::proxy::{
     error::ProxyError,
     json_canonical::{canonical_json_string, canonicalize_json_string_if_parseable},
@@ -31,7 +32,17 @@ const EXTRA_CHAT_PASSTHROUGH_FIELDS: &[&str] = &[
     "user",
 ];
 /// Convert an OpenAI Responses request into an OpenAI Chat Completions request.
+#[allow(dead_code)]
 pub fn responses_to_chat_completions(body: Value) -> Result<Value, ProxyError> {
+    responses_to_chat_completions_with_reasoning(body, None)
+}
+
+/// Convert an OpenAI Responses request into an OpenAI Chat Completions request,
+/// using provider-declared Codex Chat reasoning capabilities when available.
+pub fn responses_to_chat_completions_with_reasoning(
+    body: Value,
+    reasoning_config: Option<&CodexChatReasoningConfig>,
+) -> Result<Value, ProxyError> {
     let mut result = json!({});
 
     if let Some(model) = body.get("model") {
@@ -76,11 +87,7 @@ pub fn responses_to_chat_completions(body: Value) -> Result<Value, ProxyError> {
         }
     }
 
-    if super::transform::supports_reasoning_effort(model) {
-        if let Some(effort) = body.pointer("/reasoning/effort") {
-            result["reasoning_effort"] = effort.clone();
-        }
-    }
+    apply_reasoning_options(&mut result, &body, model, reasoning_config);
 
     if let Some(tools) = body.get("tools").and_then(|v| v.as_array()) {
         let tools: Vec<Value> = tools
@@ -123,6 +130,150 @@ pub fn responses_to_chat_completions(body: Value) -> Result<Value, ProxyError> {
     }
 
     Ok(result)
+}
+
+fn apply_reasoning_options(
+    result: &mut Value,
+    body: &Value,
+    model: &str,
+    config: Option<&CodexChatReasoningConfig>,
+) {
+    let Some(config) = config else {
+        if super::transform::supports_reasoning_effort(model) {
+            if let Some(effort) = body.pointer("/reasoning/effort") {
+                result["reasoning_effort"] = effort.clone();
+            }
+        }
+        return;
+    };
+
+    let supports_effort = config.supports_effort.unwrap_or(false);
+    let supports_thinking = config.supports_thinking.unwrap_or(false) || supports_effort;
+    let Some(reasoning_enabled) = reasoning_requested(body) else {
+        return;
+    };
+
+    if supports_thinking {
+        match config
+            .thinking_param
+            .as_deref()
+            .unwrap_or("thinking")
+            .trim()
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "thinking" => {
+                result["thinking"] = json!({
+                    "type": if reasoning_enabled { "enabled" } else { "disabled" }
+                });
+            }
+            "enable_thinking" => {
+                result["enable_thinking"] = json!(reasoning_enabled);
+            }
+            "reasoning_split" => {
+                result["reasoning_split"] = json!(reasoning_enabled);
+            }
+            _ => {}
+        }
+    }
+
+    // effort_param 在 early return 之前算出：reasoning.effort 形态的「显式关闭」分支要用到。
+    let effort_param = config
+        .effort_param
+        .as_deref()
+        .unwrap_or("reasoning_effort")
+        .trim()
+        .to_ascii_lowercase();
+
+    if !reasoning_enabled {
+        // OpenRouter 原生 reasoning.effort 支持显式 "none"（语义：彻底关闭推理）。
+        // 上游显式发 effort=none/off/disabled（或 reasoning=null）时 reasoning_enabled 为 false，
+        // 直接 return 会丢失关闭意图——OpenRouter 部分模型默认开思考，不带字段无法关闭，
+        // 造成行为与成本偏差；故对该形态忠实转发 {"reasoning":{"effort":"none"}}。
+        // 顶层 reasoning_effort 平台的枚举不含 none，仍走上方 thinking 关闭路径、不发 effort。
+        // 注意：完全不带 reasoning 字段时 reasoning_requested 返回 None 已提前 return，
+        // 不会走到这里，故只有上游「显式」表达关闭才透传 none。
+        if effort_param == "reasoning.effort" {
+            result["reasoning"] = json!({ "effort": "none" });
+        }
+        return;
+    }
+
+    if !supports_effort {
+        return;
+    }
+
+    let Some(effort) = body.pointer("/reasoning/effort").and_then(|v| v.as_str()) else {
+        return;
+    };
+    let Some(mapped) = map_reasoning_effort(effort, config.effort_value_mode.as_deref()) else {
+        return;
+    };
+
+    match effort_param.as_str() {
+        // OpenAI 风格顶层字段（DeepSeek 官方、OpenAI o-series 等）。
+        "reasoning_effort" => {
+            result["reasoning_effort"] = json!(mapped);
+        }
+        // OpenRouter 原生归一化对象：reasoning.effort 会被 OpenRouter 翻译成各底层模型
+        // （OpenAI/Grok/Gemini/Anthropic）的正确推理参数，覆盖面比顶层 OpenAI 别名更全。
+        // 本转换从空对象构造、不残留原始 reasoning 对象，故不会出现 reasoning 与
+        // reasoning_effort 并存触发 400 的情况（参见 openclaw#24119）。
+        "reasoning.effort" => {
+            result["reasoning"] = json!({ "effort": mapped });
+        }
+        _ => {}
+    }
+}
+
+fn reasoning_requested(body: &Value) -> Option<bool> {
+    if let Some(effort) = body.pointer("/reasoning/effort").and_then(|v| v.as_str()) {
+        return Some(!matches!(
+            effort.trim().to_ascii_lowercase().as_str(),
+            "none" | "off" | "disabled"
+        ));
+    }
+
+    body.get("reasoning").map(|value| !value.is_null())
+}
+
+fn map_reasoning_effort(effort: &str, mode: Option<&str>) -> Option<&'static str> {
+    let effort = effort.trim().to_ascii_lowercase();
+    if matches!(effort.as_str(), "none" | "off" | "disabled") {
+        return None;
+    }
+
+    match mode.unwrap_or("passthrough") {
+        "deepseek" => match effort.as_str() {
+            "max" | "xhigh" => Some("max"),
+            _ => Some("high"),
+        },
+        "low_high" => match effort.as_str() {
+            "minimal" | "low" => Some("low"),
+            _ => Some("high"),
+        },
+        // OpenRouter effort 枚举为 xhigh|high|medium|low|minimal（无 max）。max 是
+        // Codex / 部分模型的扩展档位，对 OpenRouter 非法，会触发
+        // `400 reasoning_effort: Invalid option`（见 openclaw#77350）；钳到最高合法档
+        // xhigh，其余合法值透传，未知值丢弃以免被上游拒绝。
+        "openrouter" => match effort.as_str() {
+            "max" | "xhigh" => Some("xhigh"),
+            "high" => Some("high"),
+            "medium" => Some("medium"),
+            "low" => Some("low"),
+            "minimal" => Some("minimal"),
+            _ => None,
+        },
+        _ => match effort.as_str() {
+            "minimal" => Some("minimal"),
+            "low" => Some("low"),
+            "medium" => Some("medium"),
+            "high" => Some("high"),
+            "xhigh" => Some("xhigh"),
+            "max" => Some("max"),
+            _ => None,
+        },
+    }
 }
 
 /// MiniMax 严格要求 messages 中只能首条出现 `role=system`，
@@ -1105,6 +1256,195 @@ mod tests {
         assert_eq!(result["tool_choice"]["function"]["name"], "get_weather");
         assert_eq!(result["max_tokens"], 100);
         assert_eq!(result["reasoning_effort"], "high");
+    }
+
+    #[test]
+    fn responses_request_to_chat_uses_provider_reasoning_effort_for_deepseek_model() {
+        let input = json!({
+            "model": "deepseek-v4-pro",
+            "input": "hello",
+            "reasoning": {"effort": "xhigh"}
+        });
+        let config = CodexChatReasoningConfig {
+            supports_thinking: Some(true),
+            supports_effort: Some(true),
+            thinking_param: Some("thinking".to_string()),
+            effort_param: Some("reasoning_effort".to_string()),
+            effort_value_mode: Some("deepseek".to_string()),
+            output_format: Some("reasoning_content".to_string()),
+        };
+
+        let result = responses_to_chat_completions_with_reasoning(input, Some(&config)).unwrap();
+
+        assert_eq!(result["thinking"]["type"], "enabled");
+        assert_eq!(result["reasoning_effort"], "max");
+    }
+
+    #[test]
+    fn responses_request_to_chat_maps_openrouter_to_native_reasoning_object() {
+        // OpenRouter 平台形态：原生 reasoning:{effort} 对象 + "openrouter" 值映射
+        // （与 infer_aggregator_platform_config 推断出的配置保持一致）。
+        let config = CodexChatReasoningConfig {
+            supports_thinking: Some(false),
+            supports_effort: Some(true),
+            thinking_param: Some("none".to_string()),
+            effort_param: Some("reasoning.effort".to_string()),
+            effort_value_mode: Some("openrouter".to_string()),
+            output_format: Some("auto".to_string()),
+        };
+
+        // max 不在 OpenRouter 枚举内（见 openclaw#77350），必须钳成 xhigh，
+        // 且写进原生 reasoning 对象，而非顶层 reasoning_effort 别名。
+        let input = json!({
+            "model": "deepseek/deepseek-chat-v3.1",
+            "input": "hello",
+            "reasoning": {"effort": "max"}
+        });
+        let result = responses_to_chat_completions_with_reasoning(input, Some(&config)).unwrap();
+
+        assert_eq!(result["reasoning"]["effort"], "xhigh");
+        assert!(result.get("reasoning_effort").is_none());
+        // thinking_param=none：即使 supports_effort 把 supports_thinking 带成 true，
+        // 也不写任何 thinking 字段（OpenRouter 不认 thinking:{type}）。
+        assert!(result.get("thinking").is_none());
+
+        // 合法档位原样透传。
+        let input_high = json!({
+            "model": "deepseek/deepseek-chat-v3.1",
+            "input": "hello",
+            "reasoning": {"effort": "high"}
+        });
+        let result_high =
+            responses_to_chat_completions_with_reasoning(input_high, Some(&config)).unwrap();
+        assert_eq!(result_high["reasoning"]["effort"], "high");
+        assert!(result_high.get("reasoning_effort").is_none());
+    }
+
+    #[test]
+    fn responses_request_to_chat_passes_explicit_none_through_for_openrouter() {
+        // OpenRouter 原生 reasoning 对象支持显式关闭：effort=none 应忠实转发为
+        // {"reasoning":{"effort":"none"}}，而非被吞掉——否则默认开思考的模型无法关闭，
+        // 带来行为与成本偏差。
+        let config = CodexChatReasoningConfig {
+            supports_thinking: Some(false),
+            supports_effort: Some(true),
+            thinking_param: Some("none".to_string()),
+            effort_param: Some("reasoning.effort".to_string()),
+            effort_value_mode: Some("openrouter".to_string()),
+            output_format: Some("auto".to_string()),
+        };
+
+        let input = json!({
+            "model": "openai/gpt-5",
+            "input": "hello",
+            "reasoning": {"effort": "none"}
+        });
+        let result = responses_to_chat_completions_with_reasoning(input, Some(&config)).unwrap();
+
+        assert_eq!(result["reasoning"]["effort"], "none");
+        // none 不是 OpenAI 顶层 reasoning_effort 的合法枚举，不写顶层别名；也不写 thinking。
+        assert!(result.get("reasoning_effort").is_none());
+        assert!(result.get("thinking").is_none());
+    }
+
+    #[test]
+    fn responses_request_to_chat_drops_explicit_none_for_top_level_effort_provider() {
+        // 对照：顶层 reasoning_effort 平台（DeepSeek/OpenAI 风格）的 effort 枚举不含 none，
+        // 显式 none 不应透传成 reasoning_effort:"none"（会被上游拒），仅走 thinking 关闭路径。
+        // 锁定「none 透传仅限 reasoning.effort 形态」的边界，防止回归。
+        let config = CodexChatReasoningConfig {
+            supports_thinking: Some(true),
+            supports_effort: Some(true),
+            thinking_param: Some("thinking".to_string()),
+            effort_param: Some("reasoning_effort".to_string()),
+            effort_value_mode: Some("deepseek".to_string()),
+            output_format: Some("reasoning_content".to_string()),
+        };
+
+        let input = json!({
+            "model": "deepseek-v4-pro",
+            "input": "hello",
+            "reasoning": {"effort": "none"}
+        });
+        let result = responses_to_chat_completions_with_reasoning(input, Some(&config)).unwrap();
+
+        // thinking 关闭信号照发；但不写 reasoning_effort，也不写原生 reasoning 对象。
+        assert_eq!(result["thinking"]["type"], "disabled");
+        assert!(result.get("reasoning_effort").is_none());
+        assert!(result.get("reasoning").is_none());
+    }
+
+    #[test]
+    fn responses_request_to_chat_maps_thinking_only_provider_without_effort() {
+        let input = json!({
+            "model": "kimi-k2.6",
+            "input": "hello",
+            "reasoning": {"effort": "high"}
+        });
+        let config = CodexChatReasoningConfig {
+            supports_thinking: Some(true),
+            supports_effort: Some(false),
+            thinking_param: Some("thinking".to_string()),
+            effort_param: Some("none".to_string()),
+            effort_value_mode: None,
+            output_format: Some("reasoning_content".to_string()),
+        };
+
+        let result = responses_to_chat_completions_with_reasoning(input, Some(&config)).unwrap();
+
+        assert_eq!(result["thinking"]["type"], "enabled");
+        assert!(result.get("reasoning_effort").is_none());
+    }
+
+    #[test]
+    fn responses_request_to_chat_maps_enable_thinking_provider() {
+        let input = json!({
+            "model": "qwen3-max",
+            "input": "hello",
+            "reasoning": {"effort": "medium"}
+        });
+        let config = CodexChatReasoningConfig {
+            supports_thinking: Some(true),
+            supports_effort: Some(false),
+            thinking_param: Some("enable_thinking".to_string()),
+            effort_param: Some("none".to_string()),
+            effort_value_mode: None,
+            output_format: Some("reasoning_content".to_string()),
+        };
+
+        let result = responses_to_chat_completions_with_reasoning(input, Some(&config)).unwrap();
+
+        assert_eq!(result["enable_thinking"], true);
+        assert!(result.get("reasoning_effort").is_none());
+    }
+
+    #[test]
+    fn chat_response_to_responses_extracts_reasoning_details() {
+        let input = json!({
+            "id": "chatcmpl_minimax",
+            "object": "chat.completion",
+            "created": 123,
+            "model": "MiniMax-M2.7",
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "reasoning_details": [
+                        {"type": "reasoning_text", "text": "Need to inspect the code."}
+                    ],
+                    "content": "Done"
+                },
+                "finish_reason": "stop"
+            }]
+        });
+
+        let result = chat_completion_to_response(input).unwrap();
+
+        assert_eq!(result["output"][0]["type"], "reasoning");
+        assert_eq!(
+            result["output"][0]["summary"][0]["text"],
+            "Need to inspect the code."
+        );
+        assert_eq!(result["output"][1]["content"][0]["text"], "Done");
     }
 
     #[test]

@@ -4,8 +4,20 @@ import { Button } from "@/components/ui/button";
 import { FormLabel } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { toast } from "sonner";
-import { Download, Loader2, Plus, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Download,
+  Loader2,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import EndpointSpeedTest from "./EndpointSpeedTest";
 import { ApiKeySection, EndpointField, ModelDropdown } from "./shared";
 import {
@@ -16,6 +28,7 @@ import {
 import type {
   CodexApiFormat,
   CodexCatalogModel,
+  CodexChatReasoning,
   ProviderCategory,
 } from "@/types";
 
@@ -50,6 +63,8 @@ interface CodexFormFieldsProps {
   // Note: wire_api is always "responses" for Codex; apiFormat controls proxy-layer conversion
   apiFormat: CodexApiFormat;
   onApiFormatChange: (format: CodexApiFormat) => void;
+  codexChatReasoning?: CodexChatReasoning;
+  onCodexChatReasoningChange?: (value: CodexChatReasoning) => void;
 
   // Model Catalog
   catalogModels?: CodexCatalogModel[];
@@ -108,6 +123,8 @@ export function CodexFormFields({
   onAutoSelectChange,
   apiFormat,
   onApiFormatChange,
+  codexChatReasoning = {},
+  onCodexChatReasoningChange,
   catalogModels = [],
   onCatalogModelsChange,
   speedTestEndpoints,
@@ -116,8 +133,14 @@ export function CodexFormFields({
 
   const [fetchedModels, setFetchedModels] = useState<FetchedModel[]>([]);
   const [isFetchingModels, setIsFetchingModels] = useState(false);
+  const [reasoningExpanded, setReasoningExpanded] = useState(false);
   const needsLocalRouting = apiFormat === "openai_chat";
   const canEditCatalog = Boolean(onCatalogModelsChange);
+  const canEditReasoning = Boolean(onCodexChatReasoningChange);
+  const supportsThinking =
+    codexChatReasoning.supportsThinking === true ||
+    codexChatReasoning.supportsEffort === true;
+  const supportsEffort = codexChatReasoning.supportsEffort === true;
 
   const [catalogRows, setCatalogRows] = useState<CodexCatalogRow[]>(() =>
     catalogModels.map((m) => createCatalogRow(m)),
@@ -155,6 +178,33 @@ export function CodexFormFields({
       onApiFormatChange(checked ? "openai_chat" : "openai_responses");
     },
     [onApiFormatChange],
+  );
+
+  const handleReasoningThinkingChange = useCallback(
+    (checked: boolean) => {
+      if (!onCodexChatReasoningChange) return;
+      onCodexChatReasoningChange({
+        ...codexChatReasoning,
+        supportsThinking: checked,
+        supportsEffort: checked ? codexChatReasoning.supportsEffort : false,
+      });
+    },
+    [codexChatReasoning, onCodexChatReasoningChange],
+  );
+
+  const handleReasoningEffortChange = useCallback(
+    (checked: boolean) => {
+      if (!onCodexChatReasoningChange) return;
+      onCodexChatReasoningChange({
+        ...codexChatReasoning,
+        supportsThinking: checked ? true : codexChatReasoning.supportsThinking,
+        supportsEffort: checked,
+        effortParam: checked
+          ? (codexChatReasoning.effortParam ?? "reasoning_effort")
+          : "none",
+      });
+    },
+    [codexChatReasoning, onCodexChatReasoningChange],
   );
 
   const handleFetchModels = useCallback(() => {
@@ -301,6 +351,87 @@ export function CodexFormFields({
             />
           </div>
         </div>
+      )}
+
+      {needsLocalRouting && canEditReasoning && (
+        <Collapsible
+          open={reasoningExpanded}
+          onOpenChange={setReasoningExpanded}
+          className="rounded-lg border border-border-default p-4"
+        >
+          <CollapsibleTrigger asChild>
+            <Button
+              type="button"
+              variant={null}
+              size="sm"
+              className="h-8 w-full justify-start gap-1.5 px-0 text-sm font-medium text-foreground hover:opacity-70"
+            >
+              {reasoningExpanded ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+              {t("codexConfig.reasoningSectionToggle", {
+                defaultValue: "思考能力（高级·通常自动识别）",
+              })}
+            </Button>
+          </CollapsibleTrigger>
+          {!reasoningExpanded && (
+            <p className="mt-1 ml-1 text-xs text-muted-foreground">
+              {t("codexConfig.reasoningSectionHint", {
+                defaultValue:
+                  "预设供应商已自动配置；自定义供应商会按名称/地址自动推断。仅当自动识别不准时才需展开手动覆盖。",
+              })}
+            </p>
+          )}
+          <CollapsibleContent className="space-y-3 pt-3">
+            <div className="flex items-center justify-between gap-4">
+              <div className="space-y-1">
+                <FormLabel>
+                  {t("codexConfig.reasoningModeToggle", {
+                    defaultValue: "支持思考模式",
+                  })}
+                </FormLabel>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {t("codexConfig.reasoningModeHint", {
+                    defaultValue:
+                      "上游 Chat Completions 接口支持开启或关闭 thinking 时启用。Kimi、GLM、Qwen 等通常属于这一类。",
+                  })}
+                </p>
+              </div>
+              <Switch
+                checked={supportsThinking}
+                onCheckedChange={handleReasoningThinkingChange}
+                aria-label={t("codexConfig.reasoningModeToggle", {
+                  defaultValue: "支持思考模式",
+                })}
+              />
+            </div>
+
+            <div className="flex items-center justify-between gap-4 border-t border-border-default pt-3">
+              <div className="space-y-1">
+                <FormLabel>
+                  {t("codexConfig.reasoningEffortToggle", {
+                    defaultValue: "支持思考等级",
+                  })}
+                </FormLabel>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {t("codexConfig.reasoningEffortHint", {
+                    defaultValue:
+                      "上游支持 low/high/max 等思考深度控制时启用。启用后会自动启用思考模式，并把 Codex 的 reasoning.effort 转成上游 Chat 参数。",
+                  })}
+                </p>
+              </div>
+              <Switch
+                checked={supportsEffort}
+                onCheckedChange={handleReasoningEffortChange}
+                aria-label={t("codexConfig.reasoningEffortToggle", {
+                  defaultValue: "支持思考等级",
+                })}
+              />
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       )}
 
       {/* Codex 模型映射 —— 仅在本地路由 + 可编辑时显示 */}
