@@ -442,7 +442,9 @@ impl ChatToResponsesState {
 
         if should_add {
             let assigned = self.next_output_index();
-            let state = self.tools.get_mut(&chat_index).expect("tool state exists");
+            let Some(state) = self.tools.get_mut(&chat_index) else {
+                return events;
+            };
             state.added = true;
             if state.call_id.is_empty() {
                 state.call_id = format!("call_{chat_index}");
@@ -655,7 +657,9 @@ impl ChatToResponsesState {
                 .unwrap_or(false)
             {
                 let assigned = self.next_output_index();
-                let state = self.tools.get_mut(&key).expect("tool state exists");
+                let Some(state) = self.tools.get_mut(&key) else {
+                    continue;
+                };
                 state.added = true;
                 if state.call_id.is_empty() {
                     state.call_id = format!("call_{key}");
@@ -687,7 +691,9 @@ impl ChatToResponsesState {
                 events.push(event);
             }
 
-            let state = self.tools.get_mut(&key).expect("tool state exists");
+            let Some(state) = self.tools.get_mut(&key) else {
+                continue;
+            };
             let output_index = state.output_index.unwrap_or(0);
             let arguments = canonicalize_tool_arguments_str(&state.arguments);
             let item = response_function_call_item(
