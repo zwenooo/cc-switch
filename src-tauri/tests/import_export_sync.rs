@@ -194,8 +194,8 @@ requires_openai_auth = true
 
     assert_eq!(
         parsed.get("model_provider").and_then(|v| v.as_str()),
-        Some("rightcode"),
-        "legacy ConfigService sync should use the stable live provider id"
+        Some("custom"),
+        "legacy ConfigService sync should collapse third-party providers into the stable \"custom\" history bucket"
     );
 
     let model_providers = parsed
@@ -208,7 +208,7 @@ requires_openai_auth = true
     );
     assert_eq!(
         model_providers
-            .get("rightcode")
+            .get("custom")
             .and_then(|v| v.get("base_url"))
             .and_then(|v| v.as_str()),
         Some("https://aihubmix.example/v1")
@@ -221,7 +221,7 @@ requires_openai_auth = true
         .and_then(|v| v.as_str())
         .expect("synced config string");
     assert!(
-        synced_cfg.contains("[model_providers.rightcode]"),
+        synced_cfg.contains("[model_providers.custom]"),
         "ConfigService keeps its existing behavior of syncing provider config from live"
     );
 }
