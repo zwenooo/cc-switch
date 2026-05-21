@@ -198,6 +198,7 @@ fn append_responses_input_as_chat_messages(
         &mut pending_reasoning,
         &mut last_assistant_index,
     );
+    backfill_tool_call_reasoning_placeholders(messages);
     Ok(())
 }
 
@@ -401,6 +402,45 @@ fn attach_pending_reasoning_to_assistant(
 
     if let Some(obj) = message.as_object_mut() {
         append_reasoning_content(obj, &reasoning);
+    }
+}
+
+/// 在所有 input 处理完毕后，对仍缺 `reasoning_content` 的 assistant tool-call 消息补占位。
+/// 必须作为管线末端的最终兜底执行：真实 reasoning 可能以尾随 `reasoning` item 的形式经
+/// `attach_reasoning_to_last_assistant` 回填，过早注入占位会被 `append_reasoning_content`
+/// 追加而污染真实思考。
+fn backfill_tool_call_reasoning_placeholders(messages: &mut [Value]) {
+    for message in messages.iter_mut() {
+        let is_assistant_tool_call = message.get("role").and_then(|value| value.as_str())
+            == Some("assistant")
+            && message
+                .get("tool_calls")
+                .and_then(|value| value.as_array())
+                .is_some_and(|calls| !calls.is_empty());
+        if is_assistant_tool_call {
+            ensure_tool_call_reasoning_content(message);
+        }
+    }
+}
+
+/// kimi/Moonshot、DeepSeek 等 thinking 模型要求每条带 `tool_calls` 的 assistant
+/// 消息都必须携带非空 `reasoning_content`。跨轮历史恢复 miss（如代理重启丢失内存缓存、
+/// call_id 歧义无法恢复、上游某轮未产出思考）时，这里补一个占位，避免上游返回
+/// `reasoning_content is missing in assistant tool call message`。
+/// 与 `transform::anthropic_to_openai_with_reasoning_content` 的占位行为保持对称。
+fn ensure_tool_call_reasoning_content(message: &mut Value) {
+    let Some(obj) = message.as_object_mut() else {
+        return;
+    };
+    let has_reasoning = obj
+        .get("reasoning_content")
+        .and_then(|value| value.as_str())
+        .is_some_and(|text| !text.trim().is_empty());
+    if !has_reasoning {
+        obj.insert(
+            "reasoning_content".to_string(),
+            Value::String("tool call".to_string()),
+        );
     }
 }
 
@@ -1255,6 +1295,36 @@ mod tests {
         assert_eq!(messages[0]["role"], "assistant");
         assert_eq!(messages[0]["tool_calls"][0]["id"], "call_1");
         assert_eq!(messages[0]["reasoning_content"], "Need to read a file.");
+        assert_eq!(messages[1]["role"], "tool");
+    }
+
+    #[test]
+    fn responses_request_to_chat_injects_placeholder_reasoning_for_bare_tool_call() {
+        // 历史恢复 miss 时，带 tool_calls 的 assistant 消息没有任何可用 reasoning，
+        // 必须补占位，否则 kimi/Moonshot thinking 模型会拒绝整个请求。
+        let input = json!({
+            "model": "kimi-k2-thinking",
+            "input": [
+                {
+                    "type": "function_call",
+                    "call_id": "call_1",
+                    "name": "read_file",
+                    "arguments": "{\"path\":\"README.md\"}"
+                },
+                {
+                    "type": "function_call_output",
+                    "call_id": "call_1",
+                    "output": "Readme content"
+                }
+            ]
+        });
+
+        let result = responses_to_chat_completions(input).unwrap();
+        let messages = result["messages"].as_array().unwrap();
+
+        assert_eq!(messages[0]["role"], "assistant");
+        assert_eq!(messages[0]["tool_calls"][0]["id"], "call_1");
+        assert_eq!(messages[0]["reasoning_content"], "tool call");
         assert_eq!(messages[1]["role"], "tool");
     }
 
