@@ -102,6 +102,26 @@ pub fn responses_to_chat_completions(body: Value) -> Result<Value, ProxyError> {
         }
     }
 
+    // OpenAI 兼容上游在流式下默认不在 SSE 里返回 usage，必须显式声明
+    // include_usage 才会在末尾吐 usage chunk。Codex CLI 用 Responses 协议、
+    // 自身不带 stream_options，缺这一注入会导致 kimi/MiniMax 等第三方流式请求的
+    // token/成本/缓存命中率全部漏记（input/output/cache 全为 0）。
+    let is_stream = result
+        .get("stream")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    if is_stream {
+        match result.get_mut("stream_options") {
+            // 保留客户端可能透传的其它 stream_options 字段，仅补 include_usage。
+            Some(Value::Object(opts)) => {
+                opts.insert("include_usage".to_string(), json!(true));
+            }
+            _ => {
+                result["stream_options"] = json!({ "include_usage": true });
+            }
+        }
+    }
+
     Ok(result)
 }
 
@@ -987,6 +1007,48 @@ pub fn chat_error_to_response_error(body: Option<&Value>) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn responses_request_with_stream_injects_include_usage() {
+        let input = json!({
+            "model": "kimi-k2.6",
+            "input": [{"role": "user", "content": [{"type": "input_text", "text": "hi"}]}],
+            "stream": true
+        });
+
+        let result = responses_to_chat_completions(input).unwrap();
+
+        assert_eq!(result["stream"], true);
+        assert_eq!(result["stream_options"]["include_usage"], true);
+    }
+
+    #[test]
+    fn responses_request_without_stream_omits_stream_options() {
+        let input = json!({
+            "model": "kimi-k2.6",
+            "input": [{"role": "user", "content": [{"type": "input_text", "text": "hi"}]}]
+        });
+
+        let result = responses_to_chat_completions(input).unwrap();
+
+        assert!(result.get("stream_options").is_none());
+    }
+
+    #[test]
+    fn responses_request_merges_include_usage_into_existing_stream_options() {
+        let input = json!({
+            "model": "kimi-k2.6",
+            "input": [{"role": "user", "content": [{"type": "input_text", "text": "hi"}]}],
+            "stream": true,
+            "stream_options": {"continuous_usage_stats": true}
+        });
+
+        let result = responses_to_chat_completions(input).unwrap();
+
+        // 既补上 include_usage，又保留客户端原有的 stream_options 字段。
+        assert_eq!(result["stream_options"]["include_usage"], true);
+        assert_eq!(result["stream_options"]["continuous_usage_stats"], true);
+    }
 
     #[test]
     fn responses_request_to_chat_maps_messages_tools_and_limits() {
