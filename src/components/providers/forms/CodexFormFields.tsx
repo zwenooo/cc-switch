@@ -284,11 +284,11 @@ export function CodexFormFields({
                 {needsLocalRouting
                   ? t("codexConfig.localRoutingOnHint", {
                       defaultValue:
-                        "适合 DeepSeek、Kimi 等自定义模型或仅支持 Chat Completions 的供应商；使用时请保持本地路由开启。",
+                        "Codex 目前仅原生支持 OpenAI Responses API 与 GPT 系列模型；如果您的供应商使用 Chat Completions 协议或非 GPT 模型（如 DeepSeek、Kimi），则需要打开本开关，并在使用过程中保持本地路由开启。",
                     })
                   : t("codexConfig.localRoutingOffHint", {
                       defaultValue:
-                        "适合供应商原生支持 OpenAI Responses API 且模型在 Codex 中可直接使用的场景，请求可由 Codex 直连供应商。",
+                        "如果您的供应商不是原生 OpenAI Responses API，或者模型名不是 Codex 默认的 GPT 系列，请打开此开关。",
                     })}
               </p>
             </div>
