@@ -579,7 +579,7 @@ export const claudeDesktopProviderPresets: ClaudeDesktopProviderPreset[] = [
     name: "ClaudeAPI",
     websiteUrl: "https://claudeapi.com",
     apiKeyUrl: "https://console.claudeapi.com/register?aff=pCLD",
-    category: "third_party",
+    category: "aggregator",
     baseUrl: "https://gw.claudeapi.com",
     mode: "direct",
     apiFormat: "anthropic",
