@@ -166,6 +166,16 @@ fn is_chat_completions_url(value: &str) -> bool {
         .ends_with("/chat/completions")
 }
 
+/// `scheme://host` 之后没有路径段的纯 origin 形式。`build_url` 在这种情况下
+/// 会自动补 `/v1`；Stream Check 等同步生产路径的代码也需要同一判定。
+pub fn is_origin_only_url(value: &str) -> bool {
+    let trimmed = value.trim_end_matches('/');
+    match trimmed.split_once("://") {
+        Some((_scheme, rest)) => !rest.contains('/'),
+        None => !trimmed.contains('/'),
+    }
+}
+
 fn extract_codex_wire_api_from_toml(config_text: &str) -> Option<String> {
     let doc = config_text.parse::<TomlValue>().ok()?;
 
@@ -342,12 +352,7 @@ impl ProviderAdapter for CodexAdapter {
 
         // 检查 base_url 是否已经包含 /v1
         let already_has_v1 = base_trimmed.ends_with("/v1");
-
-        // 检查是否是纯 origin（没有路径部分）
-        let origin_only = match base_trimmed.split_once("://") {
-            Some((_scheme, rest)) => !rest.contains('/'),
-            None => !base_trimmed.contains('/'),
-        };
+        let origin_only = is_origin_only_url(base_trimmed);
 
         let mut url = if already_has_v1 {
             // 已经有 /v1，直接拼接
