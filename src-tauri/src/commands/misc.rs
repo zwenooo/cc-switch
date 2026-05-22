@@ -974,10 +974,10 @@ fn extend_mise_node_search_paths(paths: &mut Vec<std::path::PathBuf>, home: &Pat
     }
 }
 
-/// 扫描常见路径查找 CLI
-fn scan_cli_version(tool: &str) -> ShellProbe {
-    use std::process::Command;
-
+/// 构建某工具的候选搜索目录（原生安装优先，PATH 兜底）。
+/// 单探兜底 (`scan_cli_version`) 与全量枚举 (`enumerate_tool_installations`) 共用，
+/// 确保两条路径看到的是同一组安装位置。
+fn build_tool_search_paths(tool: &str) -> Vec<std::path::PathBuf> {
     let home = dirs::home_dir().unwrap_or_default();
 
     // 常见的安装路径（原生安装优先）
@@ -1102,9 +1102,16 @@ fn scan_cli_version(tool: &str) -> ShellProbe {
     }
 
     let path_env = std::env::var_os("PATH");
-    extend_from_cli_path_env(&mut search_paths, path_env.clone());
-    let current_path = path_env
-        .as_ref()
+    extend_from_cli_path_env(&mut search_paths, path_env);
+    search_paths
+}
+
+/// 扫描常见路径查找 CLI（PATH 主命令未命中时的兜底单探）。
+fn scan_cli_version(tool: &str) -> ShellProbe {
+    use std::process::Command;
+
+    let search_paths = build_tool_search_paths(tool);
+    let current_path = std::env::var_os("PATH")
         .map(|value| value.to_string_lossy().into_owned())
         .unwrap_or_default();
 
@@ -1165,6 +1172,220 @@ fn scan_cli_version(tool: &str) -> ShellProbe {
     match exec_diagnostic {
         Some(detail) => ShellProbe::FoundButFailed(detail),
         None => ShellProbe::NotFound(NOT_INSTALLED.to_string()),
+    }
+}
+
+/// 单个工具在系统中的一处安装，用于"多处安装互相打架"的冲突诊断。
+/// 字段保持 snake_case（与 `ToolVersion` 一致），前端按同名字段读取。
+#[derive(Debug, serde::Serialize)]
+pub struct ToolInstallation {
+    /// 候选入口路径（用户实际在 PATH 里看到/输入的那个，未解析软链）。
+    path: String,
+    /// `--version` 成功时解析出的版本号。
+    version: Option<String>,
+    /// `--version` 是否 exit 0（装了且能在当前环境跑起来）。
+    runnable: bool,
+    /// 跑不起来时的诊断信息末尾若干行。
+    error: Option<String>,
+    /// 由路径前缀推断的安装来源（nvm/homebrew/...），驱动 UI 徽章与卸载建议。
+    source: String,
+    /// 是否为 PATH 解析到的那处（= 命令行默认，也是升级会作用的目标）。
+    is_path_default: bool,
+}
+
+/// 由可执行文件路径前缀推断安装来源。纯字符串匹配、无副作用。
+/// 顺序敏感：Homebrew 的 Cellar 真身要先于通用规则命中。
+fn infer_install_source(path: &Path) -> &'static str {
+    let s = path
+        .to_string_lossy()
+        .replace('\\', "/")
+        .to_ascii_lowercase();
+    if s.contains("/.nvm/") {
+        "nvm"
+    } else if s.contains("/homebrew/") || s.contains("/cellar/") {
+        "homebrew"
+    } else if s.contains("/.volta/") {
+        "volta"
+    } else if s.contains("fnm_multishells") {
+        "fnm"
+    } else if s.contains("/mise/") {
+        "mise"
+    } else if s.contains("/.bun/") {
+        "bun"
+    } else if s.contains("/scoop/") {
+        "scoop"
+    } else if s.contains("/library/python")
+        || s.contains("/scripts/")
+        || s.contains("/site-packages/")
+    {
+        "pip"
+    } else {
+        "system"
+    }
+}
+
+/// 用与 `try_get_version` 相同的登录 shell 解析 PATH 默认命中的可执行文件路径，
+/// canonicalize 后作为"命令行默认 / 升级目标"的锚点（与升级会作用的那处对齐）。
+#[cfg(not(target_os = "windows"))]
+fn resolve_path_default(tool: &str) -> Option<std::path::PathBuf> {
+    use std::process::Command;
+    let shell = std::env::var("SHELL")
+        .ok()
+        .filter(|s| is_valid_shell(s))
+        .unwrap_or_else(|| "sh".to_string());
+    let flag = default_flag_for_shell(&shell);
+    let out = Command::new(shell)
+        .arg(flag)
+        .arg(format!("command -v {tool}"))
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let raw = String::from_utf8_lossy(&out.stdout);
+    let first = raw.lines().next()?.trim();
+    if first.is_empty() {
+        return None;
+    }
+    std::fs::canonicalize(first).ok()
+}
+
+#[cfg(target_os = "windows")]
+fn resolve_path_default(tool: &str) -> Option<std::path::PathBuf> {
+    use std::os::windows::process::CommandExt;
+    use std::process::Command;
+    let out = Command::new("cmd")
+        .args(["/C", &format!("where {tool}")])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let raw = String::from_utf8_lossy(&out.stdout);
+    let first = raw.lines().next()?.trim();
+    if first.is_empty() {
+        return None;
+    }
+    std::fs::canonicalize(first).ok()
+}
+
+/// 枚举工具在系统中的所有安装（不短路）。与 `scan_cli_version` 共用
+/// `build_tool_search_paths`，但不在首个命中处停止——而是对每个去重后的真实
+/// 可执行文件都跑一次 `--version`，从而能发现"升级写入 A 处、PATH 实际用 B 处"。
+fn enumerate_tool_installations(tool: &str) -> Vec<ToolInstallation> {
+    use std::process::Command;
+
+    let search_paths = build_tool_search_paths(tool);
+    let current_path = std::env::var_os("PATH")
+        .map(|value| value.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let path_default = resolve_path_default(tool);
+
+    let mut seen: std::collections::HashSet<std::path::PathBuf> = std::collections::HashSet::new();
+    let mut installs: Vec<ToolInstallation> = Vec::new();
+
+    for dir in &search_paths {
+        #[cfg(target_os = "windows")]
+        let new_path = format!("{};{}", dir.display(), current_path);
+        #[cfg(not(target_os = "windows"))]
+        let new_path = format!("{}:{}", dir.display(), current_path);
+
+        for tool_path in tool_executable_candidates(tool, dir) {
+            if !tool_path.exists() {
+                continue;
+            }
+            // canonicalize 解析软链后去重：/opt/homebrew/bin/x → Cellar/...、nvm shim 等
+            // 多个入口可能指向同一真实文件，只算一处安装。
+            let real = std::fs::canonicalize(&tool_path).unwrap_or_else(|_| tool_path.clone());
+            if !seen.insert(real.clone()) {
+                continue;
+            }
+
+            #[cfg(target_os = "windows")]
+            let output = {
+                use std::os::windows::process::CommandExt;
+                Command::new("cmd")
+                    .args(["/C", &format!("\"{}\" --version", tool_path.display())])
+                    .env("PATH", &new_path)
+                    .creation_flags(CREATE_NO_WINDOW)
+                    .output()
+            };
+            #[cfg(not(target_os = "windows"))]
+            let output = Command::new(&tool_path)
+                .arg("--version")
+                .env("PATH", &new_path)
+                .output();
+
+            let (version, runnable, error) = match output {
+                Ok(out) if out.status.success() => {
+                    let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                    let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                    let raw = if stdout.is_empty() { stderr } else { stdout };
+                    (Some(extract_version(&raw)), true, None)
+                }
+                Ok(out) => {
+                    let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                    let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                    let detail = if stderr.is_empty() { stdout } else { stderr };
+                    let detail = detail.trim();
+                    let error = if detail.is_empty() {
+                        None
+                    } else {
+                        Some(last_lines(detail, 4))
+                    };
+                    (None, false, error)
+                }
+                Err(e) => (None, false, Some(e.to_string())),
+            };
+
+            let is_path_default = path_default.as_ref() == Some(&real);
+
+            installs.push(ToolInstallation {
+                path: tool_path.display().to_string(),
+                version,
+                runnable,
+                error,
+                source: infer_install_source(&tool_path).to_string(),
+                is_path_default,
+            });
+        }
+    }
+
+    // PATH 默认那处排最前，UI 一眼看到"命令行默认用的是哪处"。
+    installs.sort_by_key(|i| std::cmp::Reverse(i.is_path_default));
+    installs
+}
+
+/// 诊断某工具是否存在多处互相打架的安装。懒触发：前端仅在卡片 broken 或
+/// "升级后版本未变"时调用，正常版本刷新不受影响。
+///
+/// 无冲突时返回空 `Vec`：仅一处安装，或多处但版本与可运行状态完全一致
+/// （例如同一版本经多个包管理器装了两遍但都能跑）——这类不打扰用户。
+#[tauri::command]
+pub async fn diagnose_tool_installations(tool: String) -> Result<Vec<ToolInstallation>, String> {
+    if !VALID_TOOLS.contains(&tool.as_str()) {
+        return Err(format!("Unsupported tool: {tool}"));
+    }
+
+    let installs = tokio::task::spawn_blocking(move || enumerate_tool_installations(&tool))
+        .await
+        .map_err(|e| format!("diagnose task join error: {e}"))?;
+
+    if installs.len() < 2 {
+        return Ok(Vec::new());
+    }
+
+    // 仅当存在分歧才算冲突：版本不唯一，或"有能跑的也有跑不起来的"。
+    let distinct_versions: std::collections::HashSet<&Option<String>> =
+        installs.iter().map(|i| &i.version).collect();
+    let runnable_mixed =
+        installs.iter().any(|i| i.runnable) && installs.iter().any(|i| !i.runnable);
+
+    if distinct_versions.len() > 1 || runnable_mixed {
+        Ok(installs)
+    } else {
+        Ok(Vec::new())
     }
 }
 

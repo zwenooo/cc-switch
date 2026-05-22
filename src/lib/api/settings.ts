@@ -208,6 +208,10 @@ export const settingsApi = {
     });
   },
 
+  async diagnoseToolInstallations(tool: string): Promise<ToolInstallation[]> {
+    return await invoke("diagnose_tool_installations", { tool });
+  },
+
   async getRectifierConfig(): Promise<RectifierConfig> {
     return await invoke("get_rectifier_config");
   },
@@ -232,6 +236,16 @@ export const settingsApi = {
     return await invoke("set_log_config", { config });
   },
 };
+
+/** 单处工具安装的诊断信息（多处安装冲突检测）。字段对应后端 ToolInstallation。 */
+export interface ToolInstallation {
+  path: string;
+  version: string | null;
+  runnable: boolean;
+  error: string | null;
+  source: string;
+  is_path_default: boolean;
+}
 
 export interface RectifierConfig {
   enabled: boolean;

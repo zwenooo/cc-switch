@@ -13,6 +13,8 @@ import {
   AlertCircle,
   ArrowUpCircle,
   ChevronDown,
+  Stethoscope,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +28,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { getVersion } from "@tauri-apps/api/app";
 import { settingsApi } from "@/lib/api";
+import type { ToolInstallation } from "@/lib/api/settings";
 import { useUpdate } from "@/contexts/UpdateContext";
 import { relaunchApp } from "@/lib/updater";
 import { Badge } from "@/components/ui/badge";
@@ -128,6 +131,57 @@ const TOOL_APP_IDS: Record<ToolName, AppId> = {
   hermes: "hermes",
 };
 
+// 各工具的全局包名：npm 系用 npm 包名，hermes 例外（pip 包 hermes-agent）。
+const TOOL_NPM_PACKAGES: Record<Exclude<ToolName, "hermes">, string> = {
+  claude: "@anthropic-ai/claude-code",
+  codex: "@openai/codex",
+  gemini: "@google/gemini-cli",
+  opencode: "opencode-ai",
+  openclaw: "openclaw",
+};
+
+// 取路径的目录部分（兼容 / 与 \ 分隔符）；无分隔符返回空串。
+function dirOfPath(p: string): string {
+  const i = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
+  return i > 0 ? p.slice(0, i) : "";
+}
+
+// 路径是否为 Windows 风格（含反斜杠或盘符前缀）。
+function isWindowsPath(p: string): boolean {
+  return p.includes("\\") || /^[a-zA-Z]:/.test(p);
+}
+
+// 含空格时加引号，避免命令被 shell 拆断。
+function shellQuote(s: string): string {
+  return s.includes(" ") ? `"${s}"` : s;
+}
+
+// 为「某一处具体安装」生成卸载建议命令（只读、供复制，绝不代执行）。
+// 关键：用该处同目录的 npm 精确作用于这一处的 node 安装，避免裸 `npm rm -g`
+// 误删了当前激活（可能是想保留的默认）那处。volta/bun/pip 走各自的卸载器。
+function buildUninstallCommand(
+  toolName: ToolName,
+  inst: ToolInstallation,
+): string {
+  if (toolName === "hermes") {
+    return "python3 -m pip uninstall hermes-agent";
+  }
+  const pkg = TOOL_NPM_PACKAGES[toolName];
+  if (inst.source === "volta") {
+    return `volta uninstall ${pkg}`;
+  }
+  if (inst.source === "bun") {
+    return `bun rm -g ${pkg}`;
+  }
+  // nvm / fnm / mise / homebrew / system / scoop 上的 node 全局包：统一 npm rm -g，
+  // 但锚定到该处同目录的 npm 以删对版本。
+  const dir = dirOfPath(inst.path);
+  const win = isWindowsPath(inst.path);
+  const npmBin = win ? "npm.cmd" : "npm";
+  const npm = dir ? shellQuote(`${dir}${win ? "\\" : "/"}${npmBin}`) : "npm";
+  return `${npm} rm -g ${pkg}`;
+}
+
 export function AboutSection({ isPortable }: AboutSectionProps) {
   // ... (use hooks as before) ...
   const { t } = useTranslation();
@@ -157,6 +211,12 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
     Record<string, WslShellPreference>
   >({});
   const [loadingTools, setLoadingTools] = useState<Record<string, boolean>>({});
+  // 多处安装冲突诊断结果：按工具存储，有冲突的工具会在其卡片下方展示。
+  // 来源两路：顶部「诊断安装冲突」按钮一次性扫全部，或升级后版本未变时自动补诊。
+  const [toolDiagnostics, setToolDiagnostics] = useState<
+    Partial<Record<ToolName, ToolInstallation[]>>
+  >({});
+  const [isDiagnosingAll, setIsDiagnosingAll] = useState(false);
 
   const toolVersionByName = useMemo(() => {
     return new Map(toolVersions.map((tool) => [tool.name, tool]));
@@ -366,6 +426,20 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
     }
   }, [checkUpdate, hasUpdate, isPortable, resetDismiss, t, updateHandle]);
 
+  // 复制单条卸载命令到剪贴板（只复制，不执行）。
+  const handleCopyCommand = useCallback(
+    async (command: string) => {
+      try {
+        await navigator.clipboard.writeText(command);
+        toast.success(t("settings.toolUninstallCopied"), { closeButton: true });
+      } catch (error) {
+        console.error("[AboutSection] Failed to copy command", error);
+        toast.error(t("settings.installCommandsCopyFailed"));
+      }
+    },
+    [t],
+  );
+
   const handleCopyInstallCommands = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(ONE_CLICK_INSTALL_COMMANDS);
@@ -373,6 +447,54 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
     } catch (error) {
       console.error("[AboutSection] Failed to copy install commands", error);
       toast.error(t("settings.installCommandsCopyFailed"));
+    }
+  }, [t]);
+
+  // 升级后自动补诊单个工具：静默后台执行，仅在确有冲突时写入结果，
+  // 无冲突不弹 toast、不报错打扰——与用户主动点的全量诊断区别对待。
+  const diagnoseToolSilently = useCallback(async (toolName: ToolName) => {
+    try {
+      const installs = await settingsApi.diagnoseToolInstallations(toolName);
+      if (installs.length > 0) {
+        setToolDiagnostics((prev) => ({ ...prev, [toolName]: installs }));
+      }
+    } catch (error) {
+      console.error(
+        `[AboutSection] Auto-diagnose failed for ${toolName}`,
+        error,
+      );
+    }
+  }, []);
+
+  // 顶部按钮：一次性诊断全部 6 个工具，有冲突的写入各自卡片，
+  // 全部无冲突时给一条 info toast。后端逐工具枚举所有安装并判定分歧。
+  const handleDiagnoseAll = useCallback(async () => {
+    setIsDiagnosingAll(true);
+    try {
+      const entries = await Promise.all(
+        TOOL_NAMES.map(
+          async (name) =>
+            [name, await settingsApi.diagnoseToolInstallations(name)] as const,
+        ),
+      );
+      const next: Partial<Record<ToolName, ToolInstallation[]>> = {};
+      let conflicts = 0;
+      for (const [name, installs] of entries) {
+        next[name] = installs;
+        if (installs.length > 0) conflicts += 1;
+      }
+      setToolDiagnostics(next);
+      if (conflicts === 0) {
+        toast.info(t("settings.toolDiagnoseNoConflict"), { closeButton: true });
+      }
+    } catch (error) {
+      console.error("[AboutSection] Diagnose all failed", error);
+      toast.error(t("settings.toolDiagnoseFailed"), {
+        description: extractErrorMessage(error) || undefined,
+        closeButton: true,
+      });
+    } finally {
+      setIsDiagnosingAll(false);
     }
   }, [t]);
 
@@ -395,6 +517,9 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
 
       for (const toolName of toolNames) {
         setToolActions((prev) => ({ ...prev, [toolName]: action }));
+        // 记录执行前的版本：用于识别"升级跑完但版本没变"——这正是多处安装互相
+        // 打架的头号症状（升级写入 A 处、PATH 实际仍跑 B 处），需自动触发诊断。
+        const beforeVersion = toolVersionByName.get(toolName)?.version ?? null;
         try {
           await settingsApi.runToolLifecycleAction(
             [toolName],
@@ -409,12 +534,22 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
           const tool = refreshed.find((t) => t.name === toolName);
           if (tool?.version) {
             succeeded += 1;
+            // 升级命令成功、版本号却没动：大概率被另一处安装遮蔽，自动诊断。
+            if (
+              action === "update" &&
+              beforeVersion &&
+              tool.version === beforeVersion
+            ) {
+              void diagnoseToolSilently(toolName);
+            }
           } else {
             // 命令退出码为 0、但刷新后仍探不到版本：多半是"装上了却跑不起来"
             // （如 openclaw 要求更高的 Node 版本）。refreshToolVersions 的 merge 已把
             // version 置空并写入后端 error，这里只需归类为软失败并展示原因。
             const detail = tool?.error?.trim() || t("settings.toolNotRunnable");
             failures.push({ toolName, detail, soft: true });
+            // 装了却跑不起来同样可能源于多处安装，自动诊断帮用户定位。
+            void diagnoseToolSilently(toolName);
           }
         } catch (error) {
           console.error(
@@ -490,7 +625,13 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
         );
       }
     },
-    [t, wslShellByTool, refreshToolVersions],
+    [
+      t,
+      wslShellByTool,
+      refreshToolVersions,
+      toolVersionByName,
+      diagnoseToolSilently,
+    ],
   );
 
   const displayVersion = version ?? t("common.unknown");
@@ -644,6 +785,22 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
               size="sm"
               variant="outline"
               className="h-7 gap-1.5 text-xs"
+              onClick={() => handleDiagnoseAll()}
+              disabled={isLoadingTools || isAnyBusy || isDiagnosingAll}
+            >
+              {isDiagnosingAll ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Stethoscope className="h-3.5 w-3.5" />
+              )}
+              {isDiagnosingAll
+                ? t("settings.toolDiagnosing")
+                : t("settings.toolDiagnose")}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1.5 text-xs"
               onClick={() => loadAllToolVersions()}
               disabled={isLoadingTools || isAnyBusy}
             >
@@ -700,6 +857,7 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
                     : null;
             const runningAction = toolActions[toolName];
             const title = tool?.version || tool?.error || t("common.unknown");
+            const conflicts = toolDiagnostics[toolName];
 
             return (
               <motion.div
@@ -820,6 +978,73 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+                )}
+
+                {/* 多处安装冲突诊断结果：仅在懒触发后有数据时渲染。 */}
+                {conflicts && conflicts.length > 0 && (
+                  <div className="space-y-1.5 rounded-lg border border-yellow-500/20 bg-yellow-500/5 p-2.5">
+                    <div className="text-[11px] font-medium text-yellow-600 dark:text-yellow-400">
+                      {t("settings.toolConflictTitle")}
+                    </div>
+                    <p className="text-[10px] leading-snug text-muted-foreground">
+                      {t("settings.toolConflictHint")}
+                    </p>
+                    <ul className="space-y-1.5">
+                      {conflicts.map((inst) => {
+                        const uninstallCmd = buildUninstallCommand(
+                          toolName,
+                          inst,
+                        );
+                        return (
+                          <li key={inst.path} className="space-y-1">
+                            <div className="flex items-center gap-1.5 text-[10px]">
+                              <span className="shrink-0 rounded bg-background/80 px-1 py-0.5 font-mono text-muted-foreground">
+                                {inst.source}
+                              </span>
+                              <span
+                                className="min-w-0 flex-1 truncate font-mono text-muted-foreground"
+                                title={inst.path}
+                              >
+                                {inst.path}
+                              </span>
+                              <span
+                                className={
+                                  inst.runnable
+                                    ? "shrink-0 font-mono text-foreground"
+                                    : "shrink-0 text-yellow-600 dark:text-yellow-400"
+                                }
+                              >
+                                {inst.runnable
+                                  ? inst.version
+                                  : t("settings.toolConflictNotRunnable")}
+                              </span>
+                              {inst.is_path_default && (
+                                <span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-1 py-0.5 text-[9px] text-primary">
+                                  {t("settings.toolConflictDefault")}
+                                </span>
+                              )}
+                            </div>
+                            {/* 卸载建议命令：仅供复制，绝不代执行。前置红色垃圾桶图标
+                                明示这是卸载（破坏性）命令，避免误以为是普通信息。 */}
+                            <div className="flex items-center gap-1.5">
+                              <code className="min-w-0 flex-1 truncate rounded bg-background/80 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                                {uninstallCmd}
+                              </code>
+                              <Trash2 className="h-3 w-3 shrink-0 text-red-500" />
+                              <button
+                                type="button"
+                                onClick={() => handleCopyCommand(uninstallCmd)}
+                                title={t("settings.toolUninstallCopyHint")}
+                                className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground"
+                              >
+                                <Copy className="h-3 w-3" />
+                              </button>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
                   </div>
                 )}
 
