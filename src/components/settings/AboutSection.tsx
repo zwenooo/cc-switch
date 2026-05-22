@@ -372,60 +372,101 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
     async (toolNames: ToolName[], action: ToolLifecycleAction) => {
       if (toolNames.length === 0) return;
 
-      setToolActions((prev) => {
-        const next = { ...prev };
-        for (const toolName of toolNames) {
-          next[toolName] = action;
-        }
-        return next;
-      });
-      if (toolNames.length > 1) {
+      const isBatch = toolNames.length > 1;
+      if (isBatch) {
         setBatchAction(action);
       }
 
-      try {
-        await settingsApi.runToolLifecycleAction(
-          [...toolNames],
-          action,
-          wslShellByTool,
-        );
-        // 静默执行已真正结束：刷新对应工具的版本号，让卡片立即反映安装结果。
-        await refreshToolVersions([...toolNames], wslShellByTool);
+      // 逐工具串行执行：每个工具独立成败、独立刷新版本，一个失败不会连坐
+      // 后续工具（后端把整批拼成单脚本 + set -e，会在首个失败处中止整批）。
+      const failures: { toolName: ToolName; detail: string }[] = [];
+      let succeeded = 0;
+
+      for (const toolName of toolNames) {
+        setToolActions((prev) => ({ ...prev, [toolName]: action }));
+        try {
+          await settingsApi.runToolLifecycleAction(
+            [toolName],
+            action,
+            wslShellByTool,
+          );
+          // 静默执行真正结束后刷新该工具版本，卡片立即反映结果。
+          await refreshToolVersions([toolName], wslShellByTool);
+          succeeded += 1;
+        } catch (error) {
+          console.error(
+            `[AboutSection] Failed to run tool action for ${toolName}`,
+            error,
+          );
+          const detail = error instanceof Error ? error.message : String(error);
+          failures.push({ toolName, detail });
+        } finally {
+          setToolActions((prev) => {
+            const next = { ...prev };
+            delete next[toolName];
+            return next;
+          });
+        }
+      }
+
+      if (isBatch) {
+        setBatchAction(null);
+      }
+
+      const actionLabel =
+        action === "install"
+          ? t("settings.toolInstall")
+          : t("settings.toolUpdate");
+
+      if (failures.length === 0) {
         toast.success(
           t("settings.toolActionDone", {
-            count: toolNames.length,
-            action:
-              action === "install"
-                ? t("settings.toolInstall")
-                : t("settings.toolUpdate"),
+            count: succeeded,
+            action: actionLabel,
           }),
           { closeButton: true },
         );
-      } catch (error) {
-        console.error("[AboutSection] Failed to run tool action", error);
-        // 后端在命令失败时回传 stderr 末尾若干行，作为 toast 详情提示用户。
-        const detail = error instanceof Error ? error.message : String(error);
+        return;
+      }
+
+      // 批量场景每个失败只摘取错误末行（最相关），单工具场景给出完整详情。
+      const lastLine = (text: string) => {
+        const lines = text.trim().split("\n").filter(Boolean);
+        return lines[lines.length - 1] ?? text;
+      };
+      const failureDescription = isBatch
+        ? failures
+            .map(
+              (f) => `${TOOL_DISPLAY_NAMES[f.toolName]}: ${lastLine(f.detail)}`,
+            )
+            .join("\n")
+        : failures[0]?.detail;
+
+      if (succeeded === 0) {
         toast.error(t("settings.toolActionFailed"), {
-          description: detail || undefined,
+          description: failureDescription || undefined,
           closeButton: true,
         });
-      } finally {
-        setToolActions((prev) => {
-          const next = { ...prev };
-          for (const toolName of toolNames) {
-            delete next[toolName];
-          }
-          return next;
-        });
-        if (toolNames.length > 1) {
-          setBatchAction(null);
-        }
+      } else {
+        // 部分成功：用 warning 汇总成败数量，详情列出失败的工具。
+        toast.warning(
+          t("settings.toolActionPartial", {
+            succeeded,
+            failed: failures.length,
+            action: actionLabel,
+          }),
+          { description: failureDescription || undefined, closeButton: true },
+        );
       }
     },
     [t, wslShellByTool, refreshToolVersions],
   );
 
   const displayVersion = version ?? t("common.unknown");
+
+  // 任一安装/升级进行中（批量或单工具）即视为忙碌：用于禁用所有操作按钮，
+  // 避免并发触发多个 npm/pip 全局写入造成冲突。
+  const isAnyBusy = Boolean(batchAction) || Object.keys(toolActions).length > 0;
 
   return (
     <motion.section
@@ -573,7 +614,7 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
               variant="outline"
               className="h-7 gap-1.5 text-xs"
               onClick={() => loadAllToolVersions()}
-              disabled={isLoadingTools || Boolean(batchAction)}
+              disabled={isLoadingTools || isAnyBusy}
             >
               <RefreshCw
                 className={
@@ -587,9 +628,7 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
               className="h-7 gap-1.5 text-xs"
               onClick={() => handleRunToolAction(updatableToolNames, "update")}
               disabled={
-                isLoadingTools ||
-                Boolean(batchAction) ||
-                updatableToolNames.length === 0
+                isLoadingTools || isAnyBusy || updatableToolNames.length === 0
               }
             >
               {batchAction === "update" ? (
@@ -704,7 +743,9 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
                     <Select
                       value={wslShellByTool[toolName]?.wslShell || "auto"}
                       onValueChange={(v) => handleToolShellChange(toolName, v)}
-                      disabled={isLoadingTools || loadingTools[toolName]}
+                      disabled={
+                        isLoadingTools || loadingTools[toolName] || isAnyBusy
+                      }
                     >
                       <SelectTrigger className="h-7 w-[82px] text-xs">
                         <SelectValue />
@@ -723,7 +764,9 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
                       onValueChange={(v) =>
                         handleToolShellFlagChange(toolName, v)
                       }
-                      disabled={isLoadingTools || loadingTools[toolName]}
+                      disabled={
+                        isLoadingTools || loadingTools[toolName] || isAnyBusy
+                      }
                     >
                       <SelectTrigger className="h-7 w-[82px] text-xs">
                         <SelectValue />
@@ -751,11 +794,7 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
                       variant={action === "install" ? "outline" : "default"}
                       className="h-7 gap-1.5 text-xs"
                       onClick={() => handleRunToolAction([toolName], action)}
-                      disabled={
-                        isToolVersionLoading ||
-                        Boolean(runningAction) ||
-                        Boolean(batchAction)
-                      }
+                      disabled={isToolVersionLoading || isAnyBusy}
                     >
                       {runningAction ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />

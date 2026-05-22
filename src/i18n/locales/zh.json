@@ -670,6 +670,7 @@
     "toolUpdate": "升级",
     "toolReady": "已就绪",
     "toolActionDone": "{{count}} 个工具{{action}}完成",
+    "toolActionPartial": "{{succeeded}} 个{{action}}成功，{{failed}} 个失败",
     "toolActionFailed": "安装/升级命令执行失败",
     "envBadge": {
       "wsl": "WSL",

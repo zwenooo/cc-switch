@@ -670,6 +670,7 @@
     "toolUpdate": "Update",
     "toolReady": "Ready",
     "toolActionDone": "{{action}} completed for {{count}} tool(s)",
+    "toolActionPartial": "{{action}} succeeded for {{succeeded}}, failed for {{failed}}",
     "toolActionFailed": "Install/update command failed",
     "envBadge": {
       "wsl": "WSL",

@@ -670,6 +670,7 @@
     "toolUpdate": "更新",
     "toolReady": "準備完了",
     "toolActionDone": "{{count}} 個のツールの{{action}}が完了しました",
+    "toolActionPartial": "{{succeeded}} 個成功、{{failed}} 個失敗（{{action}}）",
     "toolActionFailed": "インストール/更新コマンドの実行に失敗しました",
     "envBadge": {
       "wsl": "WSL",
