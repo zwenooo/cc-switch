@@ -102,6 +102,9 @@ pub struct ToolVersion {
     version: Option<String>,
     latest_version: Option<String>, // 新增字段：最新版本
     error: Option<String>,
+    /// 已定位到可执行文件、但 `--version` 报错退出（装了却跑不起来，如 Node 版本不达标）。
+    /// 供前端区分"未安装"与"已安装·无法运行"，无需匹配 error 文案反推语义。
+    installed_but_broken: bool,
     /// 工具运行环境: "windows", "wsl", "macos", "linux", "unknown"
     env_type: String,
     /// 当 env_type 为 "wsl" 时，返回该工具绑定的 WSL distro（用于按 distro 探测 shells）
@@ -442,7 +445,7 @@ async fn get_single_tool_version_impl(
     let client = crate::proxy::http_client::get();
 
     // 1. 获取本地版本
-    let (local_version, local_error) = if let Some(distro) = wsl_distro.as_deref() {
+    let probe = if let Some(distro) = wsl_distro.as_deref() {
         try_get_version_wsl(tool, distro, wsl_shell, wsl_shell_flag)
     } else {
         #[cfg(target_os = "windows")]
@@ -454,13 +457,17 @@ async fn get_single_tool_version_impl(
 
         #[cfg(not(target_os = "windows"))]
         {
-            let direct_result = try_get_version(tool);
-            if direct_result.0.is_some() {
-                direct_result
-            } else {
-                scan_cli_version(tool)
+            // PATH 第一个命令优先；只有它确实没装(NotFound)才去常见目录兜底扫描。
+            match try_get_version(tool) {
+                ShellProbe::NotFound(_) => scan_cli_version(tool),
+                found => found,
             }
         }
+    };
+    let (local_version, local_error, installed_but_broken) = match probe {
+        ShellProbe::Found(v) => (Some(v), None, false),
+        ShellProbe::FoundButFailed(e) => (None, Some(e), true),
+        ShellProbe::NotFound(e) => (None, Some(e), false),
     };
 
     // 2. 获取远程最新版本
@@ -485,6 +492,7 @@ async fn get_single_tool_version_impl(
         version: local_version,
         latest_version,
         error: local_error,
+        installed_but_broken,
         env_type,
         wsl_distro,
     }
@@ -561,13 +569,32 @@ fn extract_version(raw: &str) -> String {
         .unwrap_or_else(|| raw.to_string())
 }
 
+/// 工具未安装时的统一错误文案；WSL 路径会再拼上 `[WSL:{distro}] ` 前缀。
+const NOT_INSTALLED: &str = "not installed or not executable";
+
+/// CLI 版本探测的三态结果，跨平台统一各 probe（`try_get_version` /
+/// `try_get_version_wsl` / `scan_cli_version`）的返回，进而在 `ToolVersion` 上给出
+/// 结构化的 `installed_but_broken` 信号——避免前端靠匹配错误文案反推语义。
+///
+/// 关键区分"没装"与"装了但 `--version` 自身报错退出"（如工具要求更高的 Node 版本）：
+/// 后者必须如实上报、不去别处捞旧版掩盖，否则"升级到新版却跑不起来"会被旧版盖住，
+/// 表现为"升级成功但版本号不变"。
+enum ShellProbe {
+    /// 成功拿到版本号
+    Found(String),
+    /// 可执行存在、但 `--version` 非零退出（携带诊断信息，如 stderr 末尾若干行）
+    FoundButFailed(String),
+    /// 没找到该命令（携带描述性消息，供 UI 展示）
+    NotFound(String),
+}
+
 /// 在非 Windows 平台用用户 shell 执行 `{tool} --version` 探测版本。
 ///
 /// Windows 不走此路径：`cmd /C {tool}` 可能误触发 App Execution Alias /
 /// 协议处理器（曾导致 Windows 版整体被禁用），那里改由 `scan_cli_version`
 /// 只执行已定位到的真实可执行文件。
 #[cfg(not(target_os = "windows"))]
-fn try_get_version(tool: &str) -> (Option<String>, Option<String>) {
+fn try_get_version(tool: &str) -> ShellProbe {
     use std::process::Command;
 
     let output = {
@@ -589,23 +616,22 @@ fn try_get_version(tool: &str) -> (Option<String>, Option<String>) {
             if out.status.success() {
                 let raw = if stdout.is_empty() { &stderr } else { &stdout };
                 if raw.is_empty() {
-                    (None, Some("not installed or not executable".to_string()))
+                    ShellProbe::NotFound(NOT_INSTALLED.to_string())
                 } else {
-                    (Some(extract_version(raw)), None)
+                    ShellProbe::Found(extract_version(raw))
                 }
             } else {
+                // exit 127 = shell 找不到命令（可放心 fallback 到搜索路径）；其它非零码
+                // = 命令存在但 --version 自身报错退出，须如实上报、不 fallback 掩盖。
                 let err = if stderr.is_empty() { stdout } else { stderr };
-                (
-                    None,
-                    Some(if err.is_empty() {
-                        "not installed or not executable".to_string()
-                    } else {
-                        err
-                    }),
-                )
+                if out.status.code() == Some(127) || err.is_empty() {
+                    ShellProbe::NotFound(NOT_INSTALLED.to_string())
+                } else {
+                    ShellProbe::FoundButFailed(last_lines(err.trim(), 4))
+                }
             }
         }
-        Err(e) => (None, Some(e.to_string())),
+        Err(_) => ShellProbe::NotFound(NOT_INSTALLED.to_string()),
     }
 }
 
@@ -649,7 +675,7 @@ fn try_get_version_wsl(
     distro: &str,
     force_shell: Option<&str>,
     force_shell_flag: Option<&str>,
-) -> (Option<String>, Option<String>) {
+) -> ShellProbe {
     use std::process::Command;
 
     // 防御性断言：tool 只能是预定义的值
@@ -657,22 +683,19 @@ fn try_get_version_wsl(
 
     // 校验 distro 名称，防止命令注入
     if !is_valid_wsl_distro_name(distro) {
-        return (None, Some(format!("[WSL:{distro}] invalid distro name")));
+        return ShellProbe::NotFound(format!("[WSL:{distro}] invalid distro name"));
     }
 
     // 构建 Shell 脚本检测逻辑
     let (shell, flag, cmd) = if let Some(shell) = force_shell {
         // Defensive validation: never allow an arbitrary executable name here.
         if !is_valid_shell(shell) {
-            return (None, Some(format!("[WSL:{distro}] invalid shell: {shell}")));
+            return ShellProbe::NotFound(format!("[WSL:{distro}] invalid shell: {shell}"));
         }
         let shell = shell.rsplit('/').next().unwrap_or(shell);
         let flag = if let Some(flag) = force_shell_flag {
             if !is_valid_shell_flag(flag) {
-                return (
-                    None,
-                    Some(format!("[WSL:{distro}] invalid shell flag: {flag}")),
-                );
+                return ShellProbe::NotFound(format!("[WSL:{distro}] invalid shell flag: {flag}"));
             }
             flag
         } else {
@@ -683,10 +706,7 @@ fn try_get_version_wsl(
     } else {
         let cmd = if let Some(flag) = force_shell_flag {
             if !is_valid_shell_flag(flag) {
-                return (
-                    None,
-                    Some(format!("[WSL:{distro}] invalid shell flag: {flag}")),
-                );
+                return ShellProbe::NotFound(format!("[WSL:{distro}] invalid shell flag: {flag}"));
             }
             format!("\"${{SHELL:-sh}}\" {flag} '{tool} --version'")
         } else {
@@ -711,29 +731,29 @@ fn try_get_version_wsl(
             if out.status.success() {
                 let raw = if stdout.is_empty() { &stderr } else { &stdout };
                 if raw.is_empty() {
-                    (
-                        None,
-                        Some(format!("[WSL:{distro}] not installed or not executable")),
-                    )
+                    ShellProbe::NotFound(format!("[WSL:{distro}] {NOT_INSTALLED}"))
                 } else {
-                    (Some(extract_version(raw)), None)
+                    ShellProbe::Found(extract_version(raw))
                 }
             } else {
                 let err = if stderr.is_empty() { stdout } else { stderr };
-                (
-                    None,
-                    Some(format!(
+                // wsl.exe 透传的退出码不总可靠，故同时用 exit 127 与 "command not found"
+                // 文本兜底判别"没装"；其余非零退出视作"装了但 --version 报错"。
+                let not_found = err.is_empty()
+                    || out.status.code() == Some(127)
+                    || err.contains("command not found")
+                    || err.contains("not found");
+                if not_found {
+                    ShellProbe::NotFound(format!("[WSL:{distro}] {NOT_INSTALLED}"))
+                } else {
+                    ShellProbe::FoundButFailed(format!(
                         "[WSL:{distro}] {}",
-                        if err.is_empty() {
-                            "not installed or not executable".to_string()
-                        } else {
-                            err
-                        }
-                    )),
-                )
+                        last_lines(err.trim(), 4)
+                    ))
+                }
             }
         }
-        Err(e) => (None, Some(format!("[WSL:{distro}] exec failed: {e}"))),
+        Err(e) => ShellProbe::NotFound(format!("[WSL:{distro}] exec failed: {e}")),
     }
 }
 
@@ -746,11 +766,8 @@ fn try_get_version_wsl(
     _distro: &str,
     _force_shell: Option<&str>,
     _force_shell_flag: Option<&str>,
-) -> (Option<String>, Option<String>) {
-    (
-        None,
-        Some("WSL check not supported on this platform".to_string()),
-    )
+) -> ShellProbe {
+    ShellProbe::NotFound("WSL check not supported on this platform".to_string())
 }
 
 fn push_unique_path(paths: &mut Vec<std::path::PathBuf>, path: std::path::PathBuf) {
@@ -958,7 +975,7 @@ fn extend_mise_node_search_paths(paths: &mut Vec<std::path::PathBuf>, home: &Pat
 }
 
 /// 扫描常见路径查找 CLI
-fn scan_cli_version(tool: &str) -> (Option<String>, Option<String>) {
+fn scan_cli_version(tool: &str) -> ShellProbe {
     use std::process::Command;
 
     let home = dirs::home_dir().unwrap_or_default();
@@ -1091,6 +1108,11 @@ fn scan_cli_version(tool: &str) -> (Option<String>, Option<String>) {
         .map(|value| value.to_string_lossy().into_owned())
         .unwrap_or_default();
 
+    // 记录"可执行文件存在、但 `--version` 非零退出"时的首个诊断信息。
+    // 典型场景：工具已安装但当前环境跑不起来（如 openclaw 要求 Node v22.19+）。
+    // 这类信息比笼统的 "not installed" 有用得多，循环结束未探到版本时回传。
+    let mut exec_diagnostic: Option<String> = None;
+
     for path in &search_paths {
         #[cfg(target_os = "windows")]
         let new_path = format!("{};{}", path.display(), current_path);
@@ -1126,14 +1148,24 @@ fn scan_cli_version(tool: &str) -> (Option<String>, Option<String>) {
                 if out.status.success() {
                     let raw = if stdout.is_empty() { &stderr } else { &stdout };
                     if !raw.is_empty() {
-                        return (Some(extract_version(raw)), None);
+                        return ShellProbe::Found(extract_version(raw));
+                    }
+                } else if exec_diagnostic.is_none() {
+                    let detail = if stderr.is_empty() { stdout } else { stderr };
+                    let detail = detail.trim();
+                    if !detail.is_empty() {
+                        exec_diagnostic = Some(last_lines(detail, 4));
                     }
                 }
             }
         }
     }
 
-    (None, Some("not installed or not executable".to_string()))
+    // 有诊断 = 找到了可执行文件但 --version 报错（装了跑不起来）；否则视作未安装。
+    match exec_diagnostic {
+        Some(detail) => ShellProbe::FoundButFailed(detail),
+        None => ShellProbe::NotFound(NOT_INSTALLED.to_string()),
+    }
 }
 
 #[cfg(target_os = "windows")]
