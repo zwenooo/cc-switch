@@ -785,6 +785,114 @@ fn extend_from_path_list(
     }
 }
 
+fn extend_from_cli_path_env(
+    paths: &mut Vec<std::path::PathBuf>,
+    value: Option<std::ffi::OsString>,
+) {
+    if let Some(raw) = value {
+        for p in std::env::split_paths(&raw) {
+            if should_skip_cli_path_env_dir(&p) {
+                continue;
+            }
+            push_unique_path(paths, p);
+        }
+    }
+}
+
+fn should_skip_cli_path_env_dir(path: &Path) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        is_windows_app_execution_alias_dir(path)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = path;
+        false
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn is_windows_app_execution_alias_dir(path: &Path) -> bool {
+    let normalized = path
+        .to_string_lossy()
+        .replace('/', "\\")
+        .to_ascii_lowercase();
+    normalized
+        .trim_end_matches('\\')
+        .ends_with("\\microsoft\\windowsapps")
+}
+
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn push_env_child_dir(
+    paths: &mut Vec<std::path::PathBuf>,
+    value: Option<std::ffi::OsString>,
+    child: &str,
+) {
+    if let Some(raw) = value {
+        push_unique_path(paths, std::path::PathBuf::from(raw).join(child));
+    }
+}
+
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn extend_existing_child_search_paths(
+    paths: &mut Vec<std::path::PathBuf>,
+    base: &Path,
+    suffix: Option<&str>,
+) {
+    if !base.exists() {
+        return;
+    }
+
+    if let Ok(entries) = std::fs::read_dir(base) {
+        for entry in entries.flatten() {
+            let path = match suffix {
+                Some(suffix) => entry.path().join(suffix),
+                None => entry.path(),
+            };
+            if path.exists() {
+                push_unique_path(paths, path);
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn extend_windows_cli_manager_search_paths(paths: &mut Vec<std::path::PathBuf>, home: &Path) {
+    push_env_single_dir(paths, std::env::var_os("PNPM_HOME"));
+    push_env_child_dir(paths, std::env::var_os("VOLTA_HOME"), "bin");
+    push_env_single_dir(paths, std::env::var_os("NVM_SYMLINK"));
+    push_env_child_dir(paths, std::env::var_os("SCOOP"), "shims");
+    push_env_child_dir(paths, std::env::var_os("SCOOP_GLOBAL"), "shims");
+
+    if let Some(nvm_home) = std::env::var_os("NVM_HOME") {
+        let nvm_home = std::path::PathBuf::from(nvm_home);
+        push_unique_path(paths, nvm_home.clone());
+        extend_existing_child_search_paths(paths, &nvm_home, None);
+    }
+
+    if let Some(appdata) = dirs::data_dir() {
+        let nvm_home = appdata.join("nvm");
+        push_unique_path(paths, nvm_home.clone());
+        extend_existing_child_search_paths(paths, &nvm_home, None);
+    }
+
+    if !home.as_os_str().is_empty() {
+        push_unique_path(paths, home.join("scoop").join("shims"));
+    }
+
+    if let Some(local_data) = dirs::data_local_dir() {
+        push_unique_path(paths, local_data.join("pnpm"));
+        push_unique_path(paths, local_data.join("Volta").join("bin"));
+        push_unique_path(paths, local_data.join("Yarn").join("bin"));
+    }
+
+    let program_data = std::env::var_os("ProgramData")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("C:\\ProgramData"));
+    push_unique_path(paths, program_data.join("scoop").join("shims"));
+}
+
 /// OpenCode install.sh 路径优先级（见 https://github.com/anomalyco/opencode README）:
 ///   $OPENCODE_INSTALL_DIR > $XDG_BIN_DIR > $HOME/bin > $HOME/.opencode/bin
 /// 额外扫描 Bun 默认全局安装路径（~/.bun/bin）
@@ -936,6 +1044,7 @@ fn scan_cli_version(tool: &str) -> (Option<String>, Option<String>) {
             &mut search_paths,
             std::path::PathBuf::from("C:\\Program Files\\nodejs"),
         );
+        extend_windows_cli_manager_search_paths(&mut search_paths, &home);
     }
 
     let fnm_base = home.join(".local/state/fnm_multishells");
@@ -975,7 +1084,12 @@ fn scan_cli_version(tool: &str) -> (Option<String>, Option<String>) {
         }
     }
 
-    let current_path = std::env::var("PATH").unwrap_or_default();
+    let path_env = std::env::var_os("PATH");
+    extend_from_cli_path_env(&mut search_paths, path_env.clone());
+    let current_path = path_env
+        .as_ref()
+        .map(|value| value.to_string_lossy().into_owned())
+        .unwrap_or_default();
 
     for path in &search_paths {
         #[cfg(target_os = "windows")]
@@ -2059,6 +2173,59 @@ mod tests {
             .filter(|path| path.as_path() == Path::new("/home/tester/.bun/bin"))
             .count();
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn cli_path_env_search_paths_include_path_entries_and_dedupe() {
+        let temp = tempfile::tempdir().expect("temp dir should be created");
+        let first = temp.path().join("first");
+        let second = temp.path().join("second");
+        std::fs::create_dir_all(&first).expect("first dir should be created");
+        std::fs::create_dir_all(&second).expect("second dir should be created");
+
+        let path_env = std::env::join_paths([first.clone(), second.clone(), first.clone()])
+            .expect("test path env should be joinable");
+        let mut paths = vec![first.clone()];
+
+        extend_from_cli_path_env(&mut paths, Some(path_env));
+
+        assert!(paths.contains(&second));
+        assert_eq!(paths.iter().filter(|path| *path == &first).count(), 1);
+    }
+
+    #[test]
+    fn child_search_paths_include_existing_children_with_suffix() {
+        let temp = tempfile::tempdir().expect("temp dir should be created");
+        let base = temp.path().join("node");
+        let bin = base.join("25.8.0").join("bin");
+        std::fs::create_dir_all(&bin).expect("version bin should be created");
+
+        let mut paths = Vec::new();
+        extend_existing_child_search_paths(&mut paths, &base, Some("bin"));
+
+        assert!(paths.contains(&bin));
+    }
+
+    #[test]
+    fn env_child_dir_appends_child_and_dedupes() {
+        let base = std::ffi::OsString::from("/custom/toolchain");
+        let mut paths = Vec::new();
+
+        push_env_child_dir(&mut paths, Some(base.clone()), "bin");
+        push_env_child_dir(&mut paths, Some(base), "bin");
+
+        assert_eq!(paths, vec![PathBuf::from("/custom/toolchain").join("bin")]);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn cli_path_env_skips_windows_apps_alias_dir() {
+        assert!(is_windows_app_execution_alias_dir(Path::new(
+            r"C:\Users\tester\AppData\Local\Microsoft\WindowsApps"
+        )));
+        assert!(!is_windows_app_execution_alias_dir(Path::new(
+            r"C:\Users\tester\AppData\Roaming\npm"
+        )));
     }
 
     #[test]
