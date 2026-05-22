@@ -108,7 +108,9 @@ pub struct ToolVersion {
     wsl_distro: Option<String>,
 }
 
-const VALID_TOOLS: [&str; 4] = ["claude", "codex", "gemini", "opencode"];
+const VALID_TOOLS: [&str; 6] = [
+    "claude", "codex", "gemini", "opencode", "openclaw", "hermes",
+];
 
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -149,40 +151,277 @@ pub async fn get_tool_versions(
     tools: Option<Vec<String>>,
     wsl_shell_by_tool: Option<HashMap<String, WslShellPreferenceInput>>,
 ) -> Result<Vec<ToolVersion>, String> {
-    // Windows: completely disable tool version detection to prevent
-    // accidentally launching apps (e.g. Claude Code) via protocol handlers.
-    #[cfg(target_os = "windows")]
-    {
-        let _ = (tools, wsl_shell_by_tool);
-        return Ok(Vec::new());
+    let requested: Vec<&str> = if let Some(tools) = tools.as_ref() {
+        let set: std::collections::HashSet<&str> = tools.iter().map(|s| s.as_str()).collect();
+        VALID_TOOLS
+            .iter()
+            .copied()
+            .filter(|t| set.contains(t))
+            .collect()
+    } else {
+        VALID_TOOLS.to_vec()
+    };
+    let mut results = Vec::new();
+
+    for tool in requested {
+        let pref = wsl_shell_by_tool.as_ref().and_then(|m| m.get(tool));
+        let tool_wsl_shell = pref.and_then(|p| p.wsl_shell.as_deref());
+        let tool_wsl_shell_flag = pref.and_then(|p| p.wsl_shell_flag.as_deref());
+
+        results.push(get_single_tool_version_impl(tool, tool_wsl_shell, tool_wsl_shell_flag).await);
     }
+
+    Ok(results)
+}
+
+#[tauri::command]
+pub async fn run_tool_lifecycle_action(
+    tools: Vec<String>,
+    action: String,
+    wsl_shell_by_tool: Option<HashMap<String, WslShellPreferenceInput>>,
+) -> Result<(), String> {
+    let action = ToolLifecycleAction::from_str(&action)?;
+    let requested = normalize_requested_tools(&tools);
+    if requested.is_empty() {
+        return Err("No supported tools selected".to_string());
+    }
+
+    let command_line =
+        build_tool_lifecycle_command(&requested, action, wsl_shell_by_tool.as_ref())?;
+    let label = match action {
+        ToolLifecycleAction::Install => "tool_install",
+        ToolLifecycleAction::Update => "tool_update",
+    };
+
+    tokio::task::spawn_blocking(move || run_tool_lifecycle_silently(&command_line, label))
+        .await
+        .map_err(|e| format!("tool lifecycle task join error: {e}"))?
+}
+
+/// 静默执行工具安装/更新脚本：直接捕获子进程输出并阻塞到命令真正结束，
+/// 不再弹出可见终端窗口（与 `launch_terminal_running` 的"开窗即返回"形成对比，
+/// 后者仍保留给 provider 切换等需要交互式终端的场景）。
+/// 失败时回传 stderr/stdout 末尾若干行，供前端 toast 提示。
+#[cfg(not(target_os = "windows"))]
+fn run_tool_lifecycle_silently(command_line: &str, _label: &str) -> Result<(), String> {
+    use std::process::Command;
+    // command_line 是 bash 风格脚本（含 `set -e` 与多行命令）；强制用 bash 执行，
+    // 避免用户默认 shell 为 fish/zsh 时 `set -e` 等语义不一致。
+    let output = Command::new("bash")
+        .arg("-c")
+        .arg(command_line)
+        .output()
+        .map_err(|e| format!("启动安装进程失败: {e}"))?;
+    finish_lifecycle_output(&output)
+}
+
+/// Windows 静默执行：command_line 是 .bat 内容（@echo off + call/wsl 行，CRLF 分隔），
+/// 写临时 .bat 后用 `cmd /C` 执行，`CREATE_NO_WINDOW` 抑制 console 窗口。
+#[cfg(target_os = "windows")]
+fn run_tool_lifecycle_silently(command_line: &str, label: &str) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    use std::process::Command;
+
+    let bat_file =
+        std::env::temp_dir().join(format!("cc_switch_{}_{}.bat", label, std::process::id()));
+    std::fs::write(&bat_file, command_line).map_err(|e| format!("写入批处理文件失败: {e}"))?;
+
+    let output = Command::new("cmd")
+        .arg("/C")
+        .arg(&bat_file)
+        .creation_flags(CREATE_NO_WINDOW)
+        .output();
+    let _ = std::fs::remove_file(&bat_file);
+
+    finish_lifecycle_output(&output.map_err(|e| format!("启动安装进程失败: {e}"))?)
+}
+
+/// 把子进程退出结果转成 `Result`：成功返回 `Ok`；失败提取 stderr（空则回退 stdout）
+/// 的末尾若干行作为错误详情，避免把整段安装日志塞进 toast。
+fn finish_lifecycle_output(output: &std::process::Output) -> Result<(), String> {
+    if output.status.success() {
+        return Ok(());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let raw = if stderr.trim().is_empty() {
+        stdout.trim()
+    } else {
+        stderr.trim()
+    };
+    let detail = last_lines(raw, 8);
+    Err(if detail.is_empty() {
+        format!("命令执行失败 (exit code: {:?})", output.status.code())
+    } else {
+        detail
+    })
+}
+
+/// 取文本末尾最多 `n` 行（npm / pip 的关键错误通常出现在输出尾部）。
+fn last_lines(text: &str, n: usize) -> String {
+    let lines: Vec<&str> = text.lines().collect();
+    let start = lines.len().saturating_sub(n);
+    lines[start..].join("\n")
+}
+
+fn normalize_requested_tools(tools: &[String]) -> Vec<&'static str> {
+    let set: std::collections::HashSet<&str> = tools.iter().map(|s| s.as_str()).collect();
+    VALID_TOOLS
+        .iter()
+        .copied()
+        .filter(|tool| set.contains(tool))
+        .collect()
+}
+
+#[derive(Debug, Clone, Copy)]
+enum ToolLifecycleAction {
+    Install,
+    Update,
+}
+
+impl FromStr for ToolLifecycleAction {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "install" => Ok(Self::Install),
+            "update" => Ok(Self::Update),
+            _ => Err(format!("Unsupported tool action: {value}")),
+        }
+    }
+}
+
+fn build_tool_lifecycle_command(
+    tools: &[&str],
+    action: ToolLifecycleAction,
+    wsl_shell_by_tool: Option<&HashMap<String, WslShellPreferenceInput>>,
+) -> Result<String, String> {
+    let mut lines = Vec::new();
 
     #[cfg(not(target_os = "windows"))]
+    lines.push("set -e".to_string());
+
+    #[cfg(target_os = "windows")]
+    lines.push("@echo off".to_string());
+
+    for tool in tools {
+        let label = tool_display_name(tool);
+        lines.push(format!("echo ========== {label} =========="));
+
+        let pref = wsl_shell_by_tool.and_then(|m| m.get(*tool));
+        let line = build_tool_action_line(
+            tool,
+            action,
+            pref.and_then(|p| p.wsl_shell.as_deref()),
+            pref.and_then(|p| p.wsl_shell_flag.as_deref()),
+        )?;
+        lines.push(line);
+
+        #[cfg(target_os = "windows")]
+        lines.push("if errorlevel 1 exit /b %errorlevel%".to_string());
+
+        #[cfg(not(target_os = "windows"))]
+        lines.push(String::new());
+    }
+
+    Ok(lines.join(if cfg!(target_os = "windows") {
+        "\r\n"
+    } else {
+        "\n"
+    }))
+}
+
+fn tool_display_name(tool: &str) -> &'static str {
+    match tool {
+        "claude" => "Claude Code",
+        "codex" => "Codex",
+        "gemini" => "Gemini CLI",
+        "opencode" => "OpenCode",
+        "openclaw" => "OpenClaw",
+        "hermes" => "Hermes",
+        _ => "Unknown",
+    }
+}
+
+fn tool_action_shell_command(tool: &str, _action: ToolLifecycleAction) -> Option<&'static str> {
+    match tool {
+        "claude" => Some("npm i -g @anthropic-ai/claude-code@latest"),
+        "codex" => Some("npm i -g @openai/codex@latest"),
+        "gemini" => Some("npm i -g @google/gemini-cli@latest"),
+        "opencode" => Some("npm i -g opencode-ai@latest"),
+        "openclaw" => Some("npm i -g openclaw@latest"),
+        #[cfg(target_os = "windows")]
+        "hermes" => Some(
+            "py -m pip install --upgrade \"hermes-agent[web]\" || python -m pip install --upgrade \"hermes-agent[web]\"",
+        ),
+        #[cfg(not(target_os = "windows"))]
+        "hermes" => Some(
+            "python3 -m pip install --upgrade \"hermes-agent[web]\" || python -m pip install --upgrade \"hermes-agent[web]\"",
+        ),
+        _ => None,
+    }
+}
+
+fn build_tool_action_line(
+    tool: &str,
+    action: ToolLifecycleAction,
+    wsl_shell: Option<&str>,
+    wsl_shell_flag: Option<&str>,
+) -> Result<String, String> {
+    let command = tool_action_shell_command(tool, action)
+        .ok_or_else(|| format!("Unsupported tool action target: {tool}"))?;
+
+    #[cfg(target_os = "windows")]
     {
-        let requested: Vec<&str> = if let Some(tools) = tools.as_ref() {
-            let set: std::collections::HashSet<&str> = tools.iter().map(|s| s.as_str()).collect();
-            VALID_TOOLS
-                .iter()
-                .copied()
-                .filter(|t| set.contains(t))
-                .collect()
-        } else {
-            VALID_TOOLS.to_vec()
-        };
-        let mut results = Vec::new();
-
-        for tool in requested {
-            let pref = wsl_shell_by_tool.as_ref().and_then(|m| m.get(tool));
-            let tool_wsl_shell = pref.and_then(|p| p.wsl_shell.as_deref());
-            let tool_wsl_shell_flag = pref.and_then(|p| p.wsl_shell_flag.as_deref());
-
-            results.push(
-                get_single_tool_version_impl(tool, tool_wsl_shell, tool_wsl_shell_flag).await,
-            );
+        if let Some(distro) = wsl_distro_for_tool(tool) {
+            return build_wsl_tool_action_line(&distro, command, wsl_shell, wsl_shell_flag);
         }
 
-        Ok(results)
+        if command.starts_with("npm ") {
+            return Ok(format!("call {command}"));
+        }
     }
+
+    let _ = (wsl_shell, wsl_shell_flag);
+    Ok(command.to_string())
+}
+
+#[cfg(target_os = "windows")]
+fn build_wsl_tool_action_line(
+    distro: &str,
+    command: &str,
+    force_shell: Option<&str>,
+    force_shell_flag: Option<&str>,
+) -> Result<String, String> {
+    if !is_valid_wsl_distro_name(distro) {
+        return Err(format!("Invalid WSL distro name: {distro}"));
+    }
+
+    let shell = force_shell
+        .map(|s| s.rsplit('/').next().unwrap_or(s))
+        .unwrap_or("sh");
+    if !is_valid_shell(shell) {
+        return Err(format!("Invalid WSL shell: {shell}"));
+    }
+
+    let flag = if let Some(flag) = force_shell_flag {
+        if !is_valid_shell_flag(flag) {
+            return Err(format!("Invalid WSL shell flag: {flag}"));
+        }
+        flag
+    } else {
+        default_flag_for_shell(shell)
+    };
+
+    Ok(format!(
+        "wsl.exe -d {distro} -- {shell} {flag} {}",
+        windows_cmd_double_quote_arg(command)
+    ))
+}
+
+#[cfg(target_os = "windows")]
+fn windows_cmd_double_quote_arg(value: &str) -> String {
+    format!("\"{}\"", value.replace('"', "\\\""))
 }
 
 /// 获取单个工具的版本信息（内部实现）
@@ -206,11 +445,21 @@ async fn get_single_tool_version_impl(
     let (local_version, local_error) = if let Some(distro) = wsl_distro.as_deref() {
         try_get_version_wsl(tool, distro, wsl_shell, wsl_shell_flag)
     } else {
-        let direct_result = try_get_version(tool);
-        if direct_result.0.is_some() {
-            direct_result
-        } else {
+        #[cfg(target_os = "windows")]
+        {
+            // Windows 上只执行已经定位到的真实可执行文件，避免 `cmd /C tool`
+            // 误触发 App Execution Alias 或协议处理器。
             scan_cli_version(tool)
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let direct_result = try_get_version(tool);
+            if direct_result.0.is_some() {
+                direct_result
+            } else {
+                scan_cli_version(tool)
+            }
         }
     };
 
@@ -219,7 +468,15 @@ async fn get_single_tool_version_impl(
         "claude" => fetch_npm_latest_version(&client, "@anthropic-ai/claude-code").await,
         "codex" => fetch_npm_latest_version(&client, "@openai/codex").await,
         "gemini" => fetch_npm_latest_version(&client, "@google/gemini-cli").await,
-        "opencode" => fetch_github_latest_version(&client, "anomalyco/opencode").await,
+        "opencode" => {
+            if let Some(version) = fetch_npm_latest_version(&client, "opencode-ai").await {
+                Some(version)
+            } else {
+                fetch_github_latest_version(&client, "anomalyco/opencode").await
+            }
+        }
+        "openclaw" => fetch_npm_latest_version(&client, "openclaw").await,
+        "hermes" => fetch_pypi_latest_version(&client, "hermes-agent").await,
         _ => None,
     };
 
@@ -274,6 +531,24 @@ async fn fetch_github_latest_version(client: &reqwest::Client, repo: &str) -> Op
     }
 }
 
+/// Helper function to fetch latest version from PyPI
+async fn fetch_pypi_latest_version(client: &reqwest::Client, package: &str) -> Option<String> {
+    let url = format!("https://pypi.org/pypi/{package}/json");
+    match client.get(&url).send().await {
+        Ok(resp) => {
+            if let Ok(json) = resp.json::<serde_json::Value>().await {
+                json.get("info")
+                    .and_then(|info| info.get("version"))
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+            } else {
+                None
+            }
+        }
+        Err(_) => None,
+    }
+}
+
 /// 预编译的版本号正则表达式
 static VERSION_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"\d+\.\d+\.\d+(-[\w.]+)?").expect("Invalid version regex"));
@@ -286,19 +561,15 @@ fn extract_version(raw: &str) -> String {
         .unwrap_or_else(|| raw.to_string())
 }
 
-/// 尝试直接执行命令获取版本
+/// 在非 Windows 平台用用户 shell 执行 `{tool} --version` 探测版本。
+///
+/// Windows 不走此路径：`cmd /C {tool}` 可能误触发 App Execution Alias /
+/// 协议处理器（曾导致 Windows 版整体被禁用），那里改由 `scan_cli_version`
+/// 只执行已定位到的真实可执行文件。
+#[cfg(not(target_os = "windows"))]
 fn try_get_version(tool: &str) -> (Option<String>, Option<String>) {
     use std::process::Command;
 
-    #[cfg(target_os = "windows")]
-    let output = {
-        Command::new("cmd")
-            .args(["/C", &format!("{tool} --version")])
-            .creation_flags(CREATE_NO_WINDOW)
-            .output()
-    };
-
-    #[cfg(not(target_os = "windows"))]
     let output = {
         let shell = std::env::var("SHELL")
             .ok()
@@ -382,10 +653,7 @@ fn try_get_version_wsl(
     use std::process::Command;
 
     // 防御性断言：tool 只能是预定义的值
-    debug_assert!(
-        ["claude", "codex", "gemini", "opencode"].contains(&tool),
-        "unexpected tool name: {tool}"
-    );
+    debug_assert!(VALID_TOOLS.contains(&tool), "unexpected tool name: {tool}");
 
     // 校验 distro 名称，防止命令注入
     if !is_valid_wsl_distro_name(distro) {
@@ -607,6 +875,19 @@ fn scan_cli_version(tool: &str) -> (Option<String>, Option<String>) {
             &mut search_paths,
             std::path::PathBuf::from("/usr/local/bin"),
         );
+        if tool == "hermes" {
+            let python_base = home.join("Library").join("Python");
+            if python_base.exists() {
+                if let Ok(entries) = std::fs::read_dir(&python_base) {
+                    for entry in entries.flatten() {
+                        let bin_path = entry.path().join("bin");
+                        if bin_path.exists() {
+                            push_unique_path(&mut search_paths, bin_path);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     #[cfg(target_os = "linux")]
@@ -622,6 +903,34 @@ fn scan_cli_version(tool: &str) -> (Option<String>, Option<String>) {
     {
         if let Some(appdata) = dirs::data_dir() {
             push_unique_path(&mut search_paths, appdata.join("npm"));
+            if tool == "hermes" {
+                let python_base = appdata.join("Python");
+                if python_base.exists() {
+                    if let Ok(entries) = std::fs::read_dir(&python_base) {
+                        for entry in entries.flatten() {
+                            let scripts_path = entry.path().join("Scripts");
+                            if scripts_path.exists() {
+                                push_unique_path(&mut search_paths, scripts_path);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if tool == "hermes" {
+            if let Some(local_data) = dirs::data_local_dir() {
+                let programs_python = local_data.join("Programs").join("Python");
+                if programs_python.exists() {
+                    if let Ok(entries) = std::fs::read_dir(&programs_python) {
+                        for entry in entries.flatten() {
+                            let scripts_path = entry.path().join("Scripts");
+                            if scripts_path.exists() {
+                                push_unique_path(&mut search_paths, scripts_path);
+                            }
+                        }
+                    }
+                }
+            }
         }
         push_unique_path(
             &mut search_paths,
@@ -720,6 +1029,8 @@ fn wsl_distro_for_tool(tool: &str) -> Option<String> {
         "codex" => crate::settings::get_codex_override_dir(),
         "gemini" => crate::settings::get_gemini_override_dir(),
         "opencode" => crate::settings::get_opencode_override_dir(),
+        "openclaw" => crate::settings::get_openclaw_override_dir(),
+        "hermes" => crate::settings::get_hermes_override_dir(),
         _ => None,
     }?;
 
@@ -1442,7 +1753,7 @@ fn run_windows_start_command(args: &[&str], terminal_name: &str) -> Result<(), S
     Ok(())
 }
 
-/// 打开用户首选终端并在其中执行一条命令行。脚本尾部 `read -n 1` / `pause`
+/// 打开用户首选终端并在其中执行一段可信命令脚本。脚本尾部 `read -n 1` / `pause`
 /// 是刻意设计的——让命令退出后窗口不要瞬间关闭，用户才看得到 `command
 /// not found` / `ModuleNotFoundError` 这类诊断信息。
 ///
@@ -1458,7 +1769,7 @@ pub(crate) fn launch_terminal_running(command_line: &str, label: &str) -> Result
         let content = format!(
             r#"#!/bin/bash
 trap 'rm -f "{script_path}"' EXIT
-echo "[cc-switch] Starting: {cmd}"
+echo "[cc-switch] Starting: {label}"
 echo ""
 {cmd}
 echo ""
@@ -1466,6 +1777,7 @@ echo "[cc-switch] Command exited. Press any key to close."
 read -n 1 -s
 "#,
             script_path = file.display(),
+            label = label,
             cmd = command_line,
         );
         (file, content)
@@ -1581,7 +1893,8 @@ read -n 1 -s
 
         let bat_file = temp_dir.join(format!("cc_switch_{}_{}.bat", label, pid));
         let content = format!(
-            "@echo off\r\necho [cc-switch] Starting: {cmd}\r\necho.\r\n{cmd}\r\necho.\r\necho [cc-switch] Command exited. Press any key to close.\r\npause >nul\r\ndel \"%~f0\" >nul 2>&1\r\n",
+            "@echo off\r\necho [cc-switch] Starting: {label}\r\necho.\r\n{cmd}\r\necho.\r\necho [cc-switch] Command exited. Press any key to close.\r\npause >nul\r\ndel \"%~f0\" >nul 2>&1\r\n",
+            label = label,
             cmd = command_line,
         );
         std::fs::write(&bat_file, &content).map_err(|e| format!("写入批处理文件失败: {e}"))?;
