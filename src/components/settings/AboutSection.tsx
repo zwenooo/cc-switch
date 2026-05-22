@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Download,
   Copy,
@@ -11,6 +11,8 @@ import {
   Terminal,
   CheckCircle2,
   AlertCircle,
+  ArrowUpCircle,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,7 +31,8 @@ import { relaunchApp } from "@/lib/updater";
 import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
 import appIcon from "@/assets/icons/app-icon.png";
-import { isWindows } from "@/lib/platform";
+import { APP_ICON_MAP } from "@/config/appConfig";
+import type { AppId } from "@/lib/api/types";
 
 interface AboutSectionProps {
   isPortable: boolean;
@@ -44,8 +47,16 @@ interface ToolVersion {
   wsl_distro: string | null;
 }
 
-const TOOL_NAMES = ["claude", "codex", "gemini", "opencode"] as const;
+const TOOL_NAMES = [
+  "claude",
+  "codex",
+  "gemini",
+  "opencode",
+  "openclaw",
+  "hermes",
+] as const;
 type ToolName = (typeof TOOL_NAMES)[number];
+type ToolLifecycleAction = "install" | "update";
 
 type WslShellPreference = {
   wslShell?: string | null;
@@ -82,14 +93,36 @@ const ENV_BADGE_CONFIG: Record<
   },
 };
 
-const ONE_CLICK_INSTALL_COMMANDS = `# Claude Code (Native install - recommended)
-curl -fsSL https://claude.ai/install.sh | bash
+const ONE_CLICK_INSTALL_COMMANDS = `# Claude Code
+npm i -g @anthropic-ai/claude-code@latest
 # Codex
 npm i -g @openai/codex@latest
 # Gemini CLI
 npm i -g @google/gemini-cli@latest
 # OpenCode
-curl -fsSL https://opencode.ai/install | bash`;
+npm i -g opencode-ai@latest
+# OpenClaw
+npm i -g openclaw@latest
+# Hermes
+python3 -m pip install --upgrade "hermes-agent[web]"`;
+
+const TOOL_DISPLAY_NAMES: Record<ToolName, string> = {
+  claude: "Claude Code",
+  codex: "Codex",
+  gemini: "Gemini CLI",
+  opencode: "OpenCode",
+  openclaw: "OpenClaw",
+  hermes: "Hermes",
+};
+
+const TOOL_APP_IDS: Record<ToolName, AppId> = {
+  claude: "claude",
+  codex: "codex",
+  gemini: "gemini",
+  opencode: "opencode",
+  openclaw: "openclaw",
+  hermes: "hermes",
+};
 
 export function AboutSection({ isPortable }: AboutSectionProps) {
   // ... (use hooks as before) ...
@@ -99,6 +132,13 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
   const [isDownloading, setIsDownloading] = useState(false);
   const [toolVersions, setToolVersions] = useState<ToolVersion[]>([]);
   const [isLoadingTools, setIsLoadingTools] = useState(true);
+  const [toolActions, setToolActions] = useState<
+    Partial<Record<ToolName, ToolLifecycleAction>>
+  >({});
+  const [batchAction, setBatchAction] = useState<ToolLifecycleAction | null>(
+    null,
+  );
+  const [showInstallCommands, setShowInstallCommands] = useState(false);
 
   const {
     hasUpdate,
@@ -113,6 +153,23 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
     Record<string, WslShellPreference>
   >({});
   const [loadingTools, setLoadingTools] = useState<Record<string, boolean>>({});
+
+  const toolVersionByName = useMemo(() => {
+    return new Map(toolVersions.map((tool) => [tool.name, tool]));
+  }, [toolVersions]);
+
+  const updatableToolNames = useMemo(
+    () =>
+      TOOL_NAMES.filter((toolName) => {
+        const tool = toolVersionByName.get(toolName);
+        return Boolean(
+          tool?.version &&
+            tool.latest_version &&
+            tool.version !== tool.latest_version,
+        );
+      }),
+    [toolVersionByName],
+  );
 
   const refreshToolVersions = useCallback(
     async (
@@ -202,7 +259,7 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
       try {
         const [appVersion] = await Promise.all([
           getVersion(),
-          ...(isWindows() ? [] : [loadAllToolVersions()]),
+          loadAllToolVersions(),
         ]);
 
         if (active) {
@@ -310,6 +367,63 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
       toast.error(t("settings.installCommandsCopyFailed"));
     }
   }, [t]);
+
+  const handleRunToolAction = useCallback(
+    async (toolNames: ToolName[], action: ToolLifecycleAction) => {
+      if (toolNames.length === 0) return;
+
+      setToolActions((prev) => {
+        const next = { ...prev };
+        for (const toolName of toolNames) {
+          next[toolName] = action;
+        }
+        return next;
+      });
+      if (toolNames.length > 1) {
+        setBatchAction(action);
+      }
+
+      try {
+        await settingsApi.runToolLifecycleAction(
+          [...toolNames],
+          action,
+          wslShellByTool,
+        );
+        // 静默执行已真正结束：刷新对应工具的版本号，让卡片立即反映安装结果。
+        await refreshToolVersions([...toolNames], wslShellByTool);
+        toast.success(
+          t("settings.toolActionDone", {
+            count: toolNames.length,
+            action:
+              action === "install"
+                ? t("settings.toolInstall")
+                : t("settings.toolUpdate"),
+          }),
+          { closeButton: true },
+        );
+      } catch (error) {
+        console.error("[AboutSection] Failed to run tool action", error);
+        // 后端在命令失败时回传 stderr 末尾若干行，作为 toast 详情提示用户。
+        const detail = error instanceof Error ? error.message : String(error);
+        toast.error(t("settings.toolActionFailed"), {
+          description: detail || undefined,
+          closeButton: true,
+        });
+      } finally {
+        setToolActions((prev) => {
+          const next = { ...prev };
+          for (const toolName of toolNames) {
+            delete next[toolName];
+          }
+          return next;
+        });
+        if (toolNames.length > 1) {
+          setBatchAction(null);
+        }
+      }
+    },
+    [t, wslShellByTool, refreshToolVersions],
+  );
 
   const displayVersion = version ?? t("common.unknown");
 
@@ -450,18 +564,16 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
         )}
       </motion.div>
 
-      {!isWindows() && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between px-1">
-            <h3 className="text-sm font-medium">
-              {t("settings.localEnvCheck")}
-            </h3>
+      <div className="space-y-3">
+        <div className="flex flex-col gap-2 px-1 sm:flex-row sm:items-center sm:justify-between">
+          <h3 className="text-sm font-medium">{t("settings.localEnvCheck")}</h3>
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               size="sm"
               variant="outline"
               className="h-7 gap-1.5 text-xs"
               onClick={() => loadAllToolVersions()}
-              disabled={isLoadingTools}
+              disabled={isLoadingTools || Boolean(batchAction)}
             >
               <RefreshCw
                 className={
@@ -470,132 +582,226 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
               />
               {isLoadingTools ? t("common.refreshing") : t("common.refresh")}
             </Button>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 px-1">
-            {TOOL_NAMES.map((toolName, index) => {
-              const tool = toolVersions.find((item) => item.name === toolName);
-              // Special case for OpenCode (capital C), others use capitalize
-              const displayName =
-                toolName === "opencode"
-                  ? "OpenCode"
-                  : toolName.charAt(0).toUpperCase() + toolName.slice(1);
-              const title = tool?.version || tool?.error || t("common.unknown");
-
-              return (
-                <motion.div
-                  key={toolName}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: 0.15 + index * 0.05 }}
-                  whileHover={{ scale: 1.02 }}
-                  className="flex flex-col gap-2 rounded-xl border border-border bg-gradient-to-br from-card/80 to-card/40 p-4 shadow-sm transition-colors hover:border-primary/30"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Terminal className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm font-medium">{displayName}</span>
-                      {/* Environment Badge */}
-                      {tool?.env_type && ENV_BADGE_CONFIG[tool.env_type] && (
-                        <span
-                          className={`text-[9px] px-1.5 py-0.5 rounded-full border ${ENV_BADGE_CONFIG[tool.env_type].className}`}
-                        >
-                          {t(ENV_BADGE_CONFIG[tool.env_type].labelKey)}
-                        </span>
-                      )}
-                      {/* WSL Shell Selector */}
-                      {tool?.env_type === "wsl" && (
-                        <Select
-                          value={wslShellByTool[toolName]?.wslShell || "auto"}
-                          onValueChange={(v) =>
-                            handleToolShellChange(toolName, v)
-                          }
-                          disabled={isLoadingTools || loadingTools[toolName]}
-                        >
-                          <SelectTrigger className="h-6 w-[70px] text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="auto">
-                              {t("common.auto")}
-                            </SelectItem>
-                            {WSL_SHELL_OPTIONS.map((shell) => (
-                              <SelectItem key={shell} value={shell}>
-                                {shell}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      )}
-                      {/* WSL Shell Flag Selector */}
-                      {tool?.env_type === "wsl" && (
-                        <Select
-                          value={
-                            wslShellByTool[toolName]?.wslShellFlag || "auto"
-                          }
-                          onValueChange={(v) =>
-                            handleToolShellFlagChange(toolName, v)
-                          }
-                          disabled={isLoadingTools || loadingTools[toolName]}
-                        >
-                          <SelectTrigger className="h-6 w-[70px] text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="auto">
-                              {t("common.auto")}
-                            </SelectItem>
-                            {WSL_SHELL_FLAG_OPTIONS.map((flag) => (
-                              <SelectItem key={flag} value={flag}>
-                                {flag}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      )}
-                    </div>
-                    {isLoadingTools || loadingTools[toolName] ? (
-                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                    ) : tool?.version ? (
-                      tool.latest_version &&
-                      tool.version !== tool.latest_version ? (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/20">
-                          {tool.latest_version}
-                        </span>
-                      ) : (
-                        <CheckCircle2 className="h-4 w-4 text-green-500" />
-                      )
-                    ) : (
-                      <AlertCircle className="h-4 w-4 text-yellow-500" />
-                    )}
-                  </div>
-                  <div
-                    className="text-xs font-mono text-muted-foreground truncate"
-                    title={title}
-                  >
-                    {isLoadingTools
-                      ? t("common.loading")
-                      : tool?.version
-                        ? tool.version
-                        : tool?.error || t("common.notInstalled")}
-                  </div>
-                </motion.div>
-              );
-            })}
+            <Button
+              size="sm"
+              className="h-7 gap-1.5 text-xs"
+              onClick={() => handleRunToolAction(updatableToolNames, "update")}
+              disabled={
+                isLoadingTools ||
+                Boolean(batchAction) ||
+                updatableToolNames.length === 0
+              }
+            >
+              {batchAction === "update" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <ArrowUpCircle className="h-3.5 w-3.5" />
+              )}
+              {t("settings.updateAllTools", {
+                count: updatableToolNames.length,
+              })}
+            </Button>
           </div>
         </div>
-      )}
 
-      {!isWindows() && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.3 }}
-          className="space-y-3"
+        <div className="grid gap-3 px-1 sm:grid-cols-2 xl:grid-cols-3">
+          {TOOL_NAMES.map((toolName, index) => {
+            const tool = toolVersionByName.get(toolName);
+            const appConfig = APP_ICON_MAP[TOOL_APP_IDS[toolName]];
+            const displayName = TOOL_DISPLAY_NAMES[toolName];
+            const isToolVersionLoading =
+              isLoadingTools || Boolean(loadingTools[toolName]);
+            const isOutdated = Boolean(
+              tool?.version &&
+                tool.latest_version &&
+                tool.version !== tool.latest_version,
+            );
+            const action = isToolVersionLoading
+              ? null
+              : !tool?.version
+                ? "install"
+                : isOutdated
+                  ? "update"
+                  : null;
+            const runningAction = toolActions[toolName];
+            const title = tool?.version || tool?.error || t("common.unknown");
+
+            return (
+              <motion.div
+                key={toolName}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: 0.15 + index * 0.04 }}
+                className="flex min-h-[150px] flex-col gap-3 rounded-xl border border-border bg-gradient-to-br from-card/80 to-card/40 p-4 shadow-sm transition-colors hover:border-primary/30"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-background/80 text-muted-foreground">
+                      {appConfig?.icon ?? <Terminal className="h-4 w-4" />}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium">
+                        {displayName}
+                      </div>
+                      {tool?.env_type && ENV_BADGE_CONFIG[tool.env_type] && (
+                        <span
+                          className={`mt-1 inline-flex w-fit text-[9px] px-1.5 py-0.5 rounded-full border ${ENV_BADGE_CONFIG[tool.env_type].className}`}
+                        >
+                          {t(ENV_BADGE_CONFIG[tool.env_type].labelKey)}
+                          {tool.wsl_distro ? ` · ${tool.wsl_distro}` : ""}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {isToolVersionLoading ? (
+                    <Loader2 className="mt-1 h-4 w-4 animate-spin text-muted-foreground" />
+                  ) : tool?.version ? (
+                    isOutdated ? (
+                      <span className="mt-1 shrink-0 rounded-full border border-yellow-500/20 bg-yellow-500/10 px-1.5 py-0.5 text-[10px] text-yellow-600 dark:text-yellow-400">
+                        {t("settings.updateAvailableShort")}
+                      </span>
+                    ) : (
+                      <CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-green-500" />
+                    )
+                  ) : (
+                    <AlertCircle className="mt-1 h-4 w-4 shrink-0 text-yellow-500" />
+                  )}
+                </div>
+
+                <div className="space-y-1.5 text-xs">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">
+                      {t("settings.currentVersion")}
+                    </span>
+                    <span
+                      className="min-w-0 truncate font-mono text-foreground"
+                      title={title}
+                    >
+                      {isToolVersionLoading
+                        ? t("common.loading")
+                        : tool?.version || t("common.notInstalled")}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">
+                      {t("settings.latestVersion")}
+                    </span>
+                    <span className="min-w-0 truncate font-mono text-foreground">
+                      {isToolVersionLoading
+                        ? t("common.loading")
+                        : tool?.latest_version || t("common.unknown")}
+                    </span>
+                  </div>
+                  {!isToolVersionLoading && !tool?.version && tool?.error && (
+                    <div className="truncate text-[11px] text-muted-foreground">
+                      {tool.error}
+                    </div>
+                  )}
+                </div>
+
+                {tool?.env_type === "wsl" && (
+                  <div className="flex flex-wrap gap-2">
+                    <Select
+                      value={wslShellByTool[toolName]?.wslShell || "auto"}
+                      onValueChange={(v) => handleToolShellChange(toolName, v)}
+                      disabled={isLoadingTools || loadingTools[toolName]}
+                    >
+                      <SelectTrigger className="h-7 w-[82px] text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="auto">{t("common.auto")}</SelectItem>
+                        {WSL_SHELL_OPTIONS.map((shell) => (
+                          <SelectItem key={shell} value={shell}>
+                            {shell}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value={wslShellByTool[toolName]?.wslShellFlag || "auto"}
+                      onValueChange={(v) =>
+                        handleToolShellFlagChange(toolName, v)
+                      }
+                      disabled={isLoadingTools || loadingTools[toolName]}
+                    >
+                      <SelectTrigger className="h-7 w-[82px] text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="auto">{t("common.auto")}</SelectItem>
+                        {WSL_SHELL_FLAG_OPTIONS.map((flag) => (
+                          <SelectItem key={flag} value={flag}>
+                            {flag}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                <div className="mt-auto flex items-center justify-end">
+                  {isToolVersionLoading ? (
+                    <span className="text-xs text-muted-foreground">
+                      {t("common.loading")}
+                    </span>
+                  ) : action ? (
+                    <Button
+                      size="sm"
+                      variant={action === "install" ? "outline" : "default"}
+                      className="h-7 gap-1.5 text-xs"
+                      onClick={() => handleRunToolAction([toolName], action)}
+                      disabled={
+                        isToolVersionLoading ||
+                        Boolean(runningAction) ||
+                        Boolean(batchAction)
+                      }
+                    >
+                      {runningAction ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : action === "install" ? (
+                        <Download className="h-3.5 w-3.5" />
+                      ) : (
+                        <ArrowUpCircle className="h-3.5 w-3.5" />
+                      )}
+                      {/* loading 时文案保持不变、仅图标切换为 spinner，
+                          按钮宽度恒定，避免"升级"→"升级中…"导致的抖动。 */}
+                      {action === "install"
+                        ? t("settings.toolInstall")
+                        : t("settings.toolUpdate")}
+                    </Button>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">
+                      {t("settings.toolReady")}
+                    </span>
+                  )}
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
+      </div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: 0.3 }}
+        className="space-y-3"
+      >
+        <button
+          type="button"
+          onClick={() => setShowInstallCommands((v) => !v)}
+          aria-expanded={showInstallCommands}
+          className="flex w-full items-center gap-1.5 px-1 text-sm font-medium text-foreground transition-colors hover:text-primary"
         >
-          <h3 className="text-sm font-medium px-1">
-            {t("settings.oneClickInstall")}
-          </h3>
+          <ChevronDown
+            className={`h-3.5 w-3.5 transition-transform ${
+              showInstallCommands ? "" : "-rotate-90"
+            }`}
+          />
+          {t("settings.manualInstallCommands")}
+        </button>
+        {showInstallCommands && (
           <div className="rounded-xl border border-border bg-gradient-to-br from-card/80 to-card/40 p-4 space-y-3 shadow-sm">
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">
@@ -615,8 +821,8 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
               {ONE_CLICK_INSTALL_COMMANDS}
             </pre>
           </div>
-        </motion.div>
-      )}
+        )}
+      </motion.div>
     </motion.section>
   );
 }
