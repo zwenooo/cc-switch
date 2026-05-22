@@ -33,6 +33,7 @@ import { motion } from "framer-motion";
 import appIcon from "@/assets/icons/app-icon.png";
 import { APP_ICON_MAP } from "@/config/appConfig";
 import type { AppId } from "@/lib/api/types";
+import { extractErrorMessage } from "@/utils/errorUtils";
 
 interface AboutSectionProps {
   isPortable: boolean;
@@ -43,6 +44,9 @@ interface ToolVersion {
   version: string | null;
   latest_version: string | null;
   error: string | null;
+  // 后端已定位到可执行文件但 --version 报错（装了却跑不起来）。直接读此字段，
+  // 不要靠匹配 error 文案反推——避免前端与后端字符串硬耦合。
+  installed_but_broken: boolean;
   env_type: "windows" | "wsl" | "macos" | "linux" | "unknown";
   wsl_distro: string | null;
 }
@@ -175,8 +179,8 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
     async (
       toolNames: ToolName[],
       wslOverrides?: Record<string, WslShellPreference>,
-    ) => {
-      if (toolNames.length === 0) return;
+    ): Promise<ToolVersion[]> => {
+      if (toolNames.length === 0) return [];
 
       // 单工具刷新使用统一后端入口（get_tool_versions）并带工具过滤。
       setLoadingTools((prev) => {
@@ -201,8 +205,12 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
           }
           return merged;
         });
+
+        // 返回刷新结果，调用方可据此判断版本是否真的探到（避免读 state 撞 stale closure）。
+        return updated;
       } catch (error) {
         console.error("[AboutSection] Failed to refresh tools", error);
+        return [];
       } finally {
         setLoadingTools((prev) => {
           const next = { ...prev };
@@ -379,7 +387,10 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
 
       // 逐工具串行执行：每个工具独立成败、独立刷新版本，一个失败不会连坐
       // 后续工具（后端把整批拼成单脚本 + set -e，会在首个失败处中止整批）。
-      const failures: { toolName: ToolName; detail: string }[] = [];
+      // soft=true 表示"命令成功执行但版本探不到"（装上却跑不起来），
+      // 与命令本身报错（soft=false）区别对待：前者不算硬失败，toast 降级为 warning。
+      const failures: { toolName: ToolName; detail: string; soft: boolean }[] =
+        [];
       let succeeded = 0;
 
       for (const toolName of toolNames) {
@@ -391,15 +402,27 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
             wslShellByTool,
           );
           // 静默执行真正结束后刷新该工具版本，卡片立即反映结果。
-          await refreshToolVersions([toolName], wslShellByTool);
-          succeeded += 1;
+          const refreshed = await refreshToolVersions(
+            [toolName],
+            wslShellByTool,
+          );
+          const tool = refreshed.find((t) => t.name === toolName);
+          if (tool?.version) {
+            succeeded += 1;
+          } else {
+            // 命令退出码为 0、但刷新后仍探不到版本：多半是"装上了却跑不起来"
+            // （如 openclaw 要求更高的 Node 版本）。refreshToolVersions 的 merge 已把
+            // version 置空并写入后端 error，这里只需归类为软失败并展示原因。
+            const detail = tool?.error?.trim() || t("settings.toolNotRunnable");
+            failures.push({ toolName, detail, soft: true });
+          }
         } catch (error) {
           console.error(
             `[AboutSection] Failed to run tool action for ${toolName}`,
             error,
           );
-          const detail = error instanceof Error ? error.message : String(error);
-          failures.push({ toolName, detail });
+          const detail = extractErrorMessage(error) || String(error);
+          failures.push({ toolName, detail, soft: false });
         } finally {
           setToolActions((prev) => {
             const next = { ...prev };
@@ -442,7 +465,15 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
             .join("\n")
         : failures[0]?.detail;
 
-      if (succeeded === 0) {
+      const hardFailures = failures.filter((f) => !f.soft);
+
+      if (succeeded === 0 && hardFailures.length === 0) {
+        // 命令均成功执行、但工具都探不到版本（装上却跑不起来）→ 降级为 warning 并解释原因。
+        toast.warning(t("settings.toolActionInstalledNotRunnable"), {
+          description: failureDescription || undefined,
+          closeButton: true,
+        });
+      } else if (succeeded === 0) {
         toast.error(t("settings.toolActionFailed"), {
           description: failureDescription || undefined,
           closeButton: true,
@@ -655,13 +686,18 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
                 tool.latest_version &&
                 tool.version !== tool.latest_version,
             );
-            const action = isToolVersionLoading
-              ? null
-              : !tool?.version
-                ? "install"
-                : isOutdated
-                  ? "update"
-                  : null;
+            // 已安装却跑不起来（如 Node 版本不达标）：用它区分卡片文案与按钮，避免把
+            // "装了跑不起来"误判成"未安装"而给出无用的安装按钮（重装同一版本解决不了）。
+            const installedButBroken = Boolean(tool?.installed_but_broken);
+            // loading 和 broken 都没有可执行动作；其余按是否已装/是否过期选择。
+            const action: ToolLifecycleAction | null =
+              isToolVersionLoading || installedButBroken
+                ? null
+                : !tool?.version
+                  ? "install"
+                  : isOutdated
+                    ? "update"
+                    : null;
             const runningAction = toolActions[toolName];
             const title = tool?.version || tool?.error || t("common.unknown");
 
@@ -718,7 +754,11 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
                     >
                       {isToolVersionLoading
                         ? t("common.loading")
-                        : tool?.version || t("common.notInstalled")}
+                        : tool?.version
+                          ? tool.version
+                          : installedButBroken
+                            ? t("settings.installedNotRunnable")
+                            : t("common.notInstalled")}
                     </span>
                   </div>
                   <div className="flex items-center justify-between gap-3">
@@ -787,6 +827,11 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
                   {isToolVersionLoading ? (
                     <span className="text-xs text-muted-foreground">
                       {t("common.loading")}
+                    </span>
+                  ) : installedButBroken ? (
+                    // 已安装但跑不起来：重装无济于事，不给按钮，给一句指向环境的提示。
+                    <span className="text-xs text-yellow-600 dark:text-yellow-400">
+                      {t("settings.toolCheckEnv")}
                     </span>
                   ) : action ? (
                     <Button

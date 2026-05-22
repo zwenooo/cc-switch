@@ -672,6 +672,10 @@
     "toolActionDone": "{{action}} completed for {{count}} tool(s)",
     "toolActionPartial": "{{action}} succeeded for {{succeeded}}, failed for {{failed}}",
     "toolActionFailed": "Install/update command failed",
+    "toolNotRunnable": "Installed but not runnable (no version detected)",
+    "toolActionInstalledNotRunnable": "Installed, but it can't run in the current environment — please check",
+    "installedNotRunnable": "Installed · can't run",
+    "toolCheckEnv": "Check environment",
     "envBadge": {
       "wsl": "WSL",
       "windows": "Win",

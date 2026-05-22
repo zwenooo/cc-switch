@@ -672,6 +672,10 @@
     "toolActionDone": "{{count}} 个工具{{action}}完成",
     "toolActionPartial": "{{succeeded}} 个{{action}}成功，{{failed}} 个失败",
     "toolActionFailed": "安装/升级命令执行失败",
+    "toolNotRunnable": "已安装但无法运行（未探测到版本）",
+    "toolActionInstalledNotRunnable": "已安装，但当前环境无法运行，请检查",
+    "installedNotRunnable": "已安装·无法运行",
+    "toolCheckEnv": "请检查运行环境",
     "envBadge": {
       "wsl": "WSL",
       "windows": "Win",
