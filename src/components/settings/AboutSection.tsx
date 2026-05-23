@@ -234,6 +234,16 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
     toolNames: ToolName[];
     plans: ToolInstallationReport[];
   } | null>(null);
+  // 升级 preflight(probe 阶段)的 in-flight 工具集合。
+  // probeToolInstallations 是个 1-3 秒级别的跨进程探测(对每个工具跑 --version + canonicalize),
+  // 在它返回之前 toolActions / batchAction 都还没被置位 → 按钮不会 disabled → 用户快速双击
+  // 会并发开两轮 probe,各自再触发 executeRun(并发的 `npm i -g` / `curl | bash`,写冲突)。
+  // 把 probe 期间的工具登记在这里、纳入 isAnyBusy 派生,关掉这个并发窗口。
+  // 用 Set 而非 boolean:单卡片升级 & 批量升级可能在不同工具上独立 preflight,
+  // 精确反映到各自卡片按钮的 disabled。
+  const [preflightTools, setPreflightTools] = useState<Set<ToolName>>(
+    () => new Set(),
+  );
 
   const toolVersionByName = useMemo(() => {
     return new Map(toolVersions.map((tool) => [tool.name, tool]));
@@ -643,32 +653,60 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
     [t, wslShellByTool, refreshToolVersions, diagnoseToolSilently],
   );
 
-  // 升级前先探测安装分布：检测到多处安装（命令行只命中其中一处）时弹确认，
-  // 让用户在「升级只动默认那处、其余不动」这件事上知情。install 无锚点，直接执行。
+  // 升级/安装的统一入口锁。所有动作在入口处先登记 preflight、出口处解锁;
+  // 这层锁覆盖三个否则会漏掉的窗口:
+  //   ① update 的 probeToolInstallations 阶段(1-3 秒跨进程,executeRun 之前);
+  //   ② executeRun 内部 setToolActions 落到 React commit 前的几个 microtask;
+  //   ③ install 直接进 executeRun 的同一段 microtask 窗口。
+  // 早退检查避免同一工具在 toolActions / preflight 已登记时被重复入栈——批量场景里
+  // 只要有一个工具被锁,整批不开新一轮,因为后端 set -e 串行的语义假设是「一次性
+  // 单脚本」,跨两次 IPC 并发会破坏它。
   const handleRunToolAction = useCallback(
     async (toolNames: ToolName[], action: ToolLifecycleAction) => {
       if (toolNames.length === 0) return;
-      if (action === "install") {
-        await executeRun(toolNames, action);
+      if (
+        toolNames.some(
+          (name) => preflightTools.has(name) || toolActions[name] !== undefined,
+        )
+      ) {
         return;
       }
-      let reports: ToolInstallationReport[];
+      // 入栈 preflight,按钮立刻 disabled。new Set(prev) 是不可变更新(直接 mutate
+      // 原 Set 会让 React 复用引用、跳过 re-render);finally 块负责异常路径解锁。
+      setPreflightTools((prev) => {
+        const next = new Set(prev);
+        toolNames.forEach((name) => next.add(name));
+        return next;
+      });
       try {
-        reports = await settingsApi.probeToolInstallations(toolNames);
-      } catch (error) {
-        // 探测失败不应阻断升级：退回直接执行（等同旧行为）。
-        console.error("[AboutSection] probeToolInstallations failed", error);
-        await executeRun(toolNames, action);
-        return;
+        if (action === "install") {
+          await executeRun(toolNames, action);
+          return;
+        }
+        let reports: ToolInstallationReport[];
+        try {
+          reports = await settingsApi.probeToolInstallations(toolNames);
+        } catch (error) {
+          // 探测失败不应阻断升级：退回直接执行（等同旧行为）。
+          console.error("[AboutSection] probeToolInstallations failed", error);
+          await executeRun(toolNames, action);
+          return;
+        }
+        const needConfirm = reports.filter((r) => r.needs_confirmation);
+        if (needConfirm.length === 0) {
+          await executeRun(toolNames, action);
+          return;
+        }
+        setPendingUpgrade({ toolNames, plans: needConfirm });
+      } finally {
+        setPreflightTools((prev) => {
+          const next = new Set(prev);
+          toolNames.forEach((name) => next.delete(name));
+          return next;
+        });
       }
-      const needConfirm = reports.filter((r) => r.needs_confirmation);
-      if (needConfirm.length === 0) {
-        await executeRun(toolNames, action);
-        return;
-      }
-      setPendingUpgrade({ toolNames, plans: needConfirm });
     },
-    [executeRun],
+    [executeRun, preflightTools, toolActions],
   );
 
   const handleConfirmUpgrade = useCallback(() => {
@@ -684,7 +722,12 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
 
   // 任一安装/升级进行中（批量或单工具）即视为忙碌：用于禁用所有操作按钮，
   // 避免并发触发多个 npm/pip 全局写入造成冲突。
-  const isAnyBusy = Boolean(batchAction) || Object.keys(toolActions).length > 0;
+  // preflightTools 覆盖升级前的 probe 阶段——那段在 executeRun 之前、toolActions
+  // 还没置位,如果不算进 busy 会留出 1-3 秒的并发触发窗口。
+  const isAnyBusy =
+    Boolean(batchAction) ||
+    Object.keys(toolActions).length > 0 ||
+    preflightTools.size > 0;
 
   return (
     <motion.section

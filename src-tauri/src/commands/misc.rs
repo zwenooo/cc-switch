@@ -1428,16 +1428,67 @@ fn brew_formula_from_path(real: &str) -> Option<String> {
     None
 }
 
+/// 含空格才用 POSIX 单引号包一层,否则保持裸路径——命令展示更干净。
+/// claude / brew / volta / bun / npm 五个锚定分支共用,避免"含空格"判定漂移。
+///
+/// **仅按空格判定,不防其他 shell 元字符**(`$` / `` ` `` / `'` / `"` / `;` 等)。
+/// 调用方传入的是探测得到的可执行路径(`enumerate_tool_installations` 里来源于
+/// `Path::display()`),实际 macOS/Linux 上 home dir 名几乎不允许这类字符、
+/// npm/brew/volta/bun 也不会装到含这类字符的路径,与 diff 前内联在 npm 分支里的
+/// `if npm.contains(' ')` 实现等价。若未来要扩广,改成 `shell_single_quote` 无条件
+/// 包裹即可,但会失去"无空格时的清洁展示"。
+#[cfg(not(target_os = "windows"))]
+fn quote_path_if_spaced(p: &str) -> String {
+    if p.contains(' ') {
+        shell_single_quote(p)
+    } else {
+        p.to_string()
+    }
+}
+
+/// 返回 `<bin_path 同目录>/<exe>` 的绝对路径。bin_path 是命令行命中的入口
+/// (如 `/opt/homebrew/bin/gemini`、`~/.volta/bin/codex`),`exe` 是与之共处一个
+/// bin 目录的另一个可执行(`brew` / `volta` / `bun` / `npm`)——这些包管理器
+/// 都把自己的 cli 跟它们安装的命令并列放在同一个 bin 目录,所以"同目录推导"
+/// 是可靠的绝对路径来源。
+///
+/// **dir 为空(bin_path 不含 `/`) → 返回 None**:此时无法推导出绝对路径,让上游
+/// `anchored_command_from_paths` 整体退化为 None,调用方落到静态命令兜底——而非
+/// 悄悄拼出 `npm i -g <pkg>` 这种依赖 PATH 的指令,违背"必须绝对路径"不变量。
+/// 实际从 `enumerate_tool_installations` 走的 bin_path 都是 `Path::display()` 出
+/// 来的绝对路径,这条防线不期望被触发,但闭合了 helper 与函数文档的语义一致。
+#[cfg(not(target_os = "windows"))]
+fn sibling_bin(bin_path: &str, exe: &str) -> Option<String> {
+    let dir = parent_dir(bin_path);
+    if dir.is_empty() {
+        None
+    } else {
+        Some(format!("{dir}/{exe}"))
+    }
+}
+
 /// 给定工具、原始 bin 路径（命令行命中的入口）、canonicalize 后的真身路径，
 /// 推断"写回同一处"的锚定升级命令。纯函数（不碰 FS），真实 canonicalize 由调用方做，
 /// 便于单测覆盖各包管理器分支。hermes（pip）不在此处：`npm_package_for` 返回 None → None。
 ///
+/// **关键不变量：返回的命令必须用绝对路径调用执行体，不依赖 PATH**。
+/// 这条命令最终在 `run_tool_lifecycle_silently` 的非登录 `bash -c` 里执行——
+/// GUI App 启动的进程 PATH 由 launchd / Windows Service / systemd 给,通常**不含**
+/// `~/.local/bin` / `/opt/homebrew/bin` / `~/.volta/bin` 等用户级 bin 目录;而探测
+/// 阶段 `try_get_version` 用的是 `$SHELL -lic`(登录+交互式,会读 .zshrc/.zprofile),
+/// 两者 PATH 不对称。裸 `claude update` / `brew upgrade ...` 在 GUI 进程里大概率
+/// `command not found`(exit 127)→ `set -e` 中止 → 用户看到失败 toast,锚定决策却
+/// 已展示给用户"将写回原生那处"——欺骗性故障。
+///
 /// 判定顺序（命中即返回）：
-/// ① Claude 原生安装器（`~/.local/share/claude/versions/`）→ `claude update` 自更新；
-///    它不归 npm 管，用 npm 升级会装到别处且被原生那份遮蔽（PATH 更靠前）。
-/// ② Homebrew formula（真身在 `Cellar/<formula>/`）→ `brew upgrade <formula>`；
+/// ① Claude 原生安装器（`~/.local/share/claude/versions/`）→ `<bin_path 绝对> update`；
+///    bin_path 指向 launcher,launcher 内部 dispatch update 子命令。它不归 npm 管,
+///    且在 PATH 里比 nvm/homebrew 更靠前,用 npm 升级会装到别处且被原生那份遮蔽。
+/// ② Homebrew formula（真身在 `Cellar/<formula>/`）→ `<bin_path 同目录>/brew upgrade <formula>`;
 ///    formula 名 ≠ npm 包名（gemini-cli ≠ @google/gemini-cli）。
-/// ③ volta / bun → 各自的全局安装命令。
+/// ③ volta → `<bin_path 同目录>/volta install <pkg>`;bun → `<bin_path 同目录>/bun add -g <pkg>@latest`。
+///    `~/.volta/bin` / `~/.bun/bin` 几乎不在 GUI 进程的 PATH 里,且用户可能 PATH
+///    上有另一份 volta/bun → 必须绝对路径锚定到命令行实际命中的那一份。
 /// ④ 其余 npm 全局包（nvm / homebrew-npm / mise / fnm / system）→ 锚定到"那处 bin
 ///    目录的 npm"，确保升级写回命令行实际在用的那个 node，而非 PATH 第一个 npm。
 #[cfg(not(target_os = "windows"))]
@@ -1449,14 +1500,24 @@ fn anchored_command_from_paths(tool: &str, bin_path: &str, real_target: &str) ->
         && (real_lower.contains("/.local/share/claude/")
             || real_lower.contains("/claude/versions/"))
     {
-        return Some("claude update".to_string());
+        return Some(format!("{} update", quote_path_if_spaced(bin_path)));
     }
     if let Some(formula) = brew_formula_from_path(real_target) {
-        return Some(format!("brew upgrade {formula}"));
+        let brew = sibling_bin(bin_path, "brew")?;
+        return Some(format!("{} upgrade {formula}", quote_path_if_spaced(&brew)));
     }
     match infer_install_source(Path::new(bin_path)) {
-        "volta" => return Some(format!("volta install {pkg}")),
-        "bun" => return Some(format!("bun add -g {pkg}@latest")),
+        "volta" => {
+            let volta = sibling_bin(bin_path, "volta")?;
+            return Some(format!("{} install {pkg}", quote_path_if_spaced(&volta)));
+        }
+        "bun" => {
+            let bun = sibling_bin(bin_path, "bun")?;
+            return Some(format!(
+                "{} add -g {pkg}@latest",
+                quote_path_if_spaced(&bun)
+            ));
+        }
         // 自带同级 npm 的 node 管理器：落到下面锚定到那处的 npm。
         "nvm" | "fnm" | "mise" | "homebrew" => {}
         // system / 未知来源（如 opencode install.sh 装的 ~/.opencode/bin、~/go/bin）
@@ -1464,20 +1525,8 @@ fn anchored_command_from_paths(tool: &str, bin_path: &str, real_target: &str) ->
         // 回退静态裸命令（至少能跑），并由前端据 anchored=false 给出诚实文案。
         _ => return None,
     }
-    let dir = parent_dir(bin_path);
-    let npm = if dir.is_empty() {
-        "npm".to_string()
-    } else {
-        format!("{dir}/npm")
-    };
-    // 含空格才单引号包裹（复用 shell_single_quote 的 POSIX 转义），否则保持裸路径，
-    // 命令展示更干净。
-    let npm = if npm.contains(' ') {
-        shell_single_quote(&npm)
-    } else {
-        npm
-    };
-    Some(format!("{npm} i -g {pkg}@latest"))
+    let npm = sibling_bin(bin_path, "npm")?;
+    Some(format!("{} i -g {pkg}@latest", quote_path_if_spaced(&npm)))
 }
 
 /// 从枚举结果里取"命令行实际命中的那处"：优先 `is_path_default`；否则（解析不到
@@ -2578,26 +2627,33 @@ mod tests {
 
         #[test]
         fn claude_native_installer_uses_self_update() {
-            // ~/.local/bin/claude → 真身在 ~/.local/share/claude/versions/，自带 self-update；
-            // 它不归 npm 管，且在 PATH 里比 nvm/homebrew 更靠前，用 npm 升级纯属白装。
+            // ~/.local/bin/claude → 真身在 ~/.local/share/claude/versions/,自带 self-update;
+            // 它不归 npm 管,且在 PATH 里比 nvm/homebrew 更靠前,用 npm 升级纯属白装。
+            // **绝对路径调用 launcher** 避免 GUI 非登录 `bash -c` 时 PATH 没有
+            // ~/.local/bin 导致 `claude: not found`(exit 127)而失败。
             let cmd = anchored_command_from_paths(
                 "claude",
                 "/Users/me/.local/bin/claude",
                 "/Users/me/.local/share/claude/versions/2.1.146",
             );
-            assert_eq!(cmd.as_deref(), Some("claude update"));
+            assert_eq!(cmd.as_deref(), Some("/Users/me/.local/bin/claude update"));
         }
 
         #[test]
         fn gemini_homebrew_formula_uses_brew_upgrade() {
-            // /opt/homebrew/bin/gemini → Cellar/gemini-cli/...：是 brew formula 而非 npm 全局包，
+            // /opt/homebrew/bin/gemini → Cellar/gemini-cli/...:是 brew formula 而非 npm 全局包,
             // 且 formula 名(gemini-cli) ≠ npm 包名(@google/gemini-cli)。
+            // **brew 与 formula 入口同目录**,用 `<dir>/brew` 绝对路径调用,避免 GUI
+            // 非登录 `bash -c` 时 PATH 没有 /opt/homebrew/bin 导致 `brew: not found`。
             let cmd = anchored_command_from_paths(
                 "gemini",
                 "/opt/homebrew/bin/gemini",
                 "/opt/homebrew/Cellar/gemini-cli/0.13.0/libexec/lib/node_modules/@google/gemini-cli/dist/index.js",
             );
-            assert_eq!(cmd.as_deref(), Some("brew upgrade gemini-cli"));
+            assert_eq!(
+                cmd.as_deref(),
+                Some("/opt/homebrew/bin/brew upgrade gemini-cli")
+            );
         }
 
         #[test]
@@ -2631,22 +2687,60 @@ mod tests {
 
         #[test]
         fn volta_uses_volta_install() {
+            // `~/.volta/bin` 通常不在 GUI 非登录 `bash -c` 的 PATH 里,且用户可能
+            // PATH 上还有另一份 volta → 必须绝对路径锚定到命令行命中的这一份。
             let cmd = anchored_command_from_paths(
                 "codex",
                 "/Users/me/.volta/bin/codex",
                 "/Users/me/.volta/tools/image/packages/codex/lib/node_modules/@openai/codex",
             );
-            assert_eq!(cmd.as_deref(), Some("volta install @openai/codex"));
+            assert_eq!(
+                cmd.as_deref(),
+                Some("/Users/me/.volta/bin/volta install @openai/codex")
+            );
         }
 
         #[test]
         fn bun_uses_bun_add() {
+            // bun 同 volta:`~/.bun/bin` 几乎不在 GUI PATH 里,绝对路径锚定。
             let cmd = anchored_command_from_paths(
                 "opencode",
                 "/Users/me/.bun/bin/opencode",
                 "/Users/me/.bun/install/global/node_modules/opencode-ai/bin/opencode",
             );
-            assert_eq!(cmd.as_deref(), Some("bun add -g opencode-ai@latest"));
+            assert_eq!(
+                cmd.as_deref(),
+                Some("/Users/me/.bun/bin/bun add -g opencode-ai@latest")
+            );
+        }
+
+        #[test]
+        fn volta_path_with_space_is_quoted() {
+            // volta 分支用 `<dir>/volta`,目录含空格时同样要 POSIX 引号包裹。
+            let cmd = anchored_command_from_paths(
+                "codex",
+                "/Users/my name/.volta/bin/codex",
+                "/Users/my name/.volta/tools/image/packages/codex/lib/node_modules/@openai/codex",
+            );
+            assert_eq!(
+                cmd.as_deref(),
+                Some("'/Users/my name/.volta/bin/volta' install @openai/codex")
+            );
+        }
+
+        #[test]
+        fn bun_path_with_space_is_quoted() {
+            // bun 分支与 volta 共享 sibling_bin + quote_path_if_spaced,
+            // 这条用例锁住 `bun add -g` 命令头部的引号包裹形态。
+            let cmd = anchored_command_from_paths(
+                "opencode",
+                "/Users/my name/.bun/bin/opencode",
+                "/Users/my name/.bun/install/global/node_modules/opencode-ai/bin/opencode",
+            );
+            assert_eq!(
+                cmd.as_deref(),
+                Some("'/Users/my name/.bun/bin/bun' add -g opencode-ai@latest")
+            );
         }
 
         #[test]
@@ -2713,6 +2807,35 @@ mod tests {
         }
 
         #[test]
+        fn claude_native_path_with_space_is_quoted() {
+            // claude 分支同样要 POSIX 引号包裹含空格的 bin_path,
+            // 否则 `/Users/my name/.local/bin/claude update` 会被 shell 拆词。
+            let cmd = anchored_command_from_paths(
+                "claude",
+                "/Users/my name/.local/bin/claude",
+                "/Users/my name/.local/share/claude/versions/2.1.146",
+            );
+            assert_eq!(
+                cmd.as_deref(),
+                Some("'/Users/my name/.local/bin/claude' update")
+            );
+        }
+
+        #[test]
+        fn brew_path_with_space_is_quoted() {
+            // brew 分支用 `<bin_path 同目录>/brew`,目录含空格时同样要引号包裹。
+            let cmd = anchored_command_from_paths(
+                "gemini",
+                "/opt/my brew/bin/gemini",
+                "/opt/my brew/Cellar/gemini-cli/0.13.0/libexec/lib/node_modules/@google/gemini-cli/dist/index.js",
+            );
+            assert_eq!(
+                cmd.as_deref(),
+                Some("'/opt/my brew/bin/brew' upgrade gemini-cli")
+            );
+        }
+
+        #[test]
         fn brew_formula_extraction() {
             assert_eq!(
                 brew_formula_from_path("/opt/homebrew/Cellar/gemini-cli/0.13.0/bin/gemini")
@@ -2727,6 +2850,22 @@ mod tests {
             assert_eq!(
                 brew_formula_from_path("/Users/me/.nvm/versions/node/v22/lib/node_modules/x"),
                 None
+            );
+        }
+
+        #[test]
+        fn sibling_bin_returns_none_when_bin_path_has_no_directory() {
+            // bin_path 不含 `/` → parent_dir 返回空 → sibling_bin 不能拼出绝对路径
+            // → None,让上游 anchored_command_from_paths 整体退化为静态命令兜底,
+            // 而不是悄悄拼出 `npm i -g <pkg>` 这种依赖 PATH 的指令(违背"必须绝对路径"
+            // 不变量)。实际从 enumerate_tool_installations 走的 bin_path 都是绝对路径,
+            // 这条防线不期望被触发,但闭合了 helper 与函数文档的语义一致。
+            assert_eq!(sibling_bin("codex", "npm"), None);
+            assert_eq!(sibling_bin("", "brew"), None);
+            // 含 `/` 即可拼出绝对路径——这是常规路径。
+            assert_eq!(
+                sibling_bin("/opt/homebrew/bin/gemini", "brew").as_deref(),
+                Some("/opt/homebrew/bin/brew")
             );
         }
 
