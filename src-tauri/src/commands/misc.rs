@@ -356,6 +356,13 @@ fn tool_display_name(tool: &str) -> &'static str {
     }
 }
 
+/// hermes pip 升级命令的 Unix shell 版本:`python3` 优先 + `python` 兜底。
+/// Non-Windows target 直接用;Windows target 上的 WSL 分支也用——WSL 内部跑的是
+/// Linux,**不存在 Windows 的 `py` launcher**(Microsoft PEP 397 是 Windows 独有),
+/// Ubuntu 24.04+ 默认连 `python` alias 都没有、只有 `python3`。
+const HERMES_PIP_UPGRADE_UNIX: &str =
+    "python3 -m pip install --upgrade \"hermes-agent[web]\" || python -m pip install --upgrade \"hermes-agent[web]\"";
+
 fn tool_action_shell_command(tool: &str, _action: ToolLifecycleAction) -> Option<&'static str> {
     match tool {
         "claude" => Some("npm i -g @anthropic-ai/claude-code@latest"),
@@ -368,11 +375,21 @@ fn tool_action_shell_command(tool: &str, _action: ToolLifecycleAction) -> Option
             "py -m pip install --upgrade \"hermes-agent[web]\" || python -m pip install --upgrade \"hermes-agent[web]\"",
         ),
         #[cfg(not(target_os = "windows"))]
-        "hermes" => Some(
-            "python3 -m pip install --upgrade \"hermes-agent[web]\" || python -m pip install --upgrade \"hermes-agent[web]\"",
-        ),
+        "hermes" => Some(HERMES_PIP_UPGRADE_UNIX),
         _ => None,
     }
+}
+
+/// Windows host 上的 WSL 分支专用:`tool_action_shell_command` 在 Windows target 编译
+/// 出的版本对 hermes 返回的是 Windows 的 `py -m pip ...`,但跨 `wsl.exe` 边界后跑的
+/// 是 Linux——`py` launcher 是 Windows 独有,执行会 fail。这个 wrapper 把 hermes 替换
+/// 为 unix 版命令,其余工具(npm 类)跨平台命令字符串相同、直接透传。
+#[cfg(target_os = "windows")]
+fn wsl_tool_action_shell_command(tool: &str, action: ToolLifecycleAction) -> Option<&'static str> {
+    if tool == "hermes" {
+        return Some(HERMES_PIP_UPGRADE_UNIX);
+    }
+    tool_action_shell_command(tool, action)
 }
 
 fn build_tool_action_line(
@@ -383,16 +400,39 @@ fn build_tool_action_line(
 ) -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {
-        // Windows：保持静态命令（WSL 走 wsl.exe；否则裸 npm 加 call），不锚定、零回归。
-        let command = tool_action_shell_command(tool, action)
-            .ok_or_else(|| format!("Unsupported tool action target: {tool}"))?;
+        // ① WSL 工具(override 是 UNC `\\wsl$\<distro>\...`):锚定的绝对路径是 Windows
+        //    主机路径,跨 wsl.exe 进入 distro 文件系统后无效;且 enumerate 不参与 WSL。
+        //    始终走静态命令(npm i -g / pip)并通过 wsl.exe -d distro -- sh 包一层。
+        //    **必须用 wsl_tool_action_shell_command 而非 tool_action_shell_command**:
+        //    后者在 Windows target 给 hermes 返回 Windows 的 `py -m pip ...`,跨 wsl.exe
+        //    后跑 Linux、py 不存在,要替换为 unix 版的 python3/python 兜底链。
         if let Some(distro) = wsl_distro_for_tool(tool) {
+            let command = wsl_tool_action_shell_command(tool, action)
+                .ok_or_else(|| format!("Unsupported tool action target: {tool}"))?;
             return build_wsl_tool_action_line(&distro, command, wsl_shell, wsl_shell_flag);
         }
-        if command.starts_with("npm ") {
-            return Ok(format!("call {command}"));
+        // ② Windows 原生 update 锚定;install 走静态(install.sh 是 bash 脚本,Windows
+        //    无意义)。**`enumerate_tool_installations` 在这里 per-tool 重做、与前端
+        //    probe 阶段算过的结果不共享是 by design**:run_tool_lifecycle_action 是
+        //    独立 IPC 调用,不信任前端回传的命令字符串(避免命令注入面扩大);前端是
+        //    逐工具触发 lifecycle,batch 化会破坏"逐工具独立成败"的 UX。
+        let command = match action {
+            ToolLifecycleAction::Update => {
+                let installs = enumerate_tool_installations(tool);
+                installs_anchored_command(tool, &installs)
+                    .unwrap_or_else(|| static_fallback_command(tool))
+            }
+            ToolLifecycleAction::Install => static_fallback_command(tool),
+        };
+        if command.is_empty() {
+            return Err(format!("Unsupported tool action target: {tool}"));
         }
-        return Ok(command.to_string());
+        // .bat 调用 .cmd/.bat 必须用 `call` 否则当前脚本被替换、后续 `if errorlevel`
+        // 行被跳过;对 .exe 加 call 无害(等同直接调用)。锚定命令头部可能是 .cmd
+        // (npm/pnpm)或 .exe(volta),静态命令头部是 `npm`(也是 .cmd)、`py` 等——
+        // 全部加 `call ` 前缀,风格统一且语义正确。含空格的头部已被 `win_quote_path_for_batch`
+        // 加上双引号,call 对带引号的路径解析正常。
+        return Ok(format!("call {command}"));
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -449,9 +489,19 @@ fn build_wsl_tool_action_line(
     ))
 }
 
+/// Windows 双引号包裹基础原语:无条件加引号 + 内部 `"` 转义为 `\"`。
+/// `windows_cmd_double_quote_arg`(给 wsl.exe 传 bash 命令字符串用)与
+/// `win_quote_path_for_batch`(给锚定路径用)都基于它,避免两份 quoter 各自演化、
+/// 未来对同一路径产生不一致引用形态。镜像 POSIX 侧 `shell_single_quote` 与
+/// `quote_path_if_spaced` 的"重量基础 + 轻量条件包装"两层结构。
+#[cfg(target_os = "windows")]
+fn win_double_quote(value: &str) -> String {
+    format!("\"{}\"", value.replace('"', "\\\""))
+}
+
 #[cfg(target_os = "windows")]
 fn windows_cmd_double_quote_arg(value: &str) -> String {
-    format!("\"{}\"", value.replace('"', "\\\""))
+    win_double_quote(value)
 }
 
 /// 获取单个工具的版本信息（内部实现）
@@ -1218,6 +1268,14 @@ pub struct ToolInstallation {
     source: String,
     /// 是否为 PATH 解析到的那处（= 命令行默认，也是升级会作用的目标）。
     is_path_default: bool,
+    /// canonicalize 解析后的真身路径(brew 形如 `Cellar/<formula>/...`、claude 原生形如
+    /// `~/.local/share/claude/versions/...`),用于 `anchored_command_from_paths` 的真身
+    /// 判定。`enumerate_tool_installations` 已经为去重算过一次,这里复用避免上游
+    /// `installs_anchored_command` 再 canonicalize 一遍——消除冗余 syscall + 闭合
+    /// "enumerate 与 anchor 看到同一真身"的一致性边界(否则两次 canonicalize 之间
+    /// symlink 被换会让锚定指向不同真身)。`#[serde(skip)]` 不外露给前端。
+    #[serde(skip)]
+    real: std::path::PathBuf,
 }
 
 /// 由可执行文件路径前缀推断安装来源。纯字符串匹配、无副作用。
@@ -1231,7 +1289,9 @@ fn infer_install_source(path: &Path) -> &'static str {
         "nvm"
     } else if s.contains("/homebrew/") || s.contains("/cellar/") {
         "homebrew"
-    } else if s.contains("/.volta/") {
+    // `.volta` 是 macOS/Linux 默认安装(`~/.volta/bin`),`/volta/` 兜底覆盖
+    // Windows 的 `%LOCALAPPDATA%\Volta\bin` / `%VOLTA_HOME%\bin`(无前导点)。
+    } else if s.contains("/.volta/") || s.contains("/volta/") {
         "volta"
     } else if s.contains("fnm_multishells") {
         "fnm"
@@ -1239,6 +1299,10 @@ fn infer_install_source(path: &Path) -> &'static str {
         "mise"
     } else if s.contains("/.bun/") {
         "bun"
+    // pnpm 全局包目录: macOS 一般 `~/.local/share/pnpm`(已 normalize 到 `/pnpm/`)
+    // 与 Windows `%LOCALAPPDATA%\pnpm` / `%PNPM_HOME%` 都命中 `/pnpm/`。
+    } else if s.contains("/pnpm/") {
+        "pnpm"
     } else if s.contains("/scoop/") {
         "scoop"
     } else if s.contains("/library/python")
@@ -1381,6 +1445,9 @@ fn enumerate_tool_installations(tool: &str) -> Vec<ToolInstallation> {
                 error,
                 source: infer_install_source(&tool_path).to_string(),
                 is_path_default,
+                // 复用上面 line ~1357 已 canonicalize 的真身,避免下游
+                // installs_anchored_command 再 canonicalize 一遍同一文件。
+                real: real.clone(),
             });
         }
     }
@@ -1391,7 +1458,7 @@ fn enumerate_tool_installations(tool: &str) -> Vec<ToolInstallation> {
 }
 
 /// 工具对应的 npm 包名（hermes 走 pip，不在此表）。锚定升级据此拼 `npm i -g`。
-#[cfg(not(target_os = "windows"))]
+/// 全平台共用一张表——Windows 锚定层(`anchored_command_from_paths` 的 windows 版)也读这里。
 fn npm_package_for(tool: &str) -> Option<&'static str> {
     match tool {
         "claude" => Some("@anthropic-ai/claude-code"),
@@ -1403,10 +1470,17 @@ fn npm_package_for(tool: &str) -> Option<&'static str> {
     }
 }
 
-/// 取 unix 路径的父目录（`/a/b/npm` → `/a/b`）；无父目录返回空串。
-#[cfg(not(target_os = "windows"))]
+/// 取路径的父目录(纯字符串截断,不碰 fs):`/a/b/npm` → `/a/b`、`C:\a\b\npm.cmd`
+/// → `C:\a\b`、混合分隔符 `C:\a/b\npm` → `C:\a/b`。无父目录返回空串。
+///
+/// 平台无关:`\` 和 `/` 都识别,取两者最右出现位置。`Option<usize>` 的 Ord 让
+/// `None < Some(_)`,所以 `rfind('\\').max(rfind('/'))` 自动取存在的那个、两者都
+/// 存在时取靠右的——比 `or_else` 优先取一种正确(混合分隔符不会拿错父目录)。
+/// 跨平台 fs separator 在两侧均接受,使 macOS/Linux 上的 cargo test 也能跑 Windows
+/// 路径用例(`parent_dir_cases::mixed_separators_takes_rightmost`)。空串语义由上游
+/// `sibling_bin` 的 `is_empty()` 检查转成 None → 锚定整体退化到静态兜底。
 fn parent_dir(p: &str) -> String {
-    match p.rfind('/') {
+    match p.rfind('\\').max(p.rfind('/')) {
         Some(i) if i > 0 => p[..i].to_string(),
         _ => String::new(),
     }
@@ -1446,6 +1520,92 @@ fn quote_path_if_spaced(p: &str) -> String {
     }
 }
 
+/// 锚定路径走 `.bat` 文件且**被 `call` 调用**,需要为 batch 特殊字符做两层防御:
+///
+/// **(1) `%` 经历两轮 percent expansion → 用 4 个 `%` 转义**。.bat 中字面 `%` 的
+/// 标准转义是 `%%`,但 `call` 命令(Microsoft `call /?`:"percent (%) expansion is
+/// performed on each parameter")**在 batch parser 处理完 `%%` → `%` 后自己再做一轮**。
+/// 所以源 .bat 里写 `%%FOO%%`,batch 一轮变 `%FOO%`,call 二轮当成 variable reference
+/// 又展开一次——要让最终 call 看到字面 `%FOO%` 必须写 `%%%%FOO%%%%`(一轮 → `%%FOO%%`,
+/// 二轮 → `%FOO%` 字面)。这是 cmd 唯一**引号无法保护**的字符:引号内的 `%` 仍参与
+/// 两轮 expansion。
+///
+/// **(2) token 边界 / escape 字符触发外层双引号**:`' '` `'&'` `'('` `')'` `'^'`
+/// `';'` `'<'` `'>'` `'|'` `','` 任一出现即包引号。NTFS 允许这些字符出现在路径中,
+/// 不包会让 cmd 把路径切成多 token、`^` 又会触发 escape;引号内它们是字面意义,
+/// 而且 call 二次解析对引号内的它们也不会做特殊处理(`^` 在引号内失去 escape 作用,
+/// token 边界字符在引号内是字面)。
+///
+/// `!`(delayed expansion)只在 `setlocal enabledelayedexpansion` 下生效——我们
+/// .bat 头只有 `@echo off`、没开,所以不需要处理。`'` 在 cmd 中无特殊意义。
+///
+/// 镜像 POSIX `quote_path_if_spaced` 的"轻量条件包装"语义:不含任何特殊字符就保持
+/// 裸路径(命令展示更干净),否则用 `win_double_quote` 包并做必要转义。
+#[cfg(target_os = "windows")]
+fn win_quote_path_for_batch(p: &str) -> String {
+    // `%` 经历两轮 expansion:.bat parser 一轮 + `call` 二轮(Microsoft `call /?`:
+    // "percent (%) expansion is performed on each parameter")。要让 call 最终看到
+    // 字面 `%` 需要 4 个 → `%%%%`(batch 一轮 → `%%`,call 二轮 → `%` 字面)。
+    // 引号内仍参与两轮 expansion,所以这一步独立于外层引号、必须无条件做。
+    let escaped = if p.contains('%') {
+        p.replace('%', "%%%%")
+    } else {
+        p.to_string()
+    };
+    // 注:`needs_quote` 基于**原路径** `p` 判断,不能用 `escaped`——后者引入的 `%`
+    // 字符不算"特殊触发字符",否则含 `%` 的路径会被错误地额外加引号。
+    let needs_quote = p
+        .chars()
+        .any(|c| matches!(c, ' ' | '&' | '(' | ')' | '^' | ';' | '<' | '>' | '|' | ','));
+    if needs_quote {
+        win_double_quote(&escaped)
+    } else {
+        escaped
+    }
+}
+
+/// Windows 版 sibling 推导:在 `<bin_path 父目录>` 下按 `ext_candidates` 顺序找
+/// 第一个存在的 `<exe_basename>.<ext>` 文件,返回该绝对路径。
+///
+/// **与 POSIX `sibling_bin` 的关键区别:这里碰 fs**——Windows 上 npm/pnpm 的入口
+/// 实际扩展名可能是 `.cmd` 也可能是 `.exe`(Node.js installer 装的是 `npm.cmd`、
+/// 部分 pnpm 是 `pnpm.exe`),纯字符串拼接无法知道哪个真的存在,猜错会拼出
+/// "GUI 执行时 file not found" 的命令。fs 检查放进 helper、单测用 tempdir 覆盖,
+/// 让上层 `anchored_command_from_paths` 仍保持"接收已锚定路径"的接口形态。
+///
+/// **TOCTOU 是 by design**:预检 `is_file` 是为了让确认对话框展示真实命令字符串;
+/// 检查到执行之间被外部进程(卸载器 / nvm switch / 杀软隔离)移走文件 → cmd /C
+/// 报 ENOENT,toast 显示错误。不要在执行前再做二次预检——双重 syscall 也解决不了 race。
+///
+/// 候选扩展名顺序按工具 idiom:npm/pnpm 优先 `.cmd`(node 装的),volta 优先 `.exe`
+/// (Volta 是 Rust 写的 native binary)。
+///
+/// **不用 `which::which_in` 的理由**:per-tool 扩展名优先级(volta 偏 `.exe`、npm/pnpm
+/// 偏 `.cmd`)与 PATHEXT 的固定顺序不一致,而且只为这一处加 `which` 依赖收益不抵 audit
+/// surface。`PathBuf::join` 让 separator 选择交给 std,避免 `format!("{dir}\\...")`
+/// 硬编码 `\\` 在混合分隔符 bin_path 下产出丑陋路径。
+///
+/// 空 dir 或所有候选都不存在 → None,上游退化到静态命令,与 POSIX 路径同款语义。
+#[cfg(target_os = "windows")]
+fn sibling_bin_with_ext(
+    bin_path: &str,
+    exe_basename: &str,
+    ext_candidates: &[&str],
+) -> Option<String> {
+    let dir = parent_dir(bin_path);
+    if dir.is_empty() {
+        return None;
+    }
+    let dir = std::path::PathBuf::from(dir);
+    for ext in ext_candidates {
+        let candidate = dir.join(format!("{exe_basename}.{ext}"));
+        if candidate.is_file() {
+            return Some(candidate.to_string_lossy().into_owned());
+        }
+    }
+    None
+}
+
 /// 返回 `<bin_path 同目录>/<exe>` 的绝对路径。bin_path 是命令行命中的入口
 /// (如 `/opt/homebrew/bin/gemini`、`~/.volta/bin/codex`),`exe` 是与之共处一个
 /// bin 目录的另一个可执行(`brew` / `volta` / `bun` / `npm`)——这些包管理器
@@ -1468,8 +1628,11 @@ fn sibling_bin(bin_path: &str, exe: &str) -> Option<String> {
 }
 
 /// 给定工具、原始 bin 路径（命令行命中的入口）、canonicalize 后的真身路径，
-/// 推断"写回同一处"的锚定升级命令。纯函数（不碰 FS），真实 canonicalize 由调用方做，
-/// 便于单测覆盖各包管理器分支。hermes（pip）不在此处：`npm_package_for` 返回 None → None。
+/// 推断"写回同一处"的锚定升级命令。**POSIX 版是纯函数（不碰 FS）**——真实 canonicalize
+/// 由调用方做（`installs_anchored_command` 复用 enumerate 时算出的 `inst.real`),
+/// 便于单测覆盖各包管理器分支。Windows 版同名函数因 sibling 扩展名歧义必须读 fs,
+/// 是刻意保留的平台差异(详见 Windows 版本 doc)。hermes（pip）不在此处:
+/// `npm_package_for` 返回 None → None。
 ///
 /// **关键不变量：返回的命令必须用绝对路径调用执行体，不依赖 PATH**。
 /// 这条命令最终在 `run_tool_lifecycle_silently` 的非登录 `bash -c` 里执行——
@@ -1529,9 +1692,69 @@ fn anchored_command_from_paths(tool: &str, bin_path: &str, real_target: &str) ->
     Some(format!("{} i -g {pkg}@latest", quote_path_if_spaced(&npm)))
 }
 
+/// Windows 版锚定命令生成。等价类压缩到 3 种(volta/pnpm/npm),不存在 brew/bun/
+/// claude-native(Windows 没 Homebrew、Bun for Windows 仍 preview、claude.ai/install.sh
+/// 是 bash 脚本)。Scoop/Chocolatey/winget/nvm-windows/MS Store node 都归 npm 类——
+/// 它们都只是"如何装 node"的不同入口,全局包真正的 idiom 仍是 sibling `npm.cmd`。
+///
+/// **与 POSIX 版的语义差异**:POSIX 版是纯函数(不碰 fs),Windows 版通过
+/// `sibling_bin_with_ext` 读 fs 来探明扩展名(`.cmd` vs `.exe`)——Node installer
+/// 装 `.cmd`、Volta 装 `.exe`,纯字符串拼接无法消歧。这一平台差异**被刻意保留**:
+/// 测试用 tempdir 隔离 fs,生产侧 TOCTOU 是 by design(见 `sibling_bin_with_ext` doc)。
+///
+/// `_real_target` 占位维持与 POSIX 版的签名对称——Windows 上未观测到需要真身路径
+/// 区分的等价类(无 Cellar、无 claude-native installer)。若未来加 Scoop persist 锚定
+/// (scoop 装的工具真身在 `<scoop_root>/persist/<app>/...`),从这里启用 `_real_target`。
+///
+/// **关键不变量同 POSIX 版:返回的命令必须用绝对路径,不依赖 PATH**。Windows GUI
+/// 进程 PATH 由 Service Control Manager / explorer.exe 给,通常不含用户 `%LOCALAPPDATA%`
+/// 下的 Volta/pnpm 路径;`$SHELL -lic` 的探测时 PATH 与执行时 PATH 不对称。
+///
+/// 判定顺序(命中即返回):
+/// ① volta(`infer_install_source == "volta"`)→ sibling `volta.exe`/`.cmd` install <pkg>
+/// ② pnpm(`infer_install_source == "pnpm"`)→ sibling `pnpm.cmd`/`.exe` add -g <pkg>@latest
+///    (用 add+@latest 而非 update:语义明确、且对"之前没在 pnpm 全局装过"也幂等)
+/// ③ 其余 → sibling `npm.cmd`/`.exe` i -g <pkg>@latest
+///
+/// hermes(pip)在 `npm_package_for` 返回 None → 整体返 None,落静态 pip 兜底。
+/// 所有 sibling 探测都通过 `sibling_bin_with_ext`(碰 fs):该处无候选扩展名存在 →
+/// 返 None,上游 `plan_command_for` 兜回静态命令、`anchored=false`。
+#[cfg(target_os = "windows")]
+fn anchored_command_from_paths(tool: &str, bin_path: &str, _real_target: &str) -> Option<String> {
+    let pkg = npm_package_for(tool)?;
+
+    match infer_install_source(Path::new(bin_path)) {
+        "volta" => {
+            let volta = sibling_bin_with_ext(bin_path, "volta", &["exe", "cmd"])?;
+            Some(format!(
+                "{} install {pkg}",
+                win_quote_path_for_batch(&volta)
+            ))
+        }
+        "pnpm" => {
+            let pnpm = sibling_bin_with_ext(bin_path, "pnpm", &["cmd", "exe"])?;
+            Some(format!(
+                "{} add -g {pkg}@latest",
+                win_quote_path_for_batch(&pnpm)
+            ))
+        }
+        // 兜底 = npm 类:Scoop / Chocolatey / winget / nvm-windows / MS Store nodejs /
+        // system / 任何识别不到专属来源的 → sibling npm.cmd。
+        _ => {
+            let npm = sibling_bin_with_ext(bin_path, "npm", &["cmd", "exe"])?;
+            Some(format!(
+                "{} i -g {pkg}@latest",
+                win_quote_path_for_batch(&npm)
+            ))
+        }
+    }
+}
+
 /// 从枚举结果里取"命令行实际命中的那处"：优先 `is_path_default`；否则（解析不到
 /// PATH 默认、但只有一处）取唯一那处；多处且无默认标记 → None（无从锚定）。
-#[cfg(not(target_os = "windows"))]
+///
+/// 全平台共用——POSIX 和 Windows 版的 `anchored_command_from_paths` 都通过
+/// `installs_anchored_command` 调它,取默认那处再 canonicalize 拿真身。
 fn default_install(installs: &[ToolInstallation]) -> Option<&ToolInstallation> {
     installs.iter().find(|i| i.is_path_default).or_else(|| {
         if installs.len() == 1 {
@@ -1543,13 +1766,15 @@ fn default_install(installs: &[ToolInstallation]) -> Option<&ToolInstallation> {
 }
 
 /// 基于已枚举的安装列表生成锚定升级命令（复用 enumerate 结果，避免二次探测）。
-/// 对默认那处的原始 bin 路径再 canonicalize 一次拿真身，喂给纯函数判定。
-#[cfg(not(target_os = "windows"))]
+/// 读取 enumerate 时已 canonicalize 写入的 `inst.real`,**不再二次 canonicalize**——
+/// 既消除冗余 syscall,也闭合"enumerate 与 anchor 看到同一真身"的一致性边界
+/// (两次 canonicalize 之间 symlink 被换会让锚定指向不同真身)。
+///
+/// 全平台共用——`anchored_command_from_paths` 自身是 cfg 二选一(POSIX 五分支 /
+/// Windows 三分支),这里只负责取默认那处 + 转发。
 fn installs_anchored_command(tool: &str, installs: &[ToolInstallation]) -> Option<String> {
     let inst = default_install(installs)?;
-    let real = std::fs::canonicalize(&inst.path)
-        .map(|p| p.to_string_lossy().into_owned())
-        .unwrap_or_else(|_| inst.path.clone());
+    let real = inst.real.to_string_lossy();
     anchored_command_from_paths(tool, &inst.path, &real)
 }
 
@@ -1582,20 +1807,32 @@ fn install_command_for(tool: &str) -> String {
     }
 }
 
-/// 计算某工具的升级命令与"是否需确认"。非 Windows 走锚定；Windows 保持静态命令、
-/// 永不弹确认（避免引入 Windows 路径/批处理复杂度，零回归）。
-#[cfg(not(target_os = "windows"))]
+/// 计算某工具的升级命令与"是否需确认"。全平台共用一份:
+/// - **Windows + WSL 工具**(override 是 `\\wsl$\<distro>\...` UNC 路径)始终走静态、
+///   不锚定:锚定命令是 Windows 主机绝对路径,跨 `wsl.exe` 边界进入 distro 文件
+///   系统后完全无效;且 `enumerate_tool_installations` 不参与 WSL 文件系统、锚定
+///   无锚点。这一类显式短路到 `(unix_static, false, false)`,前端不会弹确认。
+///   **必须用 `wsl_tool_action_shell_command`(unix 版)而非 `static_fallback_command`**
+///   ——后者读 `tool_action_shell_command`,Windows target 给 hermes 返回 `py -m pip ...`,
+///   跨 wsl.exe 后 py launcher 不存在;`build_tool_action_line` 的 WSL 分支也用同一
+///   wrapper,保证 plan 展示给前端的命令与实际执行落 .bat 的命令一致。
+/// - 其他平台与 Windows 原生工具走 `installs_anchored_command`:命中 → 锚定;
+///   None(无默认 / sibling 不存在 / hermes pip 等)→ 静态兜底、`anchored=false`,
+///   前端据此给"默认入口无法确定"诚实文案。
 fn plan_command_for(tool: &str, installs: &[ToolInstallation]) -> (String, bool, bool) {
+    #[cfg(target_os = "windows")]
+    {
+        if wsl_distro_for_tool(tool).is_some() {
+            let cmd = wsl_tool_action_shell_command(tool, ToolLifecycleAction::Update)
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            return (cmd, false, false);
+        }
+    }
     match installs_anchored_command(tool, installs) {
         Some(command) => (command, installs.len() >= 2, true),
         None => (static_fallback_command(tool), installs.len() >= 2, false),
     }
-}
-
-#[cfg(target_os = "windows")]
-fn plan_command_for(tool: &str, installs: &[ToolInstallation]) -> (String, bool, bool) {
-    let _ = installs;
-    (static_fallback_command(tool), false, false)
 }
 
 /// 多处安装是否构成"真冲突"：≥2 处，且(版本分歧 或 有的能跑有的跑不起来)。
@@ -2606,6 +2843,428 @@ mod tests {
         assert_eq!(extract_version("no version here"), "no version here");
     }
 
+    /// `parent_dir` 是锚定层"由 bin 路径推导同目录绝对路径"的基石,跨平台共用——
+    /// 这里固化 `\`/`/`/混合分隔符/根边界四种情况,避免未来重构悄悄改语义。
+    mod parent_dir_cases {
+        use super::super::*;
+
+        #[test]
+        fn unix_path() {
+            assert_eq!(
+                parent_dir("/Users/me/.volta/bin/codex"),
+                "/Users/me/.volta/bin"
+            );
+        }
+
+        #[test]
+        fn windows_backslash() {
+            assert_eq!(
+                parent_dir("C:\\Users\\me\\AppData\\Local\\Volta\\bin\\codex.exe"),
+                "C:\\Users\\me\\AppData\\Local\\Volta\\bin"
+            );
+        }
+
+        #[test]
+        fn mixed_separators_takes_rightmost() {
+            // Windows 上 `Path::join` 与字符串拼接可能产出混合分隔符;取**两种之中最右
+            // 出现**的位置,而非"优先 `\`"——后者在混合时会取错父目录。
+            assert_eq!(
+                parent_dir("C:\\Users\\me/Code/openclaw\\codex.cmd"),
+                "C:\\Users\\me/Code/openclaw"
+            );
+        }
+
+        #[test]
+        fn no_separator_returns_empty() {
+            // 无父目录 → 空串,锚定层据此返 None、回退静态命令。
+            assert_eq!(parent_dir("codex"), "");
+        }
+
+        #[test]
+        fn separator_at_root_returns_empty() {
+            // `/codex`:根目录是 index 0,`i > 0` 不满足 → 空串。同款行为对 Windows
+            // 上的 `\codex` 也成立(实际不会出现,但语义对齐)。
+            assert_eq!(parent_dir("/codex"), "");
+            assert_eq!(parent_dir("\\codex"), "");
+        }
+    }
+
+    /// Windows-only 锚定升级回归(等价类压缩到 3 种 idiom:volta/pnpm/npm)。整块通过
+    /// `cfg(target_os = "windows")` gate,在 macOS/Linux 上不参与 cargo test;Windows
+    /// CI 跑全套验证。tempdir 模拟 sibling 入口存在/不存在,锁定"扩展名顺序优先级 +
+    /// 含空格路径自动加双引号 + 探不到 sibling → None 退静态"三件事。
+    #[cfg(target_os = "windows")]
+    mod anchored_upgrade_windows {
+        use super::super::*;
+
+        /// 在 tempdir 下创建子目录 `subdir`(空字符串则用 tempdir 根),放入 `entry`
+        /// 与若干 `siblings` 假文件。返回 `(TempDir, 子目录, 入口绝对路径)`——TempDir
+        /// 必须保活,否则析构后 fs 文件消失、`is_file()` 失败,测试假绿。
+        fn setup_sibling(
+            subdir: &str,
+            entry: &str,
+            siblings: &[&str],
+        ) -> (tempfile::TempDir, std::path::PathBuf, String) {
+            let dir = tempfile::tempdir().unwrap();
+            let sub = if subdir.is_empty() {
+                dir.path().to_path_buf()
+            } else {
+                dir.path().join(subdir)
+            };
+            std::fs::create_dir_all(&sub).unwrap();
+            std::fs::write(sub.join(entry), "").unwrap();
+            for s in siblings {
+                std::fs::write(sub.join(s), "").unwrap();
+            }
+            let bin_path = sub.join(entry).to_string_lossy().to_string();
+            (dir, sub, bin_path)
+        }
+
+        /// **必须与 `win_quote_path_for_batch` 主体保持镜像**——给 anchored 测试动态算
+        /// expected,让用例在 temp 根目录含空格 / `&` / `(` / `%` 等特殊字符的开发机上
+        /// 也能通过(默认 Windows `%TEMP%` = `C:\Users\<user>\AppData\Local\Temp`,
+        /// 用户名带空格的机器整条 path 含空格、生产代码会正确加引号、测试硬编码无引号
+        /// expected 会假失败)。
+        ///
+        /// 镜像引入"两边必须同步"的隐性依赖——回归防护层是 `win_quote_*` 那 7 个独立
+        /// 单测,它们用硬编码字面值锁住 quoting 规则本身,即便此镜像漂移也会被那一组
+        /// 测试 catch;反之亦然。
+        fn expect_quoted_path(p: &str) -> String {
+            let escaped = p.replace('%', "%%%%");
+            let needs_quote = p
+                .chars()
+                .any(|c| matches!(c, ' ' | '&' | '(' | ')' | '^' | ';' | '<' | '>' | '|' | ','));
+            if needs_quote {
+                format!("\"{escaped}\"")
+            } else {
+                escaped
+            }
+        }
+
+        #[test]
+        fn volta_windows_uses_volta_install() {
+            // tempdir 路径里不含 "volta" 子串,所以在 tempdir 下手建一个 `Volta` 子目录
+            // 才能让 `infer_install_source` 通过路径 normalize 后命中 `/volta/` 分支。
+            // sibling 候选顺序 `[exe, cmd]`——Volta 是 Rust 写的 native binary,首选 .exe。
+            // expected 通过 `expect_quoted_path` 算出,以适应 temp 根目录含特殊字符的环境。
+            let (_dir, sub, bin_path) = setup_sibling("Volta", "codex.cmd", &["volta.exe"]);
+            let cmd = anchored_command_from_paths("codex", &bin_path, &bin_path);
+            let volta_full = format!("{}\\volta.exe", sub.to_string_lossy());
+            let expected = format!("{} install @openai/codex", expect_quoted_path(&volta_full));
+            assert_eq!(cmd.as_deref(), Some(expected.as_str()));
+        }
+
+        #[test]
+        fn pnpm_windows_uses_pnpm_add() {
+            // bin_path 落 `%LOCALAPPDATA%\pnpm\codex.cmd`,sibling 有 `pnpm.cmd` → 锚定到
+            // `<dir>\pnpm.cmd add -g @openai/codex@latest`。用 add+@latest 而非 update,
+            // 兼容"之前没通过 pnpm 装过"的幂等性场景。
+            let (_dir, sub, bin_path) = setup_sibling("pnpm", "codex.cmd", &["pnpm.cmd"]);
+            let cmd = anchored_command_from_paths("codex", &bin_path, &bin_path);
+            let pnpm_full = format!("{}\\pnpm.cmd", sub.to_string_lossy());
+            let expected = format!(
+                "{} add -g @openai/codex@latest",
+                expect_quoted_path(&pnpm_full)
+            );
+            assert_eq!(cmd.as_deref(), Some(expected.as_str()));
+        }
+
+        #[test]
+        fn npm_windows_default_branch() {
+            // 任意 system 类路径(不命中 volta/pnpm)→ 兜底 sibling npm.cmd 锚定。
+            // 模拟 nvm-windows 的实际形态:`<NVM_HOME>\v22.0.0\codex.cmd`。
+            let (_dir, sub, bin_path) = setup_sibling("v22.0.0", "codex.cmd", &["npm.cmd"]);
+            let cmd = anchored_command_from_paths("codex", &bin_path, &bin_path);
+            let npm_full = format!("{}\\npm.cmd", sub.to_string_lossy());
+            let expected = format!(
+                "{} i -g @openai/codex@latest",
+                expect_quoted_path(&npm_full)
+            );
+            assert_eq!(cmd.as_deref(), Some(expected.as_str()));
+        }
+
+        #[test]
+        fn npm_windows_no_sibling_returns_none() {
+            // sibling npm.cmd 不存在(纯独立二进制,如 opencode install.sh 装的)→ 返 None,
+            // 上游兜回静态 `call npm i -g`,前端据 anchored=false 给"默认入口无法确定"提示。
+            let (_dir, _sub, bin_path) = setup_sibling("", "codex.cmd", &[]);
+            let cmd = anchored_command_from_paths("codex", &bin_path, &bin_path);
+            assert!(cmd.is_none());
+        }
+
+        #[test]
+        fn hermes_windows_returns_none_for_pip() {
+            // hermes 不在 npm_package_for 表中 → 返 None,上游退回静态 pip 命令
+            // (`py -m pip install --upgrade hermes-agent[web] || python -m pip ...`)。
+            // 故意把 npm.cmd 也放进 sibling 验证"npm 在但 pkg 不在"也是 None,不靠运气。
+            let (_dir, _sub, bin_path) = setup_sibling("", "hermes.exe", &["npm.cmd"]);
+            let cmd = anchored_command_from_paths("hermes", &bin_path, &bin_path);
+            assert!(cmd.is_none());
+        }
+
+        #[test]
+        fn windows_path_with_space_is_double_quoted() {
+            // 含空格的路径(`C:\Program Files\...`)在生成命令时必须用双引号包,否则
+            // bat / cmd /C 解析会把第一个空格当 token 分隔符,后续参数串错。**精确等值断言
+            // 锁定引号位置**(starts_with+contains 会放过"双引号位置错了但仍能命中"的回归)。
+            let (_dir, sub, bin_path) = setup_sibling("Program Files", "codex.cmd", &["npm.cmd"]);
+            let cmd = anchored_command_from_paths("codex", &bin_path, &bin_path);
+            let expected = format!(
+                "\"{}\\npm.cmd\" i -g @openai/codex@latest",
+                sub.to_string_lossy()
+            );
+            assert_eq!(cmd.as_deref(), Some(expected.as_str()));
+        }
+
+        #[test]
+        fn windows_full_batch_line_for_percent_path_uses_quadruple_escape() {
+            // **完整生成的 batch 行**(`call ` + anchored cmd)对含字面 `%` 的路径必须
+            // 4 倍转义 `%foo%` → `%%%%foo%%%%`:.bat parser 一轮还原为 `%%foo%%`,call
+            // 二轮再还原为 `%foo%` 字面。helper 单测验证的是 `win_quote_path_for_batch`
+            // 内部转义,这条 integration 测验证 anchored_command_from_paths 输出 + call
+            // 包装后,**最终落到 .bat 的字符串**仍然闭合两轮 expansion。
+            let (_dir, sub, bin_path) = setup_sibling("path%foo%", "codex.cmd", &["npm.cmd"]);
+            let anchored = anchored_command_from_paths("codex", &bin_path, &bin_path).unwrap();
+            // build_tool_action_line Windows 分支最终拼的就是 `call <anchored>`(中间
+            // 没有其他变换),这里直接用 format! 复刻那一步,无需暴露内部 API。
+            let batch_line = format!("call {anchored}");
+            // 用 `expect_quoted_path` 算 npm 全路径的期望 quoting,**同时覆盖 temp 根
+            // 含空格的环境**(否则 sub 本身含空格 + 子目录 `path%foo%` 触发 4 倍 `%` 转义
+            // 会让 expected 漏引号、假失败)。
+            let npm_full = format!("{}\\npm.cmd", sub.to_string_lossy());
+            let expected = format!(
+                "call {} i -g @openai/codex@latest",
+                expect_quoted_path(&npm_full)
+            );
+            assert_eq!(batch_line, expected);
+            // 双重锁定:确认 4 倍转义子串存在 + 不出现"残留的二倍转义或字面 `%foo%`"。
+            assert!(
+                batch_line.contains("%%%%foo%%%%"),
+                "batch 行应含 4 倍转义 `%%%%foo%%%%`: {batch_line}"
+            );
+            assert!(
+                !batch_line.contains("path%foo%"),
+                "batch 行不应含未转义的字面 `%foo%`(会被 call 二次解析展开): {batch_line}"
+            );
+        }
+    }
+
+    /// Windows-only helpers 单测——在 macOS/Linux 上整块通过 cfg 排除,不参与 `cargo test`。
+    /// Windows CI(或本机 Windows 跑 cargo test)会激活这些用例。覆盖:①双引号
+    /// quoting 镜像 POSIX 版;②sibling_bin_with_ext 在 fs 上按 ext 顺序探到第一个存在的、
+    /// 全部不存在/空 dir 时返 None。tempdir 提供干净 fs 沙盒。
+    #[cfg(target_os = "windows")]
+    mod windows_helpers {
+        use super::super::*;
+
+        #[test]
+        fn win_quote_clean_path_stays_bare() {
+            // 普通路径不含特殊字符 → 不加引号,命令展示干净。
+            assert_eq!(
+                win_quote_path_for_batch("C:\\Users\\me\\npm.cmd"),
+                "C:\\Users\\me\\npm.cmd"
+            );
+        }
+
+        #[test]
+        fn win_quote_spaced_path_gets_quoted() {
+            assert_eq!(
+                win_quote_path_for_batch("C:\\Program Files\\nodejs\\npm.cmd"),
+                "\"C:\\Program Files\\nodejs\\npm.cmd\""
+            );
+        }
+
+        #[test]
+        fn win_quote_ampersand_path_gets_quoted() {
+            // `&` 是 cmd 命令分隔符,NTFS 允许在路径中出现;没有引号会让 `call C:\A&B\npm.cmd`
+            // 被解析为 `call C:\A` + `B\npm.cmd` 两条命令,执行错乱。
+            assert_eq!(
+                win_quote_path_for_batch("C:\\Tools&Dev\\npm.cmd"),
+                "\"C:\\Tools&Dev\\npm.cmd\""
+            );
+        }
+
+        #[test]
+        fn win_quote_parens_path_gets_quoted() {
+            // `(` / `)` 在 .bat 中是代码块语义,引号内才是字面意义。
+            assert_eq!(
+                win_quote_path_for_batch("C:\\Foo(x86)\\npm.cmd"),
+                "\"C:\\Foo(x86)\\npm.cmd\""
+            );
+        }
+
+        #[test]
+        fn win_quote_caret_path_gets_quoted() {
+            // `^` 是 cmd 的 escape character;包引号后是字面意义。
+            assert_eq!(
+                win_quote_path_for_batch("C:\\foo^bar\\npm.cmd"),
+                "\"C:\\foo^bar\\npm.cmd\""
+            );
+        }
+
+        #[test]
+        fn win_quote_percent_is_escaped_to_quadruple_percent() {
+            // `%` 经历 .bat 一轮 + call 二轮 expansion,要让 call 最终看到字面 `%FOO%`
+            // 需要源 .bat 里写 `%%%%FOO%%%%`(一轮 → `%%FOO%%`,二轮 → `%FOO%` 字面)。
+            // 用 `%%` 二倍转义只在 echo / 直接执行场景对,call 调用时会被还原成 variable
+            // reference 进而被替换。**这一条用例锁住"call 二次解析"必须被 4 倍转义闭合**。
+            assert_eq!(
+                win_quote_path_for_batch("C:\\path%foo%\\npm.cmd"),
+                "C:\\path%%%%foo%%%%\\npm.cmd"
+            );
+        }
+
+        #[test]
+        fn win_quote_percent_with_space_gets_both() {
+            // `%` 4 倍转义与外层引号正交——含空格触发引号、含 `%` 触发 `%%%%` 转义,叠加。
+            assert_eq!(
+                win_quote_path_for_batch("C:\\my %dir%\\npm.cmd"),
+                "\"C:\\my %%%%dir%%%%\\npm.cmd\""
+            );
+        }
+
+        #[test]
+        fn win_quote_needs_quote_uses_original_path() {
+            // 回归 guard:`needs_quote` 判定基于**原路径**,不能用 escape 后字符串——
+            // 否则原本无 token 边界字符的路径(如 `C:\path%foo%\npm.cmd`)在 escape
+            // 引入更多 `%` 后被错误识别成"需要引号"。这是实现 bug 的隐性入口。
+            // 入参不含任何 token 边界字符 → 不应加外层引号、只做 `%` 4 倍转义。
+            let out = win_quote_path_for_batch("C:\\foo%bar%\\npm.cmd");
+            assert!(!out.starts_with('"'), "纯 `%` 路径不应加外层引号: {out}");
+        }
+
+        #[test]
+        fn sibling_bin_picks_first_existing_extension() {
+            // 同目录同时存在 `npm.cmd` 和 `npm.exe` 时,候选顺序 `[cmd, exe]` 应取 .cmd——
+            // 这是 Node.js 官方 installer 装出来的 idiom(.cmd 是入口、.exe 是 wrapper)。
+            let dir = tempfile::tempdir().unwrap();
+            let cmd_path = dir.path().join("npm.cmd");
+            let exe_path = dir.path().join("npm.exe");
+            std::fs::write(&cmd_path, "").unwrap();
+            std::fs::write(&exe_path, "").unwrap();
+
+            let codex = dir.path().join("codex.cmd").to_string_lossy().to_string();
+            let found = sibling_bin_with_ext(&codex, "npm", &["cmd", "exe"]).unwrap();
+            assert_eq!(found, cmd_path.to_string_lossy());
+        }
+
+        #[test]
+        fn sibling_bin_volta_prefers_exe() {
+            // Volta 是 Rust 写的 native binary,扩展名顺序应是 [exe, cmd]——若只有 .exe
+            // 存在(常见情形),探到的就是它。
+            let dir = tempfile::tempdir().unwrap();
+            let exe_path = dir.path().join("volta.exe");
+            std::fs::write(&exe_path, "").unwrap();
+
+            let codex = dir.path().join("codex.exe").to_string_lossy().to_string();
+            let found = sibling_bin_with_ext(&codex, "volta", &["exe", "cmd"]).unwrap();
+            assert_eq!(found, exe_path.to_string_lossy());
+        }
+
+        #[test]
+        fn sibling_bin_returns_none_when_none_exist() {
+            // 同目录下没有任何候选 → None,锚定层据此退到静态命令。
+            let dir = tempfile::tempdir().unwrap();
+            let codex = dir.path().join("codex.cmd").to_string_lossy().to_string();
+            assert!(sibling_bin_with_ext(&codex, "npm", &["cmd", "exe"]).is_none());
+        }
+
+        #[test]
+        fn sibling_bin_returns_none_when_no_parent() {
+            // bin_path 没有目录部分(纯文件名) → parent_dir 空串 → 返 None。
+            assert!(sibling_bin_with_ext("codex.cmd", "npm", &["cmd"]).is_none());
+        }
+
+        #[test]
+        fn wsl_hermes_command_uses_python3_not_py_launcher() {
+            // 跨 wsl.exe 边界后跑的是 Linux,Windows 的 `py` launcher 不存在(PEP 397
+            // 是 Windows 独有)、Ubuntu 24.04+ 连 `python` alias 也没有。
+            // `tool_action_shell_command` 在 Windows target 给 hermes 返回 `py -m pip ...`
+            // 是给 Windows 原生跑用的,WSL 分支必须改走 unix 版命令——这一切由
+            // `wsl_tool_action_shell_command` 替换 hermes case 实现。
+            let cmd = wsl_tool_action_shell_command("hermes", ToolLifecycleAction::Update).unwrap();
+            assert!(
+                cmd.starts_with("python3 -m pip"),
+                "WSL hermes 必须用 python3 起手,得到: {cmd}"
+            );
+            assert!(
+                !cmd.contains("py -m pip"),
+                "WSL hermes 不能含 Windows 独有的 py launcher 命令,得到: {cmd}"
+            );
+        }
+
+        #[test]
+        fn wsl_npm_tools_passthrough_to_windows_target_command() {
+            // npm 类工具的命令在 Windows/Unix 上字符串相同 → wrapper 直接透传给
+            // `tool_action_shell_command`,无需额外替换。
+            let cmd = wsl_tool_action_shell_command("claude", ToolLifecycleAction::Update).unwrap();
+            assert_eq!(cmd, "npm i -g @anthropic-ai/claude-code@latest");
+        }
+    }
+
+    /// `infer_install_source` 是判定锚定 idiom 的入口——nvm/homebrew/volta/pnpm/...
+    /// 各对应不同的升级命令形态。函数内部已 `replace('\\','/').to_ascii_lowercase()`
+    /// 归一化,Windows 反斜杠 + 大小写差异在此处不需要分平台。这里固化"哪条路径
+    /// 算哪种来源"的归类断言,避免未来调整子串顺序时静默改变分类。
+    mod install_source_classification {
+        use super::super::*;
+        use std::path::Path;
+
+        #[test]
+        fn macos_volta_with_dot_prefix() {
+            assert_eq!(
+                infer_install_source(Path::new("/Users/me/.volta/bin/codex")),
+                "volta"
+            );
+        }
+
+        #[test]
+        fn windows_volta_localappdata_no_dot() {
+            // `%LOCALAPPDATA%\Volta\bin\codex.exe` —— 没有前导点,靠兜底的 `/volta/`
+            // 命中(归一化后小写)。如果只识别 `/.volta/`,Windows 这一类会落到 system。
+            assert_eq!(
+                infer_install_source(Path::new(
+                    "C:\\Users\\me\\AppData\\Local\\Volta\\bin\\codex.exe"
+                )),
+                "volta"
+            );
+        }
+
+        #[test]
+        fn windows_pnpm_localappdata() {
+            // `%LOCALAPPDATA%\pnpm\codex.cmd` —— pnpm 全局 bin 目录,识别为 pnpm 后
+            // 锚定命令走 `pnpm add -g <pkg>@latest`,而不是 sibling npm。
+            assert_eq!(
+                infer_install_source(Path::new("C:\\Users\\me\\AppData\\Local\\pnpm\\codex.cmd")),
+                "pnpm"
+            );
+        }
+
+        #[test]
+        fn windows_nvm_falls_back_to_system() {
+            // nvm-windows 安装的工具路径不含 `.nvm`(它通常装在 `%APPDATA%\nvm` 或
+            // `C:\Program Files\nodejs` symlink),刻意不识别成专属 source——锚定层
+            // 会按 system → sibling npm.cmd 处理,跟 nvm-windows 的实际 idiom 一致
+            // (它的全局包就是当前选中的 node 的 npm 装的)。
+            assert_eq!(
+                infer_install_source(Path::new(
+                    "C:\\Users\\me\\AppData\\Roaming\\nvm\\v22.0.0\\codex.cmd"
+                )),
+                "system"
+            );
+        }
+
+        #[test]
+        fn windows_scoop_still_identified() {
+            // Scoop 已有 `/scoop/` 分支;我们的 6 个工具都不是 scoop formula,所以这条
+            // 实际不影响锚定决策(锚定层会用 sibling npm.cmd),但归类保留方便未来。
+            assert_eq!(
+                infer_install_source(Path::new("C:\\Users\\me\\scoop\\shims\\codex.cmd")),
+                "scoop"
+            );
+        }
+    }
+
     /// 锚定升级命令生成：用真实勘察到的安装路径固化为回归断言——
     /// 一台机器上 4 个工具恰好对应 4 种升级方式（原生 self-update / brew / nvm npm /
     /// homebrew npm），任何改动若打破其中一种都会立刻被这些用例拦下。
@@ -2622,6 +3281,12 @@ mod tests {
                 error: None,
                 source: infer_install_source(Path::new(path)).to_string(),
                 is_path_default: is_default,
+                // 测试场景下不需要走 fs canonicalize——POSIX 锚定测试关心的是
+                // path/real 都被传给 anchored_command_from_paths 的纯字符串判定,
+                // 已有用例(brew_formula_extraction / claude_native_*)是直接
+                // 调 anchored_command_from_paths,不通过 installs_anchored_command,
+                // 这里 real 是给上层 default_install + read 用,填同值即可。
+                real: std::path::PathBuf::from(path),
             }
         }
 
@@ -2925,6 +3590,7 @@ mod tests {
                 error: None,
                 source: "nvm".to_string(),
                 is_path_default: false,
+                real: std::path::PathBuf::from("/x"),
             };
             // 单处 → 不冲突。
             assert!(!is_conflicting(&[make(Some("1.0.0"), true)]));
