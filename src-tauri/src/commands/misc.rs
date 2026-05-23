@@ -189,16 +189,20 @@ pub async fn run_tool_lifecycle_action(
         return Err("No supported tools selected".to_string());
     }
 
-    let command_line =
-        build_tool_lifecycle_command(&requested, action, wsl_shell_by_tool.as_ref())?;
     let label = match action {
         ToolLifecycleAction::Install => "tool_install",
         ToolLifecycleAction::Update => "tool_update",
     };
 
-    tokio::task::spawn_blocking(move || run_tool_lifecycle_silently(&command_line, label))
-        .await
-        .map_err(|e| format!("tool lifecycle task join error: {e}"))?
+    // build 阶段含锚定探测（对每个工具跑 `--version` 定位命令行实际命中那处），
+    // 与执行一并放进 blocking 线程，避免阻塞 async runtime。
+    tokio::task::spawn_blocking(move || {
+        let command_line =
+            build_tool_lifecycle_command(&requested, action, wsl_shell_by_tool.as_ref())?;
+        run_tool_lifecycle_silently(&command_line, label)
+    })
+    .await
+    .map_err(|e| format!("tool lifecycle task join error: {e}"))?
 }
 
 /// 静默执行工具安装/更新脚本：直接捕获子进程输出并阻塞到命令真正结束，
@@ -371,22 +375,38 @@ fn build_tool_action_line(
     wsl_shell: Option<&str>,
     wsl_shell_flag: Option<&str>,
 ) -> Result<String, String> {
-    let command = tool_action_shell_command(tool, action)
-        .ok_or_else(|| format!("Unsupported tool action target: {tool}"))?;
-
     #[cfg(target_os = "windows")]
     {
+        // Windows：保持静态命令（WSL 走 wsl.exe；否则裸 npm 加 call），不锚定、零回归。
+        let command = tool_action_shell_command(tool, action)
+            .ok_or_else(|| format!("Unsupported tool action target: {tool}"))?;
         if let Some(distro) = wsl_distro_for_tool(tool) {
             return build_wsl_tool_action_line(&distro, command, wsl_shell, wsl_shell_flag);
         }
-
         if command.starts_with("npm ") {
             return Ok(format!("call {command}"));
         }
+        return Ok(command.to_string());
     }
 
-    let _ = (wsl_shell, wsl_shell_flag);
-    Ok(command.to_string())
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (wsl_shell, wsl_shell_flag);
+        // update 锚定到命令行实际命中的那处（写回同一个 node / brew / 原生安装器），
+        // 而非裸 `npm` 落到 PATH 第一个 npm；install 或探不到默认安装则用静态裸命令。
+        let command = match action {
+            ToolLifecycleAction::Update => {
+                let installs = enumerate_tool_installations(tool);
+                installs_anchored_command(tool, &installs)
+                    .unwrap_or_else(|| static_fallback_command(tool))
+            }
+            ToolLifecycleAction::Install => static_fallback_command(tool),
+        };
+        if command.is_empty() {
+            return Err(format!("Unsupported tool action target: {tool}"));
+        }
+        Ok(command)
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -1224,6 +1244,13 @@ fn infer_install_source(path: &Path) -> &'static str {
     }
 }
 
+/// 从 shell 输出里挑出第一个绝对路径行（trim 后以 `/` 开头），跳过交互式登录 shell
+/// （`-lic`）里 .zshrc 打印的欢迎语/提示符等噪音。canonicalize 由调用方做（碰 FS）。
+#[cfg(not(target_os = "windows"))]
+fn first_abs_path_line(raw: &str) -> Option<&str> {
+    raw.lines().map(str::trim).find(|l| l.starts_with('/'))
+}
+
 /// 用与 `try_get_version` 相同的登录 shell 解析 PATH 默认命中的可执行文件路径，
 /// canonicalize 后作为"命令行默认 / 升级目标"的锚点（与升级会作用的那处对齐）。
 #[cfg(not(target_os = "windows"))]
@@ -1243,10 +1270,9 @@ fn resolve_path_default(tool: &str) -> Option<std::path::PathBuf> {
         return None;
     }
     let raw = String::from_utf8_lossy(&out.stdout);
-    let first = raw.lines().next()?.trim();
-    if first.is_empty() {
-        return None;
-    }
+    // 不能死取第一行：交互式 .zshrc 可能先打印欢迎语（如 "🚀 Welcome back"），
+    // command -v 的真实路径在其后；取第一个 `/` 开头的行才稳。
+    let first = first_abs_path_line(&raw)?;
     std::fs::canonicalize(first).ok()
 }
 
@@ -1357,36 +1383,207 @@ fn enumerate_tool_installations(tool: &str) -> Vec<ToolInstallation> {
     installs
 }
 
-/// 诊断某工具是否存在多处互相打架的安装。懒触发：前端仅在卡片 broken 或
-/// "升级后版本未变"时调用，正常版本刷新不受影响。
+/// 工具对应的 npm 包名（hermes 走 pip，不在此表）。锚定升级据此拼 `npm i -g`。
+#[cfg(not(target_os = "windows"))]
+fn npm_package_for(tool: &str) -> Option<&'static str> {
+    match tool {
+        "claude" => Some("@anthropic-ai/claude-code"),
+        "codex" => Some("@openai/codex"),
+        "gemini" => Some("@google/gemini-cli"),
+        "opencode" => Some("opencode-ai"),
+        "openclaw" => Some("openclaw"),
+        _ => None,
+    }
+}
+
+/// 取 unix 路径的父目录（`/a/b/npm` → `/a/b`）；无父目录返回空串。
+#[cfg(not(target_os = "windows"))]
+fn parent_dir(p: &str) -> String {
+    match p.rfind('/') {
+        Some(i) if i > 0 => p[..i].to_string(),
+        _ => String::new(),
+    }
+}
+
+/// 从 canonicalize 后的真身路径提取 Homebrew formula 名：
+/// `/opt/homebrew/Cellar/gemini-cli/0.13.0/...` → `Some("gemini-cli")`。
+/// 非 Cellar 路径（= 不是 formula，可能是 Homebrew 的 node 装的 npm 全局包）返回 None。
+/// 关键区分：formula 即便内部用 node，真身也落在 `Cellar/<formula>/` 下；而 Homebrew
+/// npm 全局包落在 `/opt/homebrew/lib/node_modules`（不含 Cellar）。两者升级命令不同。
+#[cfg(not(target_os = "windows"))]
+fn brew_formula_from_path(real: &str) -> Option<String> {
+    let mut segs = real.split('/');
+    while let Some(seg) = segs.next() {
+        if seg.eq_ignore_ascii_case("Cellar") {
+            return segs.next().filter(|s| !s.is_empty()).map(|s| s.to_string());
+        }
+    }
+    None
+}
+
+/// 给定工具、原始 bin 路径（命令行命中的入口）、canonicalize 后的真身路径，
+/// 推断"写回同一处"的锚定升级命令。纯函数（不碰 FS），真实 canonicalize 由调用方做，
+/// 便于单测覆盖各包管理器分支。hermes（pip）不在此处：`npm_package_for` 返回 None → None。
 ///
-/// 无冲突时返回空 `Vec`：仅一处安装，或多处但版本与可运行状态完全一致
-/// （例如同一版本经多个包管理器装了两遍但都能跑）——这类不打扰用户。
-#[tauri::command]
-pub async fn diagnose_tool_installations(tool: String) -> Result<Vec<ToolInstallation>, String> {
-    if !VALID_TOOLS.contains(&tool.as_str()) {
-        return Err(format!("Unsupported tool: {tool}"));
+/// 判定顺序（命中即返回）：
+/// ① Claude 原生安装器（`~/.local/share/claude/versions/`）→ `claude update` 自更新；
+///    它不归 npm 管，用 npm 升级会装到别处且被原生那份遮蔽（PATH 更靠前）。
+/// ② Homebrew formula（真身在 `Cellar/<formula>/`）→ `brew upgrade <formula>`；
+///    formula 名 ≠ npm 包名（gemini-cli ≠ @google/gemini-cli）。
+/// ③ volta / bun → 各自的全局安装命令。
+/// ④ 其余 npm 全局包（nvm / homebrew-npm / mise / fnm / system）→ 锚定到"那处 bin
+///    目录的 npm"，确保升级写回命令行实际在用的那个 node，而非 PATH 第一个 npm。
+#[cfg(not(target_os = "windows"))]
+fn anchored_command_from_paths(tool: &str, bin_path: &str, real_target: &str) -> Option<String> {
+    let pkg = npm_package_for(tool)?;
+    let real_lower = real_target.to_ascii_lowercase();
+
+    if tool == "claude"
+        && (real_lower.contains("/.local/share/claude/")
+            || real_lower.contains("/claude/versions/"))
+    {
+        return Some("claude update".to_string());
     }
+    if let Some(formula) = brew_formula_from_path(real_target) {
+        return Some(format!("brew upgrade {formula}"));
+    }
+    match infer_install_source(Path::new(bin_path)) {
+        "volta" => return Some(format!("volta install {pkg}")),
+        "bun" => return Some(format!("bun add -g {pkg}@latest")),
+        // 自带同级 npm 的 node 管理器：落到下面锚定到那处的 npm。
+        "nvm" | "fnm" | "mise" | "homebrew" => {}
+        // system / 未知来源（如 opencode install.sh 装的 ~/.opencode/bin、~/go/bin）
+        // 通常没有同级 npm，锚定会拼出 `<dir>/npm` 这种必失败命令；返回 None 让调用方
+        // 回退静态裸命令（至少能跑），并由前端据 anchored=false 给出诚实文案。
+        _ => return None,
+    }
+    let dir = parent_dir(bin_path);
+    let npm = if dir.is_empty() {
+        "npm".to_string()
+    } else {
+        format!("{dir}/npm")
+    };
+    // 含空格才单引号包裹（复用 shell_single_quote 的 POSIX 转义），否则保持裸路径，
+    // 命令展示更干净。
+    let npm = if npm.contains(' ') {
+        shell_single_quote(&npm)
+    } else {
+        npm
+    };
+    Some(format!("{npm} i -g {pkg}@latest"))
+}
 
-    let installs = tokio::task::spawn_blocking(move || enumerate_tool_installations(&tool))
-        .await
-        .map_err(|e| format!("diagnose task join error: {e}"))?;
+/// 从枚举结果里取"命令行实际命中的那处"：优先 `is_path_default`；否则（解析不到
+/// PATH 默认、但只有一处）取唯一那处；多处且无默认标记 → None（无从锚定）。
+#[cfg(not(target_os = "windows"))]
+fn default_install(installs: &[ToolInstallation]) -> Option<&ToolInstallation> {
+    installs.iter().find(|i| i.is_path_default).or_else(|| {
+        if installs.len() == 1 {
+            installs.first()
+        } else {
+            None
+        }
+    })
+}
 
+/// 基于已枚举的安装列表生成锚定升级命令（复用 enumerate 结果，避免二次探测）。
+/// 对默认那处的原始 bin 路径再 canonicalize 一次拿真身，喂给纯函数判定。
+#[cfg(not(target_os = "windows"))]
+fn installs_anchored_command(tool: &str, installs: &[ToolInstallation]) -> Option<String> {
+    let inst = default_install(installs)?;
+    let real = std::fs::canonicalize(&inst.path)
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| inst.path.clone());
+    anchored_command_from_paths(tool, &inst.path, &real)
+}
+
+/// 静态裸命令（= 现有的 `npm i -g <pkg>@latest` / pip 升级）。
+/// 锚定探不到默认安装时回退到它，等同于"装到 PATH 第一个 npm"的旧行为。
+fn static_fallback_command(tool: &str) -> String {
+    tool_action_shell_command(tool, ToolLifecycleAction::Update)
+        .map(|s| s.to_string())
+        .unwrap_or_default()
+}
+
+/// 计算某工具的升级命令与"是否需确认"。非 Windows 走锚定；Windows 保持静态命令、
+/// 永不弹确认（避免引入 Windows 路径/批处理复杂度，零回归）。
+#[cfg(not(target_os = "windows"))]
+fn plan_command_for(tool: &str, installs: &[ToolInstallation]) -> (String, bool, bool) {
+    match installs_anchored_command(tool, installs) {
+        Some(command) => (command, installs.len() >= 2, true),
+        None => (static_fallback_command(tool), installs.len() >= 2, false),
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn plan_command_for(tool: &str, installs: &[ToolInstallation]) -> (String, bool, bool) {
+    let _ = installs;
+    (static_fallback_command(tool), false, false)
+}
+
+/// 多处安装是否构成"真冲突"：≥2 处，且(版本分歧 或 有的能跑有的跑不起来)。
+/// 同版本装两份且都能跑不算冲突（不打扰用户）。诊断展示据此判定。
+fn is_conflicting(installs: &[ToolInstallation]) -> bool {
     if installs.len() < 2 {
-        return Ok(Vec::new());
+        return false;
     }
-
-    // 仅当存在分歧才算冲突：版本不唯一，或"有能跑的也有跑不起来的"。
     let distinct_versions: std::collections::HashSet<&Option<String>> =
         installs.iter().map(|i| &i.version).collect();
     let runnable_mixed =
         installs.iter().any(|i| i.runnable) && installs.iter().any(|i| !i.runnable);
+    distinct_versions.len() > 1 || runnable_mixed
+}
 
-    if distinct_versions.len() > 1 || runnable_mixed {
-        Ok(installs)
-    } else {
-        Ok(Vec::new())
+/// 一次"探测工具安装分布"的结果：枚举到的所有安装 + 各项衍生判定。同时服务两条
+/// 路径——诊断展示（`is_conflict`）与升级确认（`needs_confirmation`/`command`/`anchored`）。
+/// 字段保持 snake_case（与 `ToolInstallation` 一致），前端按同名读取。
+#[derive(Debug, serde::Serialize)]
+pub struct ToolInstallationReport {
+    tool: String,
+    /// 该工具枚举到的所有安装。
+    installs: Vec<ToolInstallation>,
+    /// 严阈值：≥2 且(版本分歧或运行态混合)。诊断按钮/自动补诊据此展示冲突。
+    is_conflict: bool,
+    /// 宽阈值：≥2 处。升级确认据此弹窗（升级只动一处，任何多处都该让用户知情）。
+    needs_confirmation: bool,
+    /// 锚定后将执行的升级命令（仅展示；真正执行时后端会重新生成，不信任前端回传）。
+    command: String,
+    /// 是否成功锚定到某处具体安装。false = 退到裸 fallback 命令（无法确定命令行实际
+    /// 命中哪处，或该处无同级 npm）；前端据此给出"默认入口无法确定"的诚实文案。
+    anchored: bool,
+}
+
+/// 探测各工具的安装分布：枚举所有安装、标记冲突、生成锚定升级命令。只读、无副作用。
+/// 诊断按钮、升级前确认、升级后补诊共用此命令，各取所需字段——避免对同一份枚举结果
+/// 散落多套下游判定。
+#[tauri::command]
+pub async fn probe_tool_installations(
+    tools: Vec<String>,
+) -> Result<Vec<ToolInstallationReport>, String> {
+    let requested = normalize_requested_tools(&tools);
+    if requested.is_empty() {
+        return Err("No supported tools selected".to_string());
     }
+    tokio::task::spawn_blocking(move || {
+        requested
+            .into_iter()
+            .map(|tool| {
+                let installs = enumerate_tool_installations(tool);
+                let (command, needs_confirmation, anchored) = plan_command_for(tool, &installs);
+                let is_conflict = is_conflicting(&installs);
+                ToolInstallationReport {
+                    tool: tool.to_string(),
+                    installs,
+                    is_conflict,
+                    needs_confirmation,
+                    command,
+                    anchored,
+                }
+            })
+            .collect()
+    })
+    .await
+    .map_err(|e| format!("probe task join error: {e}"))
 }
 
 #[cfg(target_os = "windows")]
@@ -2330,6 +2527,256 @@ mod tests {
         assert_eq!(extract_version("claude 1.0.20"), "1.0.20");
         assert_eq!(extract_version("v2.3.4-beta.1"), "2.3.4-beta.1");
         assert_eq!(extract_version("no version here"), "no version here");
+    }
+
+    /// 锚定升级命令生成：用真实勘察到的安装路径固化为回归断言——
+    /// 一台机器上 4 个工具恰好对应 4 种升级方式（原生 self-update / brew / nvm npm /
+    /// homebrew npm），任何改动若打破其中一种都会立刻被这些用例拦下。
+    #[cfg(not(target_os = "windows"))]
+    mod anchored_upgrade {
+        use super::super::*;
+        use std::path::Path;
+
+        fn inst(path: &str, is_default: bool) -> ToolInstallation {
+            ToolInstallation {
+                path: path.to_string(),
+                version: None,
+                runnable: true,
+                error: None,
+                source: infer_install_source(Path::new(path)).to_string(),
+                is_path_default: is_default,
+            }
+        }
+
+        #[test]
+        fn claude_native_installer_uses_self_update() {
+            // ~/.local/bin/claude → 真身在 ~/.local/share/claude/versions/，自带 self-update；
+            // 它不归 npm 管，且在 PATH 里比 nvm/homebrew 更靠前，用 npm 升级纯属白装。
+            let cmd = anchored_command_from_paths(
+                "claude",
+                "/Users/me/.local/bin/claude",
+                "/Users/me/.local/share/claude/versions/2.1.146",
+            );
+            assert_eq!(cmd.as_deref(), Some("claude update"));
+        }
+
+        #[test]
+        fn gemini_homebrew_formula_uses_brew_upgrade() {
+            // /opt/homebrew/bin/gemini → Cellar/gemini-cli/...：是 brew formula 而非 npm 全局包，
+            // 且 formula 名(gemini-cli) ≠ npm 包名(@google/gemini-cli)。
+            let cmd = anchored_command_from_paths(
+                "gemini",
+                "/opt/homebrew/bin/gemini",
+                "/opt/homebrew/Cellar/gemini-cli/0.13.0/libexec/lib/node_modules/@google/gemini-cli/dist/index.js",
+            );
+            assert_eq!(cmd.as_deref(), Some("brew upgrade gemini-cli"));
+        }
+
+        #[test]
+        fn codex_nvm_anchors_to_that_npm() {
+            // 命令行命中 nvm 那处 → 升级写回同一个 node 的 npm，而非 PATH 第一个 npm。
+            let cmd = anchored_command_from_paths(
+                "codex",
+                "/Users/me/.nvm/versions/node/v22.14.0/bin/codex",
+                "/Users/me/.nvm/versions/node/v22.14.0/lib/node_modules/@openai/codex/bin/codex.js",
+            );
+            assert_eq!(
+                cmd.as_deref(),
+                Some("/Users/me/.nvm/versions/node/v22.14.0/bin/npm i -g @openai/codex@latest")
+            );
+        }
+
+        #[test]
+        fn homebrew_npm_global_package_anchors_not_brew() {
+            // openclaw 装在 Homebrew node 的全局目录(lib/node_modules，非 Cellar)：
+            // 是 npm 全局包，走 npm 锚定而非 brew upgrade。
+            let cmd = anchored_command_from_paths(
+                "openclaw",
+                "/opt/homebrew/bin/openclaw",
+                "/opt/homebrew/lib/node_modules/openclaw/openclaw.mjs",
+            );
+            assert_eq!(
+                cmd.as_deref(),
+                Some("/opt/homebrew/bin/npm i -g openclaw@latest")
+            );
+        }
+
+        #[test]
+        fn volta_uses_volta_install() {
+            let cmd = anchored_command_from_paths(
+                "codex",
+                "/Users/me/.volta/bin/codex",
+                "/Users/me/.volta/tools/image/packages/codex/lib/node_modules/@openai/codex",
+            );
+            assert_eq!(cmd.as_deref(), Some("volta install @openai/codex"));
+        }
+
+        #[test]
+        fn bun_uses_bun_add() {
+            let cmd = anchored_command_from_paths(
+                "opencode",
+                "/Users/me/.bun/bin/opencode",
+                "/Users/me/.bun/install/global/node_modules/opencode-ai/bin/opencode",
+            );
+            assert_eq!(cmd.as_deref(), Some("bun add -g opencode-ai@latest"));
+        }
+
+        #[test]
+        fn hermes_has_no_npm_anchor() {
+            // hermes 走 pip，不在 npm 包表 → 锚定返回 None，调用方回退到静态 pip 升级命令。
+            let cmd = anchored_command_from_paths(
+                "hermes",
+                "/usr/local/bin/hermes",
+                "/usr/local/bin/hermes",
+            );
+            assert_eq!(cmd, None);
+        }
+
+        #[test]
+        fn system_install_without_sibling_npm_is_not_anchored() {
+            // opencode install.sh 装到 ~/.opencode/bin（独立二进制、无同级 npm）：
+            // 不能锚定到 `<dir>/npm`（必失败），返回 None 让调用方回退静态命令。
+            let cmd = anchored_command_from_paths(
+                "opencode",
+                "/Users/me/.opencode/bin/opencode",
+                "/Users/me/.opencode/bin/opencode",
+            );
+            assert_eq!(cmd, None);
+        }
+
+        #[test]
+        fn go_bin_install_is_not_anchored() {
+            // ~/go/bin 同理：无同级 npm。
+            let cmd = anchored_command_from_paths(
+                "opencode",
+                "/Users/me/go/bin/opencode",
+                "/Users/me/go/bin/opencode",
+            );
+            assert_eq!(cmd, None);
+        }
+
+        #[test]
+        fn fnm_install_anchors_to_that_npm() {
+            // fnm 是自带同级 npm 的 node 管理器 → 锚定到那处的 npm。
+            let cmd = anchored_command_from_paths(
+                "codex",
+                "/Users/me/.local/share/fnm_multishells/12345_abc/bin/codex",
+                "/Users/me/.local/share/fnm_multishells/12345_abc/lib/node_modules/@openai/codex/bin/codex.js",
+            );
+            assert_eq!(
+                cmd.as_deref(),
+                Some(
+                    "/Users/me/.local/share/fnm_multishells/12345_abc/bin/npm i -g @openai/codex@latest"
+                )
+            );
+        }
+
+        #[test]
+        fn path_with_space_is_quoted() {
+            let cmd = anchored_command_from_paths(
+                "codex",
+                "/Users/my name/.nvm/versions/node/v22/bin/codex",
+                "/Users/my name/.nvm/versions/node/v22/lib/node_modules/@openai/codex/bin/codex.js",
+            );
+            assert_eq!(
+                cmd.as_deref(),
+                Some("'/Users/my name/.nvm/versions/node/v22/bin/npm' i -g @openai/codex@latest")
+            );
+        }
+
+        #[test]
+        fn brew_formula_extraction() {
+            assert_eq!(
+                brew_formula_from_path("/opt/homebrew/Cellar/gemini-cli/0.13.0/bin/gemini")
+                    .as_deref(),
+                Some("gemini-cli")
+            );
+            // node 全局包不在 Cellar 下 → 不是 formula。
+            assert_eq!(
+                brew_formula_from_path("/opt/homebrew/lib/node_modules/openclaw/openclaw.mjs"),
+                None
+            );
+            assert_eq!(
+                brew_formula_from_path("/Users/me/.nvm/versions/node/v22/lib/node_modules/x"),
+                None
+            );
+        }
+
+        #[test]
+        fn default_install_prefers_path_default() {
+            let installs = vec![
+                inst("/opt/homebrew/bin/openclaw", false),
+                inst("/Users/me/.nvm/versions/node/v22/bin/openclaw", true),
+            ];
+            assert_eq!(
+                default_install(&installs).map(|i| i.path.as_str()),
+                Some("/Users/me/.nvm/versions/node/v22/bin/openclaw")
+            );
+        }
+
+        #[test]
+        fn default_install_falls_back_to_sole_entry() {
+            let installs = vec![inst("/opt/homebrew/bin/gemini", false)];
+            assert_eq!(
+                default_install(&installs).map(|i| i.path.as_str()),
+                Some("/opt/homebrew/bin/gemini")
+            );
+        }
+
+        #[test]
+        fn default_install_none_when_ambiguous() {
+            let installs = vec![
+                inst("/opt/homebrew/bin/openclaw", false),
+                inst("/Users/me/.nvm/versions/node/v22/bin/openclaw", false),
+            ];
+            assert!(default_install(&installs).is_none());
+        }
+
+        #[test]
+        fn first_abs_path_line_skips_shell_noise() {
+            // 交互式 .zshrc 先打印欢迎语（如 powerlevel10k / 自定义提示），
+            // command -v 的真实路径在其后 → 跳过噪音取真路径。
+            assert_eq!(
+                first_abs_path_line("🚀 Welcome back!\n/Users/me/.local/bin/claude\n"),
+                Some("/Users/me/.local/bin/claude")
+            );
+            // 无噪音时取第一行。
+            assert_eq!(
+                first_abs_path_line("/opt/homebrew/bin/gemini\n"),
+                Some("/opt/homebrew/bin/gemini")
+            );
+            // 输出里没有任何绝对路径 → None。
+            assert_eq!(first_abs_path_line("welcome\nbye\n"), None);
+        }
+
+        #[test]
+        fn is_conflicting_thresholds() {
+            let make = |version: Option<&str>, runnable: bool| ToolInstallation {
+                path: "/x".to_string(),
+                version: version.map(str::to_string),
+                runnable,
+                error: None,
+                source: "nvm".to_string(),
+                is_path_default: false,
+            };
+            // 单处 → 不冲突。
+            assert!(!is_conflicting(&[make(Some("1.0.0"), true)]));
+            // 两处同版本、都能跑 → 不冲突（同版本装两遍不打扰）。
+            assert!(!is_conflicting(&[
+                make(Some("1.0.0"), true),
+                make(Some("1.0.0"), true)
+            ]));
+            // 版本分歧 → 冲突。
+            assert!(is_conflicting(&[
+                make(Some("1.0.0"), true),
+                make(Some("2.0.0"), true)
+            ]));
+            // 同版本但运行态混合（一个能跑、一个跑不起来）→ 冲突。
+            assert!(is_conflicting(&[
+                make(Some("1.0.0"), true),
+                make(Some("1.0.0"), false)
+            ]));
+        }
     }
 
     #[cfg(target_os = "windows")]

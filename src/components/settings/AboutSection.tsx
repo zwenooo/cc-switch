@@ -28,7 +28,10 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { getVersion } from "@tauri-apps/api/app";
 import { settingsApi } from "@/lib/api";
-import type { ToolInstallation } from "@/lib/api/settings";
+import type {
+  ToolInstallation,
+  ToolInstallationReport,
+} from "@/lib/api/settings";
 import { useUpdate } from "@/contexts/UpdateContext";
 import { relaunchApp } from "@/lib/updater";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +40,8 @@ import appIcon from "@/assets/icons/app-icon.png";
 import { APP_ICON_MAP } from "@/config/appConfig";
 import type { AppId } from "@/lib/api/types";
 import { extractErrorMessage } from "@/utils/errorUtils";
+import { ToolUpgradeConfirmDialog } from "./ToolUpgradeConfirmDialog";
+import { ToolInstallRow } from "./ToolInstallRow";
 
 interface AboutSectionProps {
   isPortable: boolean;
@@ -121,6 +126,12 @@ const TOOL_DISPLAY_NAMES: Record<ToolName, string> = {
   openclaw: "OpenClaw",
   hermes: "Hermes",
 };
+
+// 后端返回的 tool 是 string；这里收敛唯一的 ToolName 断言与兜底，供升级确认
+// 对话框按工具名展示（避免在 JSX 里内联 cast、且每次渲染都新建闭包）。
+function toolDisplayName(tool: string): string {
+  return TOOL_DISPLAY_NAMES[tool as ToolName] ?? tool;
+}
 
 const TOOL_APP_IDS: Record<ToolName, AppId> = {
   claude: "claude",
@@ -217,6 +228,12 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
     Partial<Record<ToolName, ToolInstallation[]>>
   >({});
   const [isDiagnosingAll, setIsDiagnosingAll] = useState(false);
+  // 升级前探测到「多处安装需确认」时暂存：toolNames=本次要升级的全部工具，
+  // plans=其中需要确认的（≥2 处）那些。用户确认后对 toolNames 整体执行升级。
+  const [pendingUpgrade, setPendingUpgrade] = useState<{
+    toolNames: ToolName[];
+    plans: ToolInstallationReport[];
+  } | null>(null);
 
   const toolVersionByName = useMemo(() => {
     return new Map(toolVersions.map((tool) => [tool.name, tool]));
@@ -450,14 +467,22 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
     }
   }, [t]);
 
-  // 升级后自动补诊单个工具：静默后台执行，仅在确有冲突时写入结果，
-  // 无冲突不弹 toast、不报错打扰——与用户主动点的全量诊断区别对待。
+  // 升级后自动补诊单个工具：静默后台执行。有冲突写入结果；无冲突则清掉该工具可能残留
+  // 的过期冲突展示（外部卸载/修复后冲突可能已消失，不清会一直显示旧列表）。不弹 toast、
+  // 不报错打扰——与用户主动点的全量诊断区别对待。
   const diagnoseToolSilently = useCallback(async (toolName: ToolName) => {
     try {
-      const installs = await settingsApi.diagnoseToolInstallations(toolName);
-      if (installs.length > 0) {
-        setToolDiagnostics((prev) => ({ ...prev, [toolName]: installs }));
-      }
+      const [report] = await settingsApi.probeToolInstallations([toolName]);
+      setToolDiagnostics((prev) => {
+        if (report?.is_conflict) {
+          return { ...prev, [toolName]: report.installs };
+        }
+        // 无冲突：清掉残留;无旧结果则返回同引用，避免无谓 re-render。
+        if (!(toolName in prev)) return prev;
+        const next = { ...prev };
+        delete next[toolName];
+        return next;
+      });
     } catch (error) {
       console.error(
         `[AboutSection] Auto-diagnose failed for ${toolName}`,
@@ -471,17 +496,14 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
   const handleDiagnoseAll = useCallback(async () => {
     setIsDiagnosingAll(true);
     try {
-      const entries = await Promise.all(
-        TOOL_NAMES.map(
-          async (name) =>
-            [name, await settingsApi.diagnoseToolInstallations(name)] as const,
-        ),
-      );
+      const reports = await settingsApi.probeToolInstallations([...TOOL_NAMES]);
       const next: Partial<Record<ToolName, ToolInstallation[]>> = {};
       let conflicts = 0;
-      for (const [name, installs] of entries) {
-        next[name] = installs;
-        if (installs.length > 0) conflicts += 1;
+      for (const report of reports) {
+        if (report.is_conflict) {
+          next[report.tool as ToolName] = report.installs;
+          conflicts += 1;
+        }
       }
       setToolDiagnostics(next);
       if (conflicts === 0) {
@@ -498,10 +520,9 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
     }
   }, [t]);
 
-  const handleRunToolAction = useCallback(
+  // 实际执行安装/升级的串行循环（已通过任何必要的确认后才调用）。
+  const executeRun = useCallback(
     async (toolNames: ToolName[], action: ToolLifecycleAction) => {
-      if (toolNames.length === 0) return;
-
       const isBatch = toolNames.length > 1;
       if (isBatch) {
         setBatchAction(action);
@@ -517,9 +538,6 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
 
       for (const toolName of toolNames) {
         setToolActions((prev) => ({ ...prev, [toolName]: action }));
-        // 记录执行前的版本：用于识别"升级跑完但版本没变"——这正是多处安装互相
-        // 打架的头号症状（升级写入 A 处、PATH 实际仍跑 B 处），需自动触发诊断。
-        const beforeVersion = toolVersionByName.get(toolName)?.version ?? null;
         try {
           await settingsApi.runToolLifecycleAction(
             [toolName],
@@ -534,12 +552,9 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
           const tool = refreshed.find((t) => t.name === toolName);
           if (tool?.version) {
             succeeded += 1;
-            // 升级命令成功、版本号却没动：大概率被另一处安装遮蔽，自动诊断。
-            if (
-              action === "update" &&
-              beforeVersion &&
-              tool.version === beforeVersion
-            ) {
+            // 升级成功后无条件补诊：版本没变多半被另一处遮蔽，版本变了另一处也可能仍在，
+            // 两种都要刷新冲突展示（diagnoseToolSilently 无冲突时会自动清旧）。
+            if (action === "update") {
               void diagnoseToolSilently(toolName);
             }
           } else {
@@ -625,14 +640,45 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
         );
       }
     },
-    [
-      t,
-      wslShellByTool,
-      refreshToolVersions,
-      toolVersionByName,
-      diagnoseToolSilently,
-    ],
+    [t, wslShellByTool, refreshToolVersions, diagnoseToolSilently],
   );
+
+  // 升级前先探测安装分布：检测到多处安装（命令行只命中其中一处）时弹确认，
+  // 让用户在「升级只动默认那处、其余不动」这件事上知情。install 无锚点，直接执行。
+  const handleRunToolAction = useCallback(
+    async (toolNames: ToolName[], action: ToolLifecycleAction) => {
+      if (toolNames.length === 0) return;
+      if (action === "install") {
+        await executeRun(toolNames, action);
+        return;
+      }
+      let reports: ToolInstallationReport[];
+      try {
+        reports = await settingsApi.probeToolInstallations(toolNames);
+      } catch (error) {
+        // 探测失败不应阻断升级：退回直接执行（等同旧行为）。
+        console.error("[AboutSection] probeToolInstallations failed", error);
+        await executeRun(toolNames, action);
+        return;
+      }
+      const needConfirm = reports.filter((r) => r.needs_confirmation);
+      if (needConfirm.length === 0) {
+        await executeRun(toolNames, action);
+        return;
+      }
+      setPendingUpgrade({ toolNames, plans: needConfirm });
+    },
+    [executeRun],
+  );
+
+  const handleConfirmUpgrade = useCallback(() => {
+    if (pendingUpgrade) {
+      void executeRun(pendingUpgrade.toolNames, "update");
+    }
+    setPendingUpgrade(null);
+  }, [pendingUpgrade, executeRun]);
+
+  const handleCancelUpgrade = useCallback(() => setPendingUpgrade(null), []);
 
   const displayVersion = version ?? t("common.unknown");
 
@@ -998,33 +1044,7 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
                         );
                         return (
                           <li key={inst.path} className="space-y-1">
-                            <div className="flex items-center gap-1.5 text-[10px]">
-                              <span className="shrink-0 rounded bg-background/80 px-1 py-0.5 font-mono text-muted-foreground">
-                                {inst.source}
-                              </span>
-                              <span
-                                className="min-w-0 flex-1 truncate font-mono text-muted-foreground"
-                                title={inst.path}
-                              >
-                                {inst.path}
-                              </span>
-                              <span
-                                className={
-                                  inst.runnable
-                                    ? "shrink-0 font-mono text-foreground"
-                                    : "shrink-0 text-yellow-600 dark:text-yellow-400"
-                                }
-                              >
-                                {inst.runnable
-                                  ? inst.version
-                                  : t("settings.toolConflictNotRunnable")}
-                              </span>
-                              {inst.is_path_default && (
-                                <span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-1 py-0.5 text-[9px] text-primary">
-                                  {t("settings.toolConflictDefault")}
-                                </span>
-                              )}
-                            </div>
+                            <ToolInstallRow inst={inst} />
                             {/* 卸载建议命令：仅供复制，绝不代执行。前置红色垃圾桶图标
                                 明示这是卸载（破坏性）命令，避免误以为是普通信息。 */}
                             <div className="flex items-center gap-1.5">
@@ -1132,6 +1152,14 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
           </div>
         )}
       </motion.div>
+
+      <ToolUpgradeConfirmDialog
+        isOpen={pendingUpgrade !== null}
+        plans={pendingUpgrade?.plans ?? []}
+        displayName={toolDisplayName}
+        onConfirm={handleConfirmUpgrade}
+        onCancel={handleCancelUpgrade}
+      />
     </motion.section>
   );
 }

@@ -208,8 +208,12 @@ export const settingsApi = {
     });
   },
 
-  async diagnoseToolInstallations(tool: string): Promise<ToolInstallation[]> {
-    return await invoke("diagnose_tool_installations", { tool });
+  /** 探测各工具安装分布：枚举所有安装、标记冲突、生成锚定升级命令。
+   *  诊断按钮、升级前确认、升级后补诊共用此命令，各取所需字段。 */
+  async probeToolInstallations(
+    tools: string[],
+  ): Promise<ToolInstallationReport[]> {
+    return await invoke("probe_tool_installations", { tools });
   },
 
   async getRectifierConfig(): Promise<RectifierConfig> {
@@ -245,6 +249,16 @@ export interface ToolInstallation {
   error: string | null;
   source: string;
   is_path_default: boolean;
+}
+
+/** 一次"探测工具安装分布"的结果。字段对应后端 ToolInstallationReport。 */
+export interface ToolInstallationReport {
+  tool: string;
+  installs: ToolInstallation[];
+  is_conflict: boolean;
+  needs_confirmation: boolean;
+  command: string;
+  anchored: boolean;
 }
 
 export interface RectifierConfig {
