@@ -306,7 +306,13 @@ fn build_tool_lifecycle_command(
     let mut lines = Vec::new();
 
     #[cfg(not(target_os = "windows"))]
-    lines.push("set -e".to_string());
+    {
+        // set -e 让任一步失败即中止;set -o pipefail 让管道前段失败也参与判定——
+        // install 的 `curl ... | bash` 路径下,curl 失败时 bash 收空 stdin 仍 exit 0,
+        // 没有 pipefail 会"假成功"而绕过 `||` 兜底链,工具其实没装上。
+        lines.push("set -e".to_string());
+        lines.push("set -o pipefail".to_string());
+    }
 
     #[cfg(target_os = "windows")]
     lines.push("@echo off".to_string());
@@ -393,14 +399,15 @@ fn build_tool_action_line(
     {
         let _ = (wsl_shell, wsl_shell_flag);
         // update 锚定到命令行实际命中的那处（写回同一个 node / brew / 原生安装器），
-        // 而非裸 `npm` 落到 PATH 第一个 npm；install 或探不到默认安装则用静态裸命令。
+        // 而非裸 `npm` 落到 PATH 第一个 npm；install 走「上游推荐 || npm 兜底」短路链
+        // （有 native installer 的工具如 claude/opencode），其余仍裸 npm/pip。
         let command = match action {
             ToolLifecycleAction::Update => {
                 let installs = enumerate_tool_installations(tool);
                 installs_anchored_command(tool, &installs)
                     .unwrap_or_else(|| static_fallback_command(tool))
             }
-            ToolLifecycleAction::Install => static_fallback_command(tool),
+            ToolLifecycleAction::Install => install_command_for(tool),
         };
         if command.is_empty() {
             return Err(format!("Unsupported tool action target: {tool}"));
@@ -1503,6 +1510,27 @@ fn static_fallback_command(tool: &str) -> String {
     tool_action_shell_command(tool, ToolLifecycleAction::Update)
         .map(|s| s.to_string())
         .unwrap_or_default()
+}
+
+/// 新装(install)的命令:对有官方 installer 的工具走「上游推荐 || npm 兜底」短路链,
+/// 其余工具透传到 `static_fallback_command`(= 与 update fallback 同一张 npm/pip 表)。
+///
+/// 设计理由:
+/// - install 没有锚点可言(从无到有),但**有"上游推荐方式"这一事实** ——
+///   Anthropic 和 SST(OpenCode)都已将自家 native installer 列为首推、把 npm 列为传统方式。
+///   把这层认知补进来,让 install 表与 update 端的锚定决策树共用同一份"上游事实"。
+/// - 短路链(POSIX `||`)保证 URL 不可达/防火墙拦截时仍能装上,降级到 npm。
+/// - 仅非 Windows 启用:claude.ai/install.sh、opencode.ai/install 都是 bash 脚本,
+///   Windows(及不带 bash 的环境)继续走原 `tool_action_shell_command` 的 npm 命令。
+/// - 配套要求:`build_tool_lifecycle_command` 头部已开 `set -o pipefail`,确保
+///   `curl ... | bash` 中 curl 失败能让管道整体非零、`||` 兜底真正触发。
+#[cfg(not(target_os = "windows"))]
+fn install_command_for(tool: &str) -> String {
+    match tool {
+        "claude" => "curl -fsSL https://claude.ai/install.sh | bash || npm i -g @anthropic-ai/claude-code@latest".to_string(),
+        "opencode" => "curl -fsSL https://opencode.ai/install | bash || npm i -g opencode-ai@latest".to_string(),
+        _ => static_fallback_command(tool),
+    }
 }
 
 /// 计算某工具的升级命令与"是否需确认"。非 Windows 走锚定；Windows 保持静态命令、
@@ -2776,6 +2804,81 @@ mod tests {
                 make(Some("1.0.0"), true),
                 make(Some("1.0.0"), false)
             ]));
+        }
+    }
+
+    /// install 端的"上游推荐 || npm 兜底"短路链:把工具→官方安装方式这一上游事实
+    /// 固化为回归断言。任何方案改动若打破短路链结构或 URL,都会被这些用例拦下。
+    #[cfg(not(target_os = "windows"))]
+    mod install_strategy {
+        use super::super::*;
+
+        #[test]
+        fn claude_install_prefers_native_with_npm_fallback() {
+            // Anthropic 现在主推 native installer(claude.ai/install.sh),
+            // 网络不通时短路到 npm 仍能装上;两段都得在,顺序也得对。
+            let cmd = install_command_for("claude");
+            assert!(
+                cmd.contains("https://claude.ai/install.sh"),
+                "should include official installer URL: {cmd}"
+            );
+            assert!(
+                cmd.contains("@anthropic-ai/claude-code@latest"),
+                "should keep npm package as fallback: {cmd}"
+            );
+            let parts: Vec<&str> = cmd.split("||").collect();
+            assert_eq!(parts.len(), 2, "should be a two-step short-circuit chain");
+            assert!(parts[0].contains("install.sh"), "native first: {cmd}");
+            assert!(parts[1].contains("npm i -g"), "npm second: {cmd}");
+        }
+
+        #[test]
+        fn opencode_install_prefers_native_with_npm_fallback() {
+            // SST 自家 install.sh 与 claude 同形态:bash 脚本、网络下载、装到 ~/.opencode/bin。
+            let cmd = install_command_for("opencode");
+            assert!(
+                cmd.contains("https://opencode.ai/install"),
+                "should include official installer URL: {cmd}"
+            );
+            assert!(
+                cmd.contains("opencode-ai@latest"),
+                "should keep npm package as fallback: {cmd}"
+            );
+            assert!(cmd.contains("||"), "should chain fallback: {cmd}");
+        }
+
+        #[test]
+        fn codex_install_keeps_static_npm() {
+            // OpenAI 暂无独立 native installer,保持原裸 npm,不引入兜底链(无东西可兜底)。
+            let cmd = install_command_for("codex");
+            assert_eq!(cmd, "npm i -g @openai/codex@latest");
+            assert!(!cmd.contains("||"));
+        }
+
+        #[test]
+        fn gemini_install_keeps_static_npm() {
+            // Google 文档同时支持 brew/npm,但本表保持与 update fallback 一致的 npm。
+            // 用户若已装 brew gemini-cli,update 路径的锚定会识别 formula → brew upgrade,
+            // 所以 install 端不强行替用户决策"用 brew 还是 npm"。
+            let cmd = install_command_for("gemini");
+            assert_eq!(cmd, "npm i -g @google/gemini-cli@latest");
+        }
+
+        #[test]
+        fn openclaw_install_keeps_static_npm() {
+            let cmd = install_command_for("openclaw");
+            assert_eq!(cmd, "npm i -g openclaw@latest");
+        }
+
+        #[test]
+        fn hermes_install_keeps_static_pip_chain() {
+            // hermes 已经有 python3 || python 兜底,install_command_for 透传到 fallback。
+            let cmd = install_command_for("hermes");
+            assert!(cmd.contains("hermes-agent[web]"), "pip package: {cmd}");
+            assert!(
+                cmd.contains("python3") && cmd.contains("python "),
+                "should keep python3→python fallback chain: {cmd}"
+            );
         }
     }
 
