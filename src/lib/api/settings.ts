@@ -249,6 +249,20 @@ export interface ToolInstallation {
   error: string | null;
   source: string;
   is_path_default: boolean;
+  /** 后端拼好的卸载命令(仅展示给用户复制,UI 不代执行)。source-aware:
+   *  brew formula → brew uninstall、volta → volta uninstall、bun → bun rm -g、
+   *  其余 npm 全局 → 锚定该处同目录 npm 的 npm rm -g。
+   *  此前前端按 source 字符串自己拼,无法区分 brew formula vs homebrew npm 全局包,
+   *  会给 brew formula 错拼 `npm rm -g`。现统一在后端用 brew_formula_from_path 的
+   *  真身判定生成,与升级路径共享判定逻辑。 */
+  uninstall_command: string;
+  /** 该卸载命令是否是 Windows cmd 兼容形式(含 quoted 路径,PowerShell 用户需 `&`
+   *  call operator 前缀)。前端据此条件渲染一行 PowerShell 限制提示。
+   *  **必须由后端给出**:POSIX `shell_single_quote` 转义形式 `'"'"'` 含双引号,
+   *  前端 `cmd.includes('"')` 会把 POSIX 路径带 `'` 的用户(macOS `o'leary`)
+   *  误判为 Windows cmd 形式。后端用 `cfg!(target_os = "windows") && contains('"')`
+   *  算,POSIX 编译时整体短路为 false,精确锁定触发域。 */
+  uninstall_command_needs_cmd_hint: boolean;
 }
 
 /** 一次"探测工具安装分布"的结果。字段对应后端 ToolInstallationReport。 */

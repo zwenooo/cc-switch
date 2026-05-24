@@ -142,57 +142,11 @@ const TOOL_APP_IDS: Record<ToolName, AppId> = {
   hermes: "hermes",
 };
 
-// 各工具的全局包名：npm 系用 npm 包名，hermes 例外（pip 包 hermes-agent）。
-const TOOL_NPM_PACKAGES: Record<Exclude<ToolName, "hermes">, string> = {
-  claude: "@anthropic-ai/claude-code",
-  codex: "@openai/codex",
-  gemini: "@google/gemini-cli",
-  opencode: "opencode-ai",
-  openclaw: "openclaw",
-};
-
-// 取路径的目录部分（兼容 / 与 \ 分隔符）；无分隔符返回空串。
-function dirOfPath(p: string): string {
-  const i = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
-  return i > 0 ? p.slice(0, i) : "";
-}
-
-// 路径是否为 Windows 风格（含反斜杠或盘符前缀）。
-function isWindowsPath(p: string): boolean {
-  return p.includes("\\") || /^[a-zA-Z]:/.test(p);
-}
-
-// 含空格时加引号，避免命令被 shell 拆断。
-function shellQuote(s: string): string {
-  return s.includes(" ") ? `"${s}"` : s;
-}
-
-// 为「某一处具体安装」生成卸载建议命令（只读、供复制，绝不代执行）。
-// 关键：用该处同目录的 npm 精确作用于这一处的 node 安装，避免裸 `npm rm -g`
-// 误删了当前激活（可能是想保留的默认）那处。volta/bun/pip 走各自的卸载器。
-function buildUninstallCommand(
-  toolName: ToolName,
-  inst: ToolInstallation,
-): string {
-  if (toolName === "hermes") {
-    return "python3 -m pip uninstall hermes-agent";
-  }
-  const pkg = TOOL_NPM_PACKAGES[toolName];
-  if (inst.source === "volta") {
-    return `volta uninstall ${pkg}`;
-  }
-  if (inst.source === "bun") {
-    return `bun rm -g ${pkg}`;
-  }
-  // nvm / fnm / mise / homebrew / system / scoop 上的 node 全局包：统一 npm rm -g，
-  // 但锚定到该处同目录的 npm 以删对版本。
-  const dir = dirOfPath(inst.path);
-  const win = isWindowsPath(inst.path);
-  const npmBin = win ? "npm.cmd" : "npm";
-  const npm = dir ? shellQuote(`${dir}${win ? "\\" : "/"}${npmBin}`) : "npm";
-  return `${npm} rm -g ${pkg}`;
-}
-
+// 卸载命令历史上在前端按 inst.source 拼,但 `source` 把 brew formula 和 homebrew npm
+// 全局包都归为 "homebrew"——前端无法区分两者(formula 真身在 /Cellar/、npm 全局在
+// /opt/homebrew/lib/node_modules/),会给 brew formula 错拼 `npm rm -g` 必失败。
+// 现已迁回后端 uninstall_command_from_paths,复用 brew_formula_from_path 真身判定;
+// 这里只读 inst.uninstall_command,不再前端拼。
 export function AboutSection({ isPortable }: AboutSectionProps) {
   // ... (use hooks as before) ...
   const { t } = useTranslation();
@@ -1081,10 +1035,7 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
                     </p>
                     <ul className="space-y-1.5">
                       {conflicts.map((inst) => {
-                        const uninstallCmd = buildUninstallCommand(
-                          toolName,
-                          inst,
-                        );
+                        const uninstallCmd = inst.uninstall_command;
                         return (
                           <li key={inst.path} className="space-y-1">
                             <ToolInstallRow inst={inst} />
@@ -1104,6 +1055,17 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
                                 <Copy className="h-3 w-3" />
                               </button>
                             </div>
+                            {/* PowerShell 限制提示：用后端结构化字段而非前端 string match。
+                                **不能用 uninstallCmd.includes('"')**：POSIX 的
+                                shell_single_quote 转义是 `'"'"'` 也含 `"`，含 `'` 的 POSIX
+                                路径会被误判为 Windows cmd 形式。后端用
+                                `cfg!(target_os = "windows") && contains('"')` 算这个 bit，
+                                POSIX 编译时短路 false，前端只读 bool。 */}
+                            {inst.uninstall_command_needs_cmd_hint && (
+                              <p className="text-[10px] leading-snug text-muted-foreground/80">
+                                {t("settings.toolUninstallPwshHint")}
+                              </p>
+                            )}
                           </li>
                         );
                       })}

@@ -686,6 +686,7 @@
     "toolDiagnoseFailed": "诊断失败",
     "toolUninstallCopyHint": "复制卸载命令（不会自动执行）",
     "toolUninstallCopied": "卸载命令已复制",
+    "toolUninstallPwshHint": "适用于命令提示符 (cmd)。PowerShell 用户需在命令前加 `&`（call 运算符），否则带引号的路径会被当作字符串字面值。",
     "toolUpgradeConfirmTitle": "确认升级位置",
     "toolUpgradeConfirmHint": "检测到多处安装。本次升级不会全部更新，具体作用的位置以下方各项为准。",
     "toolUpgradeWillRun": "将执行：",
