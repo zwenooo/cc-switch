@@ -14,7 +14,6 @@ import {
   ArrowUpCircle,
   ChevronDown,
   Stethoscope,
-  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -142,11 +141,6 @@ const TOOL_APP_IDS: Record<ToolName, AppId> = {
   hermes: "hermes",
 };
 
-// 卸载命令历史上在前端按 inst.source 拼,但 `source` 把 brew formula 和 homebrew npm
-// 全局包都归为 "homebrew"——前端无法区分两者(formula 真身在 /Cellar/、npm 全局在
-// /opt/homebrew/lib/node_modules/),会给 brew formula 错拼 `npm rm -g` 必失败。
-// 现已迁回后端 uninstall_command_from_paths,复用 brew_formula_from_path 真身判定;
-// 这里只读 inst.uninstall_command,不再前端拼。
 export function AboutSection({ isPortable }: AboutSectionProps) {
   // ... (use hooks as before) ...
   const { t } = useTranslation();
@@ -406,20 +400,6 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
       toast.error(t("settings.checkUpdateFailed"));
     }
   }, [checkUpdate, hasUpdate, isPortable, resetDismiss, t, updateHandle]);
-
-  // 复制单条卸载命令到剪贴板（只复制，不执行）。
-  const handleCopyCommand = useCallback(
-    async (command: string) => {
-      try {
-        await navigator.clipboard.writeText(command);
-        toast.success(t("settings.toolUninstallCopied"), { closeButton: true });
-      } catch (error) {
-        console.error("[AboutSection] Failed to copy command", error);
-        toast.error(t("settings.installCommandsCopyFailed"));
-      }
-    },
-    [t],
-  );
 
   const handleCopyInstallCommands = useCallback(async () => {
     try {
@@ -1034,41 +1014,11 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
                       {t("settings.toolConflictHint")}
                     </p>
                     <ul className="space-y-1.5">
-                      {conflicts.map((inst) => {
-                        const uninstallCmd = inst.uninstall_command;
-                        return (
-                          <li key={inst.path} className="space-y-1">
-                            <ToolInstallRow inst={inst} />
-                            {/* 卸载建议命令：仅供复制，绝不代执行。前置红色垃圾桶图标
-                                明示这是卸载（破坏性）命令，避免误以为是普通信息。 */}
-                            <div className="flex items-center gap-1.5">
-                              <code className="min-w-0 flex-1 truncate rounded bg-background/80 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-                                {uninstallCmd}
-                              </code>
-                              <Trash2 className="h-3 w-3 shrink-0 text-red-500" />
-                              <button
-                                type="button"
-                                onClick={() => handleCopyCommand(uninstallCmd)}
-                                title={t("settings.toolUninstallCopyHint")}
-                                className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground"
-                              >
-                                <Copy className="h-3 w-3" />
-                              </button>
-                            </div>
-                            {/* PowerShell 限制提示：用后端结构化字段而非前端 string match。
-                                **不能用 uninstallCmd.includes('"')**：POSIX 的
-                                shell_single_quote 转义是 `'"'"'` 也含 `"`，含 `'` 的 POSIX
-                                路径会被误判为 Windows cmd 形式。后端用
-                                `cfg!(target_os = "windows") && contains('"')` 算这个 bit，
-                                POSIX 编译时短路 false，前端只读 bool。 */}
-                            {inst.uninstall_command_needs_cmd_hint && (
-                              <p className="text-[10px] leading-snug text-muted-foreground/80">
-                                {t("settings.toolUninstallPwshHint")}
-                              </p>
-                            )}
-                          </li>
-                        );
-                      })}
+                      {conflicts.map((inst) => (
+                        <li key={inst.path}>
+                          <ToolInstallRow inst={inst} />
+                        </li>
+                      ))}
                     </ul>
                   </div>
                 )}

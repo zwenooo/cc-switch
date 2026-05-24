@@ -1268,33 +1268,6 @@ pub struct ToolInstallation {
     source: String,
     /// 是否为 PATH 解析到的那处（= 命令行默认，也是升级会作用的目标）。
     is_path_default: bool,
-    /// 卸载该处的命令(仅展示给用户复制,UI 不代执行)。源感知 + 真身感知:
-    /// brew formula → `brew uninstall <formula>`、volta → `volta uninstall`、bun →
-    /// `bun rm -g`、pnpm → `pnpm rm -g`、其余 npm 全局 → 锚定那处同目录 npm 的
-    /// `npm rm -g`(附物理删除兜底)。复用 `brew_formula_from_path`、`infer_install_source`、
-    /// `sibling_bin`,与升级路径(`anchored_command_from_paths`)共享真身判定——避免
-    /// 前端按 `source` 字符串拼命令时把"homebrew formula"和"homebrew node 的 npm 全局包"
-    /// 混为一谈。
-    ///
-    /// **eager 计算(与升级命令按需算的不对称是 by design)**:升级命令在
-    /// `installs_anchored_command` 里只为 default install 算一次;卸载命令则**每处
-    /// install 都预计算**进字段,因为冲突诊断 UI 需要为每处展示对应的卸载 hint——
-    /// 延后到二次 IPC 会增加"诊断 → 显示命令"的端到端延迟。计算成本是纯字符串
-    /// 扫描(评估:8 install × ~2μs ≈ 16μs,可忽略),不影响 probe 1-3s 主时延。
-    uninstall_command: String,
-    /// `uninstall_command` 是否是 Windows cmd 兼容形式(含 quoted 路径,PowerShell
-    /// 用户需 `&` call operator 前缀)。前端据此**条件渲染**一行 PowerShell 限制提示。
-    ///
-    /// **必须由后端提供结构化信号、前端不能 string match**:POSIX 的
-    /// `shell_single_quote` 转义形式是 `'"'"'`(关单引号 + 双引号包字面单引号 +
-    /// 重开)——含双引号!所以 macOS 用户名带 `'`(如 `o'leary`)时,POSIX 卸载命令
-    /// **巧合地也含 `"`**,前端 `cmd.includes('"')` 会**误判为 Windows cmd 形式**,
-    /// 给 POSIX 用户错误显示 PowerShell 提示。string-based 平台推断在这里 false-positive。
-    ///
-    /// 后端用 `cfg!(target_os = "windows") && uninstall_command.contains('"')` 算:
-    /// `cfg!` 是**编译时 ground truth**(不是字符串猜测),POSIX 编译时整体短路为
-    /// false,与 POSIX 单引号 escape 含 `"` 的形态完全无关。
-    uninstall_command_needs_cmd_hint: bool,
     /// canonicalize 解析后的真身路径(brew 形如 `Cellar/<formula>/...`、claude 原生形如
     /// `~/.local/share/claude/versions/...`),用于 `anchored_command_from_paths` 的真身
     /// 判定。`enumerate_tool_installations` 已经为去重算过一次,这里复用避免上游
@@ -1465,22 +1438,7 @@ fn enumerate_tool_installations(tool: &str) -> Vec<ToolInstallation> {
 
             let is_path_default = path_default.as_ref() == Some(&real);
             let path_str = tool_path.display().to_string();
-            // **source 在这里算一次,同时供 ToolInstallation.source 字段和
-            // uninstall_command_from_paths 的 match 用**(review N1):函数签名上
-            // source 作为参数传入,避免函数内部再 `infer_install_source(Path::new(bin_path))`
-            // 二次扫描 + 重复 lower-case 分配。同时把"路径分类"的契约外化——上下游
-            // 都以同一标签作判定,不会因函数内外重算意外漂移。
             let source = infer_install_source(&tool_path);
-            // 卸载提示与升级锚定共用同一份 (bin_path, real) —— 见
-            // `uninstall_command_from_paths` 的 doc:**前端按 source 字符串拼无法
-            // 区分 brew formula vs homebrew npm 全局包**,只能在后端拿真身判定。
-            let uninstall_command =
-                uninstall_command_from_paths(tool, &path_str, &real.to_string_lossy(), source);
-            // PowerShell hint 触发位:Windows + 命令含 quoted 路径。`cfg!` 是编译时
-            // 常量,POSIX 编译时整体短路为 false——这就把 POSIX 单引号 escape `'"'"'`
-            // 也含 `"` 的字面巧合从触发域里排除掉(见字段 doc)。
-            let uninstall_command_needs_cmd_hint =
-                cfg!(target_os = "windows") && uninstall_command.contains('"');
 
             installs.push(ToolInstallation {
                 path: path_str,
@@ -1489,8 +1447,6 @@ fn enumerate_tool_installations(tool: &str) -> Vec<ToolInstallation> {
                 error,
                 source: source.to_string(),
                 is_path_default,
-                uninstall_command,
-                uninstall_command_needs_cmd_hint,
                 // 复用上面 line ~1357 已 canonicalize 的真身,避免下游
                 // installs_anchored_command 再 canonicalize 一遍同一文件。
                 real: real.clone(),
@@ -1566,43 +1522,6 @@ fn quote_path_if_spaced(p: &str) -> String {
     }
 }
 
-/// **卸载 hint 专用 POSIX quoting**——白名单判定:全字符都在
-/// `[A-Za-z0-9._/+=:@-]` 安全集合内 → 保持裸路径(常规 nvm/brew/volta/bun 路径
-/// 以及 npm scope 包名 `@scope/pkg` 都命中,命令展示干净);任何不在集合的字符
-/// (包括空格、`;`、`$`、`` ` ``、`'`、`"`、`&`、`|`、`<`、`>`、`(`、`)`、`*`、
-/// `?`、`[`、`]`、`{`、`}`、`!`、`#`、换行、tab 等)→ 走 `shell_single_quote`
-/// 无条件强 quote。
-///
-/// **白名单含 `@`** :npm scope 包名形如 `@anthropic-ai/claude-code` /
-/// `@google/gemini-cli`,pkg_dir 必然含 `@`;且 `@` 在 bash/zsh/dash/sh 都无特殊
-/// 含义(zsh 的 `${var@P}` 是 parameter expansion 的修饰符,需要前缀 `$`,单独 `@`
-/// 字符在路径里无害),纳入白名单不引入风险。
-///
-/// **为什么不复用 `quote_path_if_spaced`**(P2 修复):后者只查空格,但卸载命令
-/// 是 destructive(`rm -rf <pkg_dir>`)——含 `;` / `` ` `` / `$(...)` 的路径会让
-/// shell 把卸载链拆成多条命令、把 rm 落到错的路径。升级命令"出错"是 inconvenient,
-/// 但卸载侧的 quoting 漏洞是 destructive risk,**安全门槛必须更高**。
-///
-/// **为什么用白名单而非黑名单**:shell 元字符列表长且 shell-specific(bash vs zsh
-/// vs dash 略有差异),黑名单容易漏。白名单只允许"绝对安全字符",其他一律 quote
-/// ——default-quoting 比 default-bare 更适合 destructive 命令。常规 POSIX 安装
-/// 路径 + npm 包名只用安全字符,白名单不影响展示美观。
-///
-/// 路径含安全集合外字符(如 home dir 名带 `;` `'` `$`)时,`shell_single_quote`
-/// 把单引号 escape 为 `'"'"'`(关引号 + 双引号包单引号 + 重开引号),跨
-/// bash/zsh/dash/sh 全部 POSIX 兼容。
-#[cfg(not(target_os = "windows"))]
-fn posix_quote_for_user_shell(p: &str) -> String {
-    let is_safe = |c: char| {
-        c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '/' | '+' | '=' | ':' | '-' | '@')
-    };
-    if p.chars().all(is_safe) {
-        p.to_string()
-    } else {
-        shell_single_quote(p)
-    }
-}
-
 /// 锚定路径走 `.bat` 文件且**被 `call` 调用**,需要为 batch 特殊字符做两层防御:
 ///
 /// **(1) `%` 经历两轮 percent expansion → 用 4 个 `%` 转义**。.bat 中字面 `%` 的
@@ -1644,51 +1563,6 @@ fn win_quote_path_for_batch(p: &str) -> String {
         win_double_quote(&escaped)
     } else {
         escaped
-    }
-}
-
-/// **复制给用户的命令**专用 Windows quoting,**目标语法为 cmd**——与
-/// `win_quote_path_for_batch` 的关键差异是**不做 `%` 转义**(本 helper 服务的
-/// 命令不进 .bat + call,只一轮 expansion 不需要 4 倍)。
-///
-/// **PowerShell 用户的已知限制**(P3, 2026-05-24):本 helper 生成的 quoted 路径
-/// (含空格时 `"C:\Program Files\nodejs\npm.cmd"`)在 PowerShell 下**当字符串字面
-/// 值,不会执行**——PowerShell 对含引号的可执行路径需要 call operator `&` 前缀:
-///
-/// ```text
-///     cmd:        "C:\Program Files\nodejs\npm.cmd" rm -g pkg  ← OK
-///     PowerShell: "C:\Program Files\nodejs\npm.cmd" rm -g pkg  ← 当字符串字面
-///     PowerShell: & "C:\Program Files\nodejs\npm.cmd" rm -g pkg  ← OK
-///     cmd:        & "C:\Program Files\nodejs\npm.cmd" rm -g pkg  ← `&` 是命令分隔符,报错
-/// ```
-///
-/// 两个 shell 在引号路径上语法完全不兼容,无法用一份 quoting 同时满足。本 helper
-/// 选 cmd 兼容形式(Windows 历史默认 shell;路径不含空格时 PowerShell 也能直接跑,
-/// 因为无引号路径在 PowerShell 下走 unquoted invocation)。**含空格路径的 PowerShell
-/// 用户需手动在命令前加 `&`** ——前端 UI 文案应明示此限制(否则用户照 hint 复制
-/// 粘到 PowerShell 会看到"字符串回显但什么都没执行"的迷惑现象)。
-///
-/// **`%` 字符的语义对比**:cmd 一轮展开会把 `%foo%` 当变量;PowerShell / bash on
-/// Windows / WSL 都无 % 展开(字面识别)。三套语义无法共存,**保持原始 `%`**
-/// 是最诚实的兜底——cmd 用户在含 `%` 路径下仍会被变量展开困住(cmd 固有限制,
-/// 双引号内 `%` 仍展开,任何 quoting 救不了);若用 batch quoter 的 4 倍 `%`,
-/// 则三个 shell 全部得到错路径(cmd 一轮变 `%%`、PowerShell/bash 字面 `%%%%`)。
-///
-/// **本 helper 与 `win_quote_path_for_batch` 必须保持镜像的部分**:token 边界字符
-/// (空格 & ( ) ^ ; < > | ,)的双引号包裹规则一致——这些字符在三个 shell 下都
-/// 用引号包裹保持字面,跨 shell 一致。
-///
-/// 使用场景仅限"卸载提示之类只展示不代执行的命令";.bat + call 链路坚决用
-/// `win_quote_path_for_batch`,否则两轮 expansion 下 % 字面会丢失。
-#[cfg(target_os = "windows")]
-fn win_quote_path_for_user_shell(p: &str) -> String {
-    let needs_quote = p
-        .chars()
-        .any(|c| matches!(c, ' ' | '&' | '(' | ')' | '^' | ';' | '<' | '>' | '|' | ','));
-    if needs_quote {
-        win_double_quote(p)
-    } else {
-        p.to_string()
     }
 }
 
@@ -1755,52 +1629,12 @@ fn sibling_bin(bin_path: &str, exe: &str) -> Option<String> {
     }
 }
 
-/// 卸载 hint 专用:取 sibling exe 绝对路径并 quote;推不出 sibling 时退化为**裸命令名**
-/// (让用户终端 PATH 默认那个工具处理)。
-///
-/// **与 anchored upgrade 不返 None 的差异**:`anchored_command_from_paths` 的 POSIX 版
-/// 用 `?` 短路返 `None`,让上游退化到静态命令并标 `anchored=false`;卸载 hint 是直接
-/// 给用户复制粘贴的——返 None 等于"不展示命令",诚实但 UX 差。退化为裸命令(无路径
-/// 前缀)反而是"明确意图 + 让用户终端自决"的合理兜底,与 `static_fallback_command` 同款。
-///
-/// **quoting 用 `posix_quote_for_user_shell` 而非 `quote_path_if_spaced`**(P2 修复):
-/// 卸载命令是 destructive(部分分支带 `rm -rf` 兜底),含 `;` / `` ` `` / `$` 的路径
-/// 必须强 quote 防止 shell 拆词出错——detail 见 `posix_quote_for_user_shell` doc。
-///
-/// 仅在 POSIX uninstall 的 brew/volta/bun/pnpm/npm 五条分支共用,消除"sibling_bin →
-/// map → unwrap_or_else 裸字面" 三行 boilerplate 的重复出现。
-#[cfg(not(target_os = "windows"))]
-fn quoted_sibling_or_bare(bin_path: &str, exe: &str) -> String {
-    sibling_bin(bin_path, exe)
-        .map(|b| posix_quote_for_user_shell(&b))
-        .unwrap_or_else(|| exe.to_string())
-}
-
-/// Windows 版镜像 `quoted_sibling_or_bare`,quoter 用 `win_quote_path_for_user_shell`
-/// (不做 4× % 转义,目标是复制到用户 shell 而非 .bat + call)。fallback 是 exe_basename
-/// 裸名(`"npm"`/`"pnpm"`/`"volta"`),与原 `format!("npm rm -g {pkg}")` 兜底一致——
-/// 不返回带扩展名的 `npm.cmd`,因为用户 shell 上 `npm` 已被 PATH 解析时自动加扩展。
-#[cfg(target_os = "windows")]
-fn quoted_sibling_or_bare_with_ext(
-    bin_path: &str,
-    exe_basename: &str,
-    ext_candidates: &[&str],
-) -> String {
-    sibling_bin_with_ext(bin_path, exe_basename, ext_candidates)
-        .map(|p| win_quote_path_for_user_shell(&p))
-        .unwrap_or_else(|| exe_basename.to_string())
-}
-
 /// 给定工具、原始 bin 路径（命令行命中的入口）、canonicalize 后的真身路径，
 /// 推断"写回同一处"的锚定升级命令。**POSIX 版是纯函数（不碰 FS）**——真实 canonicalize
 /// 由调用方做（`installs_anchored_command` 复用 enumerate 时算出的 `inst.real`),
 /// 便于单测覆盖各包管理器分支。Windows 版同名函数因 sibling 扩展名歧义必须读 fs,
 /// 是刻意保留的平台差异(详见 Windows 版本 doc)。hermes（pip）不在此处:
 /// `npm_package_for` 返回 None → None。
-///
-/// **对偶函数**:`uninstall_command_from_paths` 是本函数在卸载侧的镜像,共享 brew
-/// formula 真身判定 + sibling 锚定 + source 等价类。任一边新增/移除等价类都得
-/// 同步另一边——卸载侧 doc 对此点有更详细的不变量说明。
 ///
 /// **关键不变量：返回的命令必须用绝对路径调用执行体，不依赖 PATH**。
 /// 这条命令最终在 `run_tool_lifecycle_silently` 的非登录 `bash -c` 里执行——
@@ -1858,200 +1692,6 @@ fn anchored_command_from_paths(tool: &str, bin_path: &str, real_target: &str) ->
     }
     let npm = sibling_bin(bin_path, "npm")?;
     Some(format!("{} i -g {pkg}@latest", quote_path_if_spaced(&npm)))
-}
-
-/// 给定一处具体安装的 bin 路径、真身路径与 source 标签,推断**卸载该处**的命令
-/// (纯函数、不碰 FS)。`source` 由调用方传入(`enumerate_tool_installations` 复用
-/// 已为 `ToolInstallation.source` 字段算过的那次 `infer_install_source` 结果,本函数
-/// 不再二次调用,见 review N1)。与 `anchored_command_from_paths` 共享真身判定:
-/// formula 走 `brew uninstall`、volta/bun/pnpm 走各自 uninstaller、其余 npm 全局走
-/// sibling npm 的 `rm -g`。
-///
-/// **为什么不让前端拼**:前端只拿到 `source` 字符串,但 `infer_install_source` 把
-/// `/Cellar/` 与 `/opt/homebrew/lib/node_modules/` 都归为 `"homebrew"`,**有损分类**——
-/// 前端区分不出 formula 和 npm 全局包,只能统一拼成 `npm rm -g`,对 brew formula
-/// 会 `no such package` 失败(实测案例:`/opt/homebrew/bin/gemini` → `Cellar/gemini-cli/`,
-/// 前端给的 `npm rm -g @google/gemini-cli` 跑出来报"not installed")。把卸载命令
-/// 搬到后端、复用 `brew_formula_from_path(real)` 即可正确区分。
-///
-/// **不变量**:与升级路径一致,尽量绝对路径锚定(避免命令拷贝到非登录 shell 里
-/// PATH 缺 `/opt/homebrew/bin` 等用户级目录而 `command not found`)。同目录推不出
-/// brew/volta/bun/pnpm/npm 时退化到裸命令(`brew uninstall <formula>` 等),与
-/// `static_fallback_command` 同款"诚实兜底"语义。`quoted_sibling_or_bare` 封装此模式。
-///
-/// 判定顺序(命中即返回):
-/// ① hermes → pip(包名固定,不参与锚定)
-/// ② brew formula(真身 `Cellar/<formula>/`)→ sibling `brew uninstall <formula>`;
-///    formula 名 ≠ npm 包名(gemini-cli ≠ @google/gemini-cli),用 `npm_package_for(pkg)`
-///    会卸错对象。
-/// ③ volta → sibling `volta uninstall <pkg>`;bun → sibling `bun rm -g <pkg>`。
-/// ④ pnpm → sibling `pnpm rm -g <pkg>`。**pnpm 必须独占分支**,不能落到 ⑤ npm 兜底:
-///    pnpm 全局包**不在 npm prefix 下**,`npm rm -g` 会报"not installed"必失败。
-///    POSIX 上 `~/.local/share/pnpm/<cli>` 是常见形态(review M1 实际命中)。
-/// ⑤ nvm/fnm/mise/homebrew(npm 全局)→ sibling `npm rm -g <pkg>` + 物理删除兜底;
-///    "homebrew npm 全局"在 ② 之后落到这里——它是 `/opt/homebrew/lib/node_modules/`
-///    下的包(真身**不含 Cellar**),正确卸载就是 `npm rm`,与 nvm 共享同一分支。
-/// ⑥ 其余(system / unknown / scoop / pip 等无可靠锚定的来源)→ 无前缀 `npm rm -g`,
-///    让用户终端 PATH 默认那个 npm 处理。
-#[cfg(not(target_os = "windows"))]
-fn uninstall_command_from_paths(
-    tool: &str,
-    bin_path: &str,
-    real_target: &str,
-    source: &str,
-) -> String {
-    if tool == "hermes" {
-        return "python3 -m pip uninstall hermes-agent".to_string();
-    }
-    let Some(pkg) = npm_package_for(tool) else {
-        return String::new();
-    };
-    if let Some(formula) = brew_formula_from_path(real_target) {
-        let brew = quoted_sibling_or_bare(bin_path, "brew");
-        return format!("{brew} uninstall {formula}");
-    }
-    match source {
-        "volta" => {
-            let volta = quoted_sibling_or_bare(bin_path, "volta");
-            format!("{volta} uninstall {pkg}")
-        }
-        "bun" => {
-            let bun = quoted_sibling_or_bare(bin_path, "bun");
-            format!("{bun} rm -g {pkg}")
-        }
-        "pnpm" => {
-            // 与 ⑤ 分支故意不共享 npm 路径:pnpm 全局 prefix 与 npm 不同
-            // (`~/.local/share/pnpm/global` vs `<node_root>/lib/node_modules`),
-            // 用 `npm rm` 卸 pnpm 包会"package not installed"。Windows 版 anchored
-            // upgrade 已有 pnpm 分支,POSIX 卸载端补齐对偶。
-            let pnpm = quoted_sibling_or_bare(bin_path, "pnpm");
-            format!("{pnpm} rm -g {pkg}")
-        }
-        // 自带同级 npm 的 node 管理器:锚定到那处的 npm,保证卸载作用于命令行
-        // 实际命中的那个 node。等价类与 anchored_command_from_paths 的 POSIX 版
-        // 一一对应,任何一边新增/移除等价类都要同步另一边。
-        //
-        // **附加物理删除兜底(Jason 2026-05-23 实测 bug 修复)**:nvm node v18.20.8
-        // 上 `npm rm -g <pkg>` 静默 no-op——返回 `up to date in 91ms`、exit 0、
-        // 文案像 `npm install`、bin 软链与 `lib/node_modules/<pkg>` 都没动,用户
-        // 照 hint 复制后"以为成功了"但版本没变。可能根因:老 node 的 npm 全局
-        // 元数据/package-lock 损坏。
-        //
-        // 兜底形态:`<npm> rm -g <pkg>; [ -e <bin> ] && rm -f <bin> && rm -rf <pkg_dir>`
-        // - npm rm 真生效 → bin 已不存在 → `[ -e bin ]` 失败 → 短路,物理删除不触发(幂等)
-        // - npm rm 静默 no-op → bin 仍在 → 物理删除接管,与"卸载意图"对齐
-        // - 命令变长 2-3× 是可接受成本,换用户复制粘贴一次到位
-        //
-        // **rm -rf 红线**:目标是 `<node_root>/lib/node_modules/<pkg>` 这一具体
-        // 包目录,**不是** `<node_root>/lib/node_modules` 整个 node_modules。`<pkg>`
-        // 是 `@anthropic-ai/claude-code`/`opencode-ai` 等 npm 包全名(含 scope),
-        // npm 包名规则严格无注入面;但 pkg_dir 算不出(parent_dir 返空)时**不加
-        // 兜底**,保留原 `npm rm -g`,避免拼出 `/lib/node_modules/<pkg>` 这种
-        // 误指根目录的命令。
-        //
-        // **本分支专用 `<node_root>/{bin,lib}` 标准 layout 假设**:nvm/fnm/mise/
-        // homebrew(npm 全局)四者都把 node 装到 `<node_root>/{bin,lib,...}` 标准
-        // 布局下,所以 `<bin_path>` 的祖父就是 node 安装根。volta/bun/scoop 的
-        // 包目录布局完全不同(volta `~/.volta/tools/image/packages/`、bun
-        // `~/.bun/install/global/node_modules/`),它们走各自分支不进这里。未来
-        // 扩广本分支到新来源时,务必先校验 `<bin_path>/../../lib/node_modules/<pkg>`
-        // 假设是否成立。
-        "nvm" | "fnm" | "mise" | "homebrew" => {
-            let npm = quoted_sibling_or_bare(bin_path, "npm");
-            // <bin_dir> = parent(bin_path),<node_root> = parent(bin_dir)
-            // 即 nvm:`~/.nvm/versions/node/v18/bin/gemini` → bin_dir `~/.nvm/.../v18/bin`
-            //    → node_root `~/.nvm/.../v18` → pkg_dir `~/.nvm/.../v18/lib/node_modules/@google/gemini-cli`
-            let bin_dir = parent_dir(bin_path);
-            let node_root = parent_dir(&bin_dir);
-            if node_root.is_empty() {
-                // parent_dir 推不出 node_root(理论不会发生:bin_path 是绝对路径) →
-                // 不加兜底,与原行为一致,避免拼错 pkg_dir。
-                format!("{npm} rm -g {pkg}")
-            } else {
-                let pkg_dir = format!("{node_root}/lib/node_modules/{pkg}");
-                // **强 quote 而非 quote_path_if_spaced**(P2 修复):兜底链含 `;` 和
-                // `&&` 多语句分隔,bin/pkg_dir 路径若含 `;` / `` ` `` / `$` 等元字符,
-                // 弱 quoting 会让 shell 拆出额外命令——destructive `rm -rf` 落到错的
-                // 路径。`posix_quote_for_user_shell` 白名单判定:常规路径不加引号
-                // (展示干净),特殊字符触发 `shell_single_quote` 无条件强 quote。
-                let bin_q = posix_quote_for_user_shell(bin_path);
-                let pkg_dir_q = posix_quote_for_user_shell(&pkg_dir);
-                format!("{npm} rm -g {pkg}; [ -e {bin_q} ] && rm -f {bin_q} && rm -rf {pkg_dir_q}")
-            }
-        }
-        // system / unknown / scoop / pip 等不期望锚定 npm 的来源:
-        // **不要拼 `<dir>/npm`** (该处通常无 sibling npm,会拼出必失败的命令——
-        // 与 anchored_command_from_paths 在同类来源返回 None 的语义对偶)。
-        // 退化到无前缀的 `npm rm -g <pkg>`,让用户终端 PATH 默认的 npm 处理;
-        // 卸载语义下这比"返回 None 让 UI 不显示命令"更友好,因为这条 hint 本来
-        // 就是给用户复制粘贴的——明确意图 + 用户自决比沉默更好。
-        _ => format!("npm rm -g {pkg}"),
-    }
-}
-
-/// Windows 版卸载命令生成。等价类与 anchored upgrade 一致(volta/pnpm/npm 三分支),
-/// 无 brew/bun/claude-native(平台不存在)、无 formula 判定路径——`real_target` 占位
-/// 保持与 POSIX 版签名对称;`source` 由调用方传入(见 POSIX 版 doc)。
-/// `quoted_sibling_or_bare_with_ext` 探不到时退化到 exe_basename 裸名。
-///
-/// **quoting 用 `win_quote_path_for_user_shell` 而非 `win_quote_path_for_batch`**:
-/// 卸载命令在前端只展示给用户复制到自己的 shell,不经过 .bat + call 的两轮 %
-/// expansion——后者把 `%` 转 `%%%%` 是为了让 call 看到字面 `%`,但用户的 cmd /
-/// PowerShell / bash 都只一轮甚至零轮展开,直接复制 `%%%%` 会得到错的路径。
-/// 与升级路径(`anchored_command_from_paths` Windows 版用 `win_quote_path_for_batch`,
-/// 因为它落 .bat + call)形成"目标终端决定 quoter"的对照,doc 在 helper 一侧
-/// 已经写明,这里不重复。
-///
-/// **目标语法是 cmd / PowerShell 限制**(P3, 2026-05-24):本函数生成的命令是
-/// cmd 兼容形式——含空格路径用双引号包裹(`"C:\Program Files\..."`),PowerShell
-/// 对这种引号路径**当字符串字面值不执行**,需要 call operator `&` 前缀。两个
-/// shell 在引号路径上语法不兼容,无法用一份命令同时满足;详见
-/// `win_quote_path_for_user_shell` doc 的 PowerShell 限制段。
-///
-/// **前端 UI 通过 `ToolInstallation.uninstall_command_needs_cmd_hint` 结构化字段
-/// 条件渲染提示**(AboutSection.tsx 卸载行下方, i18n key `toolUninstallPwshHint`)。
-/// 该 bool 由 enumerate 用 `cfg!(target_os = "windows") && contains('"')` 算出,
-/// `cfg!` 是编译时 ground truth——POSIX 编译时整体短路为 false,与 POSIX
-/// `shell_single_quote` 的 `'"'"'` 转义形态含 `"` 的字面巧合**完全无关**。
-/// **前端不能 string match `uninstall_command`**:POSIX 路径带 `'`(如
-/// macOS `o'leary`)的命令也含 `"`,前端 includes('"') 会误判为 Windows cmd 形式。
-///
-/// **POSIX 兜底物理删除链在 Windows 版**有意不镜像**:实测未观察到 nvm-windows /
-/// Scoop 上 `npm.cmd rm -g` 静默 no-op(POSIX 的 npm rm 静默是 nvm node v18.20.8
-/// 老 node 的特定 bug),而 Windows 的物理删除链需要 `del` / `rmdir /S /Q` + `if
-/// exist` 三段语义,跨 cmd/PowerShell shell 不一致(`del` 在 PowerShell 是 Remove-
-/// Item 别名、参数不同),收益不抵复杂度。若未来在 Windows 上观察到同款 bug,可
-/// 在本函数加 cmd-only 兜底链。
-///
-/// hermes 走 `py -m pip uninstall`,与 `tool_action_shell_command` 的 Windows 分支
-/// 用同一 py launcher 入口。
-#[cfg(target_os = "windows")]
-fn uninstall_command_from_paths(
-    tool: &str,
-    bin_path: &str,
-    _real_target: &str,
-    source: &str,
-) -> String {
-    if tool == "hermes" {
-        return "py -m pip uninstall hermes-agent".to_string();
-    }
-    let Some(pkg) = npm_package_for(tool) else {
-        return String::new();
-    };
-    match source {
-        "volta" => {
-            let volta = quoted_sibling_or_bare_with_ext(bin_path, "volta", &["exe", "cmd"]);
-            format!("{volta} uninstall {pkg}")
-        }
-        "pnpm" => {
-            let pnpm = quoted_sibling_or_bare_with_ext(bin_path, "pnpm", &["cmd", "exe"]);
-            format!("{pnpm} rm -g {pkg}")
-        }
-        _ => {
-            let npm = quoted_sibling_or_bare_with_ext(bin_path, "npm", &["cmd", "exe"]);
-            format!("{npm} rm -g {pkg}")
-        }
-    }
 }
 
 /// Windows 版锚定命令生成。等价类压缩到 3 种(volta/pnpm/npm),不存在 brew/bun/
@@ -3303,27 +2943,6 @@ mod tests {
             }
         }
 
-        /// `win_quote_path_for_user_shell` 的镜像——卸载命令是给用户复制到自己 shell
-        /// 跑的,**不做** `%` → `%%%%` 转义(那是 .bat + call 两轮 expansion 的需要,
-        /// 用户的 cmd 一轮、PowerShell/bash 零轮展开,4 倍转义会让三个 shell 都拿不到
-        /// 原路径)。其他 token 边界字符的引号包裹规则与 `expect_quoted_path` 一致,
-        /// 因为引号在三个 shell 下都保持字面。
-        ///
-        /// 与 `expect_quoted_path` 物理相邻并排放,提醒读者两个 helper **同步**反映
-        /// 生产端 `win_quote_path_for_batch` / `win_quote_path_for_user_shell` 那对函数
-        /// 的"目标终端决定 quoter"边界——任一边改了,另一边也得跟。
-        fn expect_user_shell_quoted_path(p: &str) -> String {
-            // 不替换 `%`——这正是与 expect_quoted_path 的唯一差异。
-            let needs_quote = p
-                .chars()
-                .any(|c| matches!(c, ' ' | '&' | '(' | ')' | '^' | ';' | '<' | '>' | '|' | ','));
-            if needs_quote {
-                format!("\"{p}\"")
-            } else {
-                p.to_string()
-            }
-        }
-
         #[test]
         fn volta_windows_uses_volta_install() {
             // tempdir 路径里不含 "volta" 子串,所以在 tempdir 下手建一个 `Volta` 子目录
@@ -3430,40 +3049,6 @@ mod tests {
                 "batch 行不应含未转义的字面 `%foo%`(会被 call 二次解析展开): {batch_line}"
             );
         }
-
-        #[test]
-        fn windows_uninstall_for_percent_path_keeps_literal_percent() {
-            // **P3 回归用例**(2026-05-23):卸载命令是给用户复制到自己 shell 跑的,
-            // **不能复用 anchored upgrade 的 `win_quote_path_for_batch`**——后者把
-            // `%` 转 `%%%%` 是因为命令落 .bat + call(两轮 expansion 后还原 `%foo%`),
-            // 而卸载命令直接渲染给用户复制,cmd 只一轮、PowerShell/bash 零轮展开,
-            // `%%%%foo%%%%` 在三个 shell 下都拿不到原路径。
-            //
-            // 这条 integration 测试是上面那条 windows_full_batch_line_for_percent_path...
-            // 的精确对照:同样 `path%foo%` 子目录,升级路径生成 `%%%%foo%%%%`、
-            // 卸载路径应保持字面 `%foo%`。两条用例并排锁住"目标终端决定 quoter"边界。
-            let (_dir, sub, bin_path) = setup_sibling("path%foo%", "codex.cmd", &["npm.cmd"]);
-            // tempdir 路径不命中 nvm/homebrew/volta/... 任何前缀 → source = "system",
-            // 落到 Windows 版 uninstall 的 `_ => npm` 兜底分支(这正是本用例要验证的:
-            // npm.cmd 同目录被 sibling 探到、anchored 到那处)。
-            let source = infer_install_source(std::path::Path::new(&bin_path));
-            let uninstall = uninstall_command_from_paths("codex", &bin_path, &bin_path, source);
-            // 含字面 `%foo%`,**不含** `%%%%`(那是 batch quoter 的痕迹)。
-            assert!(
-                uninstall.contains("path%foo%"),
-                "卸载命令应保持字面 `path%foo%`(cmd 用户字面识别;PowerShell/bash 也字面但 PowerShell 还需 `&` 前缀执行含引号命令——见 win_quote_path_for_user_shell doc): {uninstall}"
-            );
-            assert!(
-                !uninstall.contains("%%%%"),
-                "卸载命令不应含 4 倍 `%` 转义(那是 .bat+call 链路的 quoting): {uninstall}"
-            );
-            // 端到端形态:`<npm 路径> rm -g @openai/codex`,npm 路径在 sub 下。
-            // sub 可能含空格(取决于 temp 根目录),用 user-shell quoter 镜像算 expected——
-            // 与 expect_quoted_path 对偶,锁住"卸载侧不做 % 转义、其他字符引号规则同款"。
-            let npm_full = format!("{}\\npm.cmd", sub.to_string_lossy());
-            let expected_npm = expect_user_shell_quoted_path(&npm_full);
-            assert_eq!(uninstall, format!("{expected_npm} rm -g @openai/codex"));
-        }
     }
 
     /// Windows-only helpers 单测——在 macOS/Linux 上整块通过 cfg 排除,不参与 `cargo test`。
@@ -3548,57 +3133,6 @@ mod tests {
             // 入参不含任何 token 边界字符 → 不应加外层引号、只做 `%` 4 倍转义。
             let out = win_quote_path_for_batch("C:\\foo%bar%\\npm.cmd");
             assert!(!out.starts_with('"'), "纯 `%` 路径不应加外层引号: {out}");
-        }
-
-        // ─── win_quote_path_for_user_shell:对照 win_quote_path_for_batch ───
-        // 关键差异:**不做 `%` 转义**(目标是用户复制到 cmd/PowerShell/bash,
-        // 不进 .bat + call 的两轮 expansion)。token 边界字符的引号包裹规则
-        // 与 batch quoter 一致(三个 shell 下引号都保持字面)。
-
-        #[test]
-        fn user_shell_quote_clean_path_stays_bare() {
-            // 与 batch quoter 同样的"无特殊字符不加引号"语义。
-            assert_eq!(
-                win_quote_path_for_user_shell("C:\\Users\\me\\npm.cmd"),
-                "C:\\Users\\me\\npm.cmd"
-            );
-        }
-
-        #[test]
-        fn user_shell_quote_spaced_path_gets_quoted() {
-            // 空格触发外层引号(防止 shell 拆 token),与 batch quoter 同款。
-            assert_eq!(
-                win_quote_path_for_user_shell("C:\\Program Files\\nodejs\\npm.cmd"),
-                "\"C:\\Program Files\\nodejs\\npm.cmd\""
-            );
-        }
-
-        #[test]
-        fn user_shell_quote_percent_stays_literal_unlike_batch() {
-            // **回归用例**(P3 反馈):卸载命令是用户复制到自己 shell 跑的,
-            // **不能用 batch 的 4 倍 % 转义**。对比:
-            // - win_quote_path_for_batch("C:\\path%foo%\\npm.cmd")
-            //     → "C:\\path%%%%foo%%%%\\npm.cmd"  (供 .bat+call 两轮展开后还原 `%foo%`)
-            // - win_quote_path_for_user_shell("C:\\path%foo%\\npm.cmd")
-            //     → "C:\\path%foo%\\npm.cmd"        (保持原 `%`,让用户自决)
-            // 若用 batch 那个 quoter,粘到 cmd 一轮展开变 `%%`、粘到 PowerShell/bash
-            // 直接字面 `%%%%`,三个 shell 都拿不到原路径。
-            assert_eq!(
-                win_quote_path_for_user_shell("C:\\path%foo%\\npm.cmd"),
-                "C:\\path%foo%\\npm.cmd"
-            );
-        }
-
-        #[test]
-        fn user_shell_quote_percent_with_space_keeps_percent_literal() {
-            // 与 batch quoter 的 win_quote_percent_with_space_gets_both 形成精确对照:
-            // - batch: "C:\\my %dir%\\npm.cmd"  → "\"C:\\my %%%%dir%%%%\\npm.cmd\""
-            // - user_shell: same input         → "\"C:\\my %dir%\\npm.cmd\""
-            // 空格仍触发引号(token 边界、跨 shell 一致),`%` 保持字面(目标 shell 不确定)。
-            assert_eq!(
-                win_quote_path_for_user_shell("C:\\my %dir%\\npm.cmd"),
-                "\"C:\\my %dir%\\npm.cmd\""
-            );
         }
 
         #[test]
@@ -3741,13 +3275,6 @@ mod tests {
         use super::super::*;
         use std::path::Path;
 
-        /// 测试 helper:跟生产代码 `enumerate_tool_installations` 同款契约——从 bin 路径
-        /// 推 source 标签,再传给 `uninstall_command_from_paths`。封一层让 uninstall_*
-        /// 用例的 4 参数调用形态简洁。
-        fn src(bin: &str) -> &'static str {
-            infer_install_source(Path::new(bin))
-        }
-
         fn inst(path: &str, is_default: bool) -> ToolInstallation {
             ToolInstallation {
                 path: path.to_string(),
@@ -3756,10 +3283,6 @@ mod tests {
                 error: None,
                 source: infer_install_source(Path::new(path)).to_string(),
                 is_path_default: is_default,
-                // 升级锚定测试不关心 uninstall_command(那条由 uninstall_* 用例覆盖);
-                // 填空串避免与本组用例的"升级命令应该是什么"互相干扰。
-                uninstall_command: String::new(),
-                uninstall_command_needs_cmd_hint: false,
                 // 测试场景下不需要走 fs canonicalize——POSIX 锚定测试关心的是
                 // path/real 都被传给 anchored_command_from_paths 的纯字符串判定,
                 // 已有用例(brew_formula_extraction / claude_native_*)是直接
@@ -3997,307 +3520,6 @@ mod tests {
             );
         }
 
-        // ─── uninstall command (bug fix: 卸载命令的 source-aware 锚定) ───
-        // 这组测试与上面 anchored upgrade 是对偶关系——同一组真身判定要在卸载侧
-        // 也产出正确命令。先前卸载命令在前端拼,前端只拿到 `source` 字符串,无法
-        // 区分 brew formula vs homebrew npm 全局包,把所有 `/opt/homebrew/bin/*`
-        // 默认拼成 `npm rm -g`,对 brew formula 必然 `no such package` 失败。
-        // 修复后卸载在后端拼,复用 brew_formula_from_path + sibling_bin。
-
-        #[test]
-        fn brew_formula_uninstall_uses_brew_uninstall() {
-            // 关键回归用例:Jason 2026-05-23 实测的 bug 现场——
-            // /opt/homebrew/bin/gemini 真身在 /Cellar/gemini-cli/,前端给出
-            // `npm rm -g @google/gemini-cli` 会失败。修复后应该是 brew uninstall。
-            // formula 名 ≠ npm 包名(gemini-cli ≠ @google/gemini-cli),
-            // 用 npm 包名做参数会卸错对象。
-            let bin = "/opt/homebrew/bin/gemini";
-            let cmd = uninstall_command_from_paths(
-                "gemini",
-                bin,
-                "/opt/homebrew/Cellar/gemini-cli/0.43.0/libexec/lib/node_modules/@google/gemini-cli/dist/index.js",
-                src(bin),
-            );
-            assert_eq!(cmd, "/opt/homebrew/bin/brew uninstall gemini-cli");
-        }
-
-        #[test]
-        fn homebrew_npm_global_uninstall_uses_npm_rm() {
-            // openclaw 装在 Homebrew node 的全局目录(lib/node_modules,**非 Cellar**)
-            // 是 npm 全局包,应该走 npm rm -g 而不是 brew uninstall。
-            // 这条 case 锁住"homebrew formula vs homebrew npm 全局"的边界——
-            // 两者前端 source 都是 "homebrew",必须靠后端真身判定区分。
-            //
-            // 命令尾巴附加物理删除兜底:`npm rm -g` 在某些环境(老 node 损坏 npm
-            // 元数据)静默 no-op,`[ -e bin ] && rm -f bin && rm -rf pkg_dir` 兜底
-            // 让真正不生效时仍能清理。详见 uninstall_command_from_paths doc。
-            let bin = "/opt/homebrew/bin/openclaw";
-            let cmd = uninstall_command_from_paths(
-                "openclaw",
-                bin,
-                "/opt/homebrew/lib/node_modules/openclaw/dist/cli.js",
-                src(bin),
-            );
-            assert_eq!(
-                cmd,
-                concat!(
-                    "/opt/homebrew/bin/npm rm -g openclaw",
-                    "; [ -e /opt/homebrew/bin/openclaw ]",
-                    " && rm -f /opt/homebrew/bin/openclaw",
-                    " && rm -rf /opt/homebrew/lib/node_modules/openclaw",
-                )
-            );
-        }
-
-        #[test]
-        fn nvm_uninstall_anchors_to_that_npm() {
-            // nvm node18 v18.20.8 装的 @google/gemini-cli 0.1.7——Jason 实测的
-            // 第二处安装。卸载必须锚定到 v18.20.8 下的 npm,避免误删 v22.14.0 的。
-            //
-            // **这条用例是 npm rm 静默 no-op bug 的关键回归现场**:Jason 实测
-            // 此机型上 `npm rm -g @google/gemini-cli` 返回 `up to date in 91ms`
-            // exit 0 不动包目录。命令尾巴的物理删除兜底专门防御此 case。
-            let bin = "/Users/me/.nvm/versions/node/v18.20.8/bin/gemini";
-            let cmd = uninstall_command_from_paths(
-                "gemini",
-                bin,
-                "/Users/me/.nvm/versions/node/v18.20.8/lib/node_modules/@google/gemini-cli/dist/index.js",
-                src(bin),
-            );
-            assert_eq!(
-                cmd,
-                concat!(
-                    "/Users/me/.nvm/versions/node/v18.20.8/bin/npm rm -g @google/gemini-cli",
-                    "; [ -e /Users/me/.nvm/versions/node/v18.20.8/bin/gemini ]",
-                    " && rm -f /Users/me/.nvm/versions/node/v18.20.8/bin/gemini",
-                    " && rm -rf /Users/me/.nvm/versions/node/v18.20.8/lib/node_modules/@google/gemini-cli",
-                )
-            );
-        }
-
-        #[test]
-        fn npm_uninstall_fallback_quotes_spaced_paths() {
-            // 兜底链里有 3 处路径(npm / bin / pkg_dir),含空格时 3 处都要单引号包裹,
-            // 否则 `[ -e /Users/my name/.../bin/gemini ]` 会被 shell 拆成多 token。
-            // 锁住 quote_path_if_spaced 应用在兜底所有路径上,而非只 npm 头部。
-            let bin = "/Users/my name/.nvm/versions/node/v22/bin/gemini";
-            let cmd = uninstall_command_from_paths(
-                "gemini",
-                bin,
-                "/Users/my name/.nvm/versions/node/v22/lib/node_modules/@google/gemini-cli/dist/index.js",
-                src(bin),
-            );
-            assert_eq!(
-                cmd,
-                concat!(
-                    "'/Users/my name/.nvm/versions/node/v22/bin/npm' rm -g @google/gemini-cli",
-                    "; [ -e '/Users/my name/.nvm/versions/node/v22/bin/gemini' ]",
-                    " && rm -f '/Users/my name/.nvm/versions/node/v22/bin/gemini'",
-                    " && rm -rf '/Users/my name/.nvm/versions/node/v22/lib/node_modules/@google/gemini-cli'",
-                )
-            );
-        }
-
-        #[test]
-        fn npm_uninstall_fallback_strong_quotes_shell_metachars() {
-            // **P2 回归用例**:卸载命令是 destructive(`rm -rf <pkg_dir>`),路径含
-            // `;` / `'` / `$` / `` ` `` 等 shell 元字符时必须强 quote——否则
-            // `[ -e /Users/foo;bad/.../gemini ]` 会被 shell 拆成 `[ -e /Users/foo]`
-            // + `bad/.../gemini ] && rm -rf ...`,destructive 命令落到错的路径。
-            // `quote_path_if_spaced` 只查空格,本用例确保升级到
-            // `posix_quote_for_user_shell`(白名单)后,危险字符触发 `shell_single_quote`。
-            //
-            // 用 `;` 作为代表性元字符——所有非 `[A-Za-z0-9._/+=:-]` 字符都走同一
-            // shell_single_quote 路径,锁一个就够覆盖白名单切换语义。
-            let bin = "/Users/foo;bar/.nvm/versions/node/v22/bin/gemini";
-            let cmd = uninstall_command_from_paths(
-                "gemini",
-                bin,
-                "/Users/foo;bar/.nvm/versions/node/v22/lib/node_modules/@google/gemini-cli/dist/index.js",
-                src(bin),
-            );
-            // npm/bin/pkg_dir 三处都被单引号包裹(shell_single_quote 的形态)。
-            // 这条 assert_eq 锁住"含 `;` 路径**所有**位置都强 quote",任一漏掉
-            // 都会让 shell 拆词、可能 destructive。
-            assert_eq!(
-                cmd,
-                concat!(
-                    "'/Users/foo;bar/.nvm/versions/node/v22/bin/npm' rm -g @google/gemini-cli",
-                    "; [ -e '/Users/foo;bar/.nvm/versions/node/v22/bin/gemini' ]",
-                    " && rm -f '/Users/foo;bar/.nvm/versions/node/v22/bin/gemini'",
-                    " && rm -rf '/Users/foo;bar/.nvm/versions/node/v22/lib/node_modules/@google/gemini-cli'",
-                )
-            );
-        }
-
-        #[test]
-        fn npm_uninstall_fallback_quotes_single_quote_in_path() {
-            // 路径含字面 `'`——`shell_single_quote` 的 `'"'"'` 转义形式必须能 round-trip。
-            // 形态:`o'leary` → `'o'"'"'leary'`(关单引号 + 双引号包字面单引号 + 重开
-            // 单引号),跨 bash/zsh/dash/sh 全部 POSIX 兼容。本用例在卸载兜底链上下文
-            // 验证 npm/bin/pkg_dir 三处都正确 round-trip,防止未来"换 quoter"重构时
-            // 漏掉单引号场景(单引号是最棘手的 shell quoting 边界)。
-            //
-            // **关键 ToolInstallation.uninstall_command_needs_cmd_hint 边界**(reviewer
-            // 2026-05-24 抓的 false-positive):此命令含 `"`(escape 的一部分),但
-            // 它是 **POSIX shell_single_quote 形态**,**不是** Windows cmd 引号路径。
-            // 前端 `cmd.includes('"')` 在此场景会**误判**为 Windows cmd 形式,
-            // 给 macOS 用户名带 `'`(如 `o'leary`)的用户错误显示 PowerShell 提示。
-            // 这就是为什么 `uninstall_command_needs_cmd_hint` 必须由后端用
-            // `cfg!(target_os = "windows") && contains('"')` 算——`cfg!` 是编译时
-            // ground truth, POSIX 编译时整体短路 false, 与含 `"` 的字面巧合无关。
-            // 本测试的存在 = 字面 contains('"') 永远 true, cfg 短路是唯一防线。
-            let bin = "/Users/o'leary/.nvm/versions/node/v22/bin/gemini";
-            let cmd = uninstall_command_from_paths(
-                "gemini",
-                bin,
-                "/Users/o'leary/.nvm/versions/node/v22/lib/node_modules/@google/gemini-cli/dist/index.js",
-                src(bin),
-            );
-            // 验证三处都得到同款 `'"'"'` 转义形态。
-            assert!(
-                cmd.contains("'/Users/o'\"'\"'leary/.nvm/versions/node/v22/bin/npm'"),
-                "npm 路径单引号转义不对: {cmd}"
-            );
-            assert!(
-                cmd.contains("'/Users/o'\"'\"'leary/.nvm/versions/node/v22/bin/gemini'"),
-                "bin 路径单引号转义不对: {cmd}"
-            );
-            assert!(
-                cmd.contains("'/Users/o'\"'\"'leary/.nvm/versions/node/v22/lib/node_modules/@google/gemini-cli'"),
-                "pkg_dir 路径单引号转义不对: {cmd}"
-            );
-            // 显式断言:命令字面**确实**含 `"`——这是上面 doc 关键边界的存在证明。
-            // 此 assert 让"前端 string match 是 false-positive"的论据有了不可绕过的
-            // 测试支撑(未来若 shell_single_quote 改用别的 escape 形式,本断言会失败、
-            // 触发 reviewer 评估是否还需要 cfg 防御层)。
-            assert!(
-                cmd.contains('"'),
-                "POSIX shell_single_quote 转义形态必须含 `\"`(本用例的存在前提): {cmd}"
-            );
-        }
-
-        #[test]
-        fn npm_uninstall_fallback_only_for_anchored_branches() {
-            // 兜底链**只在 nvm/fnm/mise/homebrew npm 全局四个分支出现**(那里 bin 与
-            // pkg_dir 都能可靠推导)。其他分支不应该带兜底:
-            // - brew formula: brew uninstall 没观察到 no-op
-            // - volta: volta uninstall 没观察到 no-op
-            // - bun: bun rm 没观察到 no-op
-            // - system/unknown: 路径不可靠,**不要拼出可能误指根目录的 rm -rf**
-            // 这条用例反向锁住——任意分支若误带兜底,会被这里 catch。
-            //
-            // **不包含 hermes** :hermes 在函数开头就 early return pip uninstall,根本
-            // 不进 source match 分支,断言对 pip uninstall 是 vacuously true。hermes
-            // 的"不进 npm 分支"已由 hermes_uninstall_uses_pip 用例独立锁住,这里再放
-            // 一行只会误导读者(让人以为本用例在验证"hermes 走 npm 分支也不带兜底")。
-            for (tool, bin, real) in [
-                ("gemini", "/opt/homebrew/bin/gemini",
-                 "/opt/homebrew/Cellar/gemini-cli/0.43.0/libexec/lib/node_modules/@google/gemini-cli/dist/index.js"),
-                ("codex", "/Users/me/.volta/bin/codex",
-                 "/Users/me/.volta/tools/image/packages/@openai/codex/lib/cli.js"),
-                ("opencode", "/Users/me/.bun/bin/opencode",
-                 "/Users/me/.bun/install/global/node_modules/opencode-ai/bin/opencode"),
-                ("opencode", "/Users/me/.opencode/bin/opencode", "/Users/me/.opencode/bin/opencode"),
-            ] {
-                let cmd = uninstall_command_from_paths(tool, bin, real, src(bin));
-                assert!(
-                    !cmd.contains("rm -rf"),
-                    "tool={tool} bin={bin}: 该分支不应含 rm -rf 兜底,实际生成: {cmd}"
-                );
-                assert!(
-                    !cmd.contains("[ -e "),
-                    "tool={tool} bin={bin}: 该分支不应含 `[ -e ]` 测试,实际生成: {cmd}"
-                );
-            }
-        }
-
-        #[test]
-        fn volta_uninstall_uses_volta_uninstall() {
-            let bin = "/Users/me/.volta/bin/codex";
-            let cmd = uninstall_command_from_paths(
-                "codex",
-                bin,
-                "/Users/me/.volta/tools/image/packages/@openai/codex/lib/cli.js",
-                src(bin),
-            );
-            assert_eq!(cmd, "/Users/me/.volta/bin/volta uninstall @openai/codex");
-        }
-
-        #[test]
-        fn bun_uninstall_uses_bun_rm() {
-            let bin = "/Users/me/.bun/bin/opencode";
-            let cmd = uninstall_command_from_paths(
-                "opencode",
-                bin,
-                "/Users/me/.bun/install/global/node_modules/opencode-ai/bin/opencode",
-                src(bin),
-            );
-            assert_eq!(cmd, "/Users/me/.bun/bin/bun rm -g opencode-ai");
-        }
-
-        #[test]
-        fn pnpm_uninstall_uses_pnpm_rm() {
-            // **review M1 回归用例**:pnpm 全局包不在 npm prefix 下,落到 npm rm -g
-            // 会"not installed"必失败。Windows anchored upgrade 早已有 pnpm 分支,
-            // POSIX 卸载补齐对偶——`~/.local/share/pnpm/<cli>` 是 pnpm 在 macOS/Linux
-            // 上的标准全局 bin 形态,被 infer_install_source 归为 "pnpm" 类。
-            let bin = "/Users/me/.local/share/pnpm/codex";
-            let cmd = uninstall_command_from_paths(
-                "codex",
-                bin,
-                "/Users/me/.local/share/pnpm/global/5/node_modules/@openai/codex/dist/cli.js",
-                src(bin),
-            );
-            assert_eq!(cmd, "/Users/me/.local/share/pnpm/pnpm rm -g @openai/codex");
-        }
-
-        #[test]
-        fn hermes_uninstall_uses_pip() {
-            // hermes 走 pip,与锚定无关——包名固定 hermes-agent。
-            let bin = "/Users/me/.local/bin/hermes";
-            let cmd = uninstall_command_from_paths(
-                "hermes",
-                bin,
-                "/Users/me/.local/bin/hermes",
-                src(bin),
-            );
-            assert_eq!(cmd, "python3 -m pip uninstall hermes-agent");
-        }
-
-        #[test]
-        fn brew_uninstall_path_with_space_is_quoted() {
-            // brew 分支用 `<bin_path 同目录>/brew`,目录含空格时同样要引号包裹,
-            // 否则 `/opt/my brew/bin/brew uninstall gemini-cli` 会被 shell 拆词
-            // 当成两个命令。镜像 anchored upgrade 的 brew_path_with_space_is_quoted。
-            let bin = "/opt/my brew/bin/gemini";
-            let cmd = uninstall_command_from_paths(
-                "gemini",
-                bin,
-                "/opt/my brew/Cellar/gemini-cli/0.13.0/libexec/lib/node_modules/@google/gemini-cli/dist/index.js",
-                src(bin),
-            );
-            assert_eq!(cmd, "'/opt/my brew/bin/brew' uninstall gemini-cli");
-        }
-
-        #[test]
-        fn system_install_uninstall_falls_back_to_bare_npm_rm() {
-            // ~/.opencode/bin / ~/go/bin / ~/.local/bin 等独立安装无 sibling npm
-            // (与 anchored upgrade 在同类来源返回 None 的语义对偶)。
-            // **关键**:不要拼 `<bin_dir>/npm rm -g <pkg>`——该处无 npm 文件,
-            // 拼出来必失败。退化到**无前缀** `npm rm -g <pkg>`,让用户终端 PATH
-            // 默认的 npm 处理;卸载语义下"不锚定但明确意图"比"返回 None 让 UI
-            // 不显示命令"更友好(这条 hint 本来就是给用户复制粘贴的)。
-            let bin = "/Users/me/.opencode/bin/opencode";
-            let cmd = uninstall_command_from_paths(
-                "opencode",
-                bin,
-                "/Users/me/.opencode/bin/opencode",
-                src(bin),
-            );
-            assert_eq!(cmd, "npm rm -g opencode-ai");
-        }
-
         #[test]
         fn sibling_bin_returns_none_when_bin_path_has_no_directory() {
             // bin_path 不含 `/` → parent_dir 返回空 → sibling_bin 不能拼出绝对路径
@@ -4370,8 +3592,6 @@ mod tests {
                 error: None,
                 source: "nvm".to_string(),
                 is_path_default: false,
-                uninstall_command: String::new(),
-                uninstall_command_needs_cmd_hint: false,
                 real: std::path::PathBuf::from("/x"),
             };
             // 单处 → 不冲突。
