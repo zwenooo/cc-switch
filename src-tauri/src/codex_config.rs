@@ -505,7 +505,7 @@ pub fn should_restore_codex_provider_token_for_backfill(
 
     let has_provider_api_key = extract_codex_auth_api_key(auth).is_some();
     let has_oauth_login = codex_auth_has_oauth_login_material(auth);
-    !(has_oauth_login && !has_provider_api_key)
+    !has_oauth_login || has_provider_api_key
 }
 
 fn parse_codex_positive_u64(value: Option<&Value>) -> Option<u64> {

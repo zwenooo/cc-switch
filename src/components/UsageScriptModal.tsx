@@ -177,8 +177,7 @@ const UsageScriptModal: React.FC<UsageScriptModalProps> = ({
         const auth = (config as any).auth || {};
         const configToml = (config as any).config || "";
         const apiKey =
-          typeof auth.OPENAI_API_KEY === "string" &&
-          auth.OPENAI_API_KEY.trim()
+          typeof auth.OPENAI_API_KEY === "string" && auth.OPENAI_API_KEY.trim()
             ? auth.OPENAI_API_KEY
             : extractCodexExperimentalBearerToken(configToml);
         return {
