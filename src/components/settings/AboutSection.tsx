@@ -39,6 +39,7 @@ import appIcon from "@/assets/icons/app-icon.png";
 import { APP_ICON_MAP } from "@/config/appConfig";
 import type { AppId } from "@/lib/api/types";
 import { extractErrorMessage } from "@/utils/errorUtils";
+import { isWindows } from "@/lib/platform";
 import { ToolUpgradeConfirmDialog } from "./ToolUpgradeConfirmDialog";
 import { ToolInstallRow } from "./ToolInstallRow";
 
@@ -104,7 +105,39 @@ const ENV_BADGE_CONFIG: Record<
   },
 };
 
-const ONE_CLICK_INSTALL_COMMANDS = `# Claude Code
+const posixScriptInstallCommand = (url: string) =>
+  `bash -c 'tmp=$(mktemp) && curl -fsSL ${url} -o $tmp && bash $tmp; status=$?; rm -f $tmp; exit $status'`;
+
+const HERMES_WINDOWS_INSTALL_SCRIPT =
+  "irm https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.ps1 | iex";
+
+const powershellEncodedCommand = (script: string): string => {
+  let binary = "";
+  for (let i = 0; i < script.length; i += 1) {
+    const code = script.charCodeAt(i);
+    binary += String.fromCharCode(code & 0xff, code >> 8);
+  }
+  return btoa(binary);
+};
+
+const HERMES_WINDOWS_INSTALL_COMMAND = `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${powershellEncodedCommand(
+  HERMES_WINDOWS_INSTALL_SCRIPT,
+)}`;
+
+const POSIX_ONE_CLICK_INSTALL_COMMANDS = `# Claude Code
+${posixScriptInstallCommand("https://claude.ai/install.sh")} || npm i -g @anthropic-ai/claude-code@latest
+# Codex
+npm i -g @openai/codex@latest
+# Gemini CLI
+npm i -g @google/gemini-cli@latest
+# OpenCode
+${posixScriptInstallCommand("https://opencode.ai/install")} || npm i -g opencode-ai@latest
+# OpenClaw
+npm i -g openclaw@latest
+# Hermes
+${posixScriptInstallCommand("https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh")}`;
+
+const WINDOWS_ONE_CLICK_INSTALL_COMMANDS = `# Claude Code
 npm i -g @anthropic-ai/claude-code@latest
 # Codex
 npm i -g @openai/codex@latest
@@ -115,7 +148,11 @@ npm i -g opencode-ai@latest
 # OpenClaw
 npm i -g openclaw@latest
 # Hermes
-curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash`;
+${HERMES_WINDOWS_INSTALL_COMMAND}`;
+
+const ONE_CLICK_INSTALL_COMMANDS = isWindows()
+  ? WINDOWS_ONE_CLICK_INSTALL_COMMANDS
+  : POSIX_ONE_CLICK_INSTALL_COMMANDS;
 
 const TOOL_DISPLAY_NAMES: Record<ToolName, string> = {
   claude: "Claude Code",
@@ -185,7 +222,7 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
   // 升级 preflight(probe 阶段)的 in-flight 工具集合。
   // probeToolInstallations 是个 1-3 秒级别的跨进程探测(对每个工具跑 --version + canonicalize),
   // 在它返回之前 toolActions / batchAction 都还没被置位 → 按钮不会 disabled → 用户快速双击
-  // 会并发开两轮 probe,各自再触发 executeRun(并发的 `npm i -g` / `curl | bash`,写冲突)。
+  // 会并发开两轮 probe,各自再触发 executeRun(并发的 `npm i -g` / 官方 installer,写冲突)。
   // 把 probe 期间的工具登记在这里、纳入 isAnyBusy 派生,关掉这个并发窗口。
   // 用 Set 而非 boolean:单卡片升级 & 批量升级可能在不同工具上独立 preflight,
   // 精确反映到各自卡片按钮的 disabled。

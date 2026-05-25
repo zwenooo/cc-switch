@@ -307,9 +307,9 @@ fn build_tool_lifecycle_command(
 
     #[cfg(not(target_os = "windows"))]
     {
-        // set -e 让任一步失败即中止;set -o pipefail 让管道前段失败也参与判定——
-        // install 的 `curl ... | bash` 路径下,curl 失败时 bash 收空 stdin 仍 exit 0,
-        // 没有 pipefail 会"假成功"而绕过 `||` 兜底链,工具其实没装上。
+        // set -e 让任一步失败即中止;set -o pipefail 保留为管道命令的兜底防线。
+        // 当前官方 installer 路径已避免 `curl | bash`,但未来若新增管道命令,
+        // 仍应让管道前段失败参与整条脚本判定。
         lines.push("set -e".to_string());
         lines.push("set -o pipefail".to_string());
     }
@@ -356,16 +356,20 @@ fn tool_display_name(tool: &str) -> &'static str {
     }
 }
 
+/// 官方 shell installer 都不用 `curl | bash` 这种 pipe 形式（仍然用 curl 下载，
+/// 只是先落到临时文件再交给 bash 执行）:WSL 分支会在
+/// `wsl.exe ... -- sh -c "<cmd>"` 子 shell 里执行命令,外层脚本的 `set -o pipefail`
+/// 不会继承进去;而 WSL 默认 shell 可能是 dash/ash,也不能假设支持 `set -o pipefail`。
+/// 先下载到 mktemp 文件再交给 bash,能让 curl 失败稳定变成整条命令失败。
+const CLAUDE_INSTALL_UNIX: &str =
+    "bash -c 'tmp=$(mktemp) && curl -fsSL https://claude.ai/install.sh -o $tmp && bash $tmp; status=$?; rm -f $tmp; exit $status'";
+const OPENCODE_INSTALL_UNIX: &str =
+    "bash -c 'tmp=$(mktemp) && curl -fsSL https://opencode.ai/install -o $tmp && bash $tmp; status=$?; rm -f $tmp; exit $status'";
+
 /// Hermes 官方安装器会自带/选择合适的 Python 运行时。不要再用
 /// `python3 -m pip ... || python -m pip ...`:Hermes PyPI 包要求 Python >=3.11,
 /// 但 macOS 系统 `python3` 常是 3.9,而 pyenv 下 `python` shim 还可能不存在,会把
 /// 真正的 Python 版本问题盖成 "python command exists in these Python versions"。
-///
-/// 这里也刻意不用 `curl | bash` 这种 shell pipe 形式（仍然用 curl 下载，只是改成
-/// 先落到临时文件再交给 bash 执行）:WSL 分支会在 `wsl.exe ... -- sh -c "<cmd>"`
-/// 子 shell 里执行命令,外层脚本的 `set -o pipefail` 不会继承进去;而 WSL 默认
-/// shell 可能是 dash/ash,也不能假设支持 `set -o pipefail`。先下载到 mktemp 文件再
-/// 交给 bash,能让 curl 失败稳定变成整条命令失败。
 const HERMES_INSTALL_UNIX: &str =
     "bash -c 'tmp=$(mktemp) && curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh -o $tmp && bash $tmp; status=$?; rm -f $tmp; exit $status'";
 const HERMES_UPDATE_UNIX: &str =
@@ -501,7 +505,19 @@ fn tool_action_shell_command(tool: &str, action: ToolLifecycleAction) -> Option<
 /// 强制生成 POSIX 版命令。
 #[cfg(target_os = "windows")]
 fn wsl_tool_action_shell_command(tool: &str, action: ToolLifecycleAction) -> Option<String> {
-    tool_action_shell_command_for_shell(tool, action, LifecycleCommandShell::Posix)
+    match action {
+        ToolLifecycleAction::Install => {
+            let command = posix_install_command_for(tool);
+            if command.is_empty() {
+                None
+            } else {
+                Some(command)
+            }
+        }
+        ToolLifecycleAction::Update => {
+            tool_action_shell_command_for_shell(tool, action, LifecycleCommandShell::Posix)
+        }
+    }
 }
 
 fn build_tool_action_line(
@@ -514,10 +530,11 @@ fn build_tool_action_line(
     {
         // ① WSL 工具(override 是 UNC `\\wsl$\<distro>\...`):锚定的绝对路径是 Windows
         //    主机路径,跨 wsl.exe 进入 distro 文件系统后无效;且 enumerate 不参与 WSL。
-        //    始终走静态命令(npm i -g / 官方 installer)并通过 wsl.exe -d distro -- sh 包一层。
+        //    install 走 POSIX 安装优先级,update 走 POSIX 静态/官方 update 命令,
+        //    再通过 wsl.exe -d distro -- sh 包一层。
         //    **必须用 wsl_tool_action_shell_command 而非 tool_action_shell_command**:
-        //    后者在 Windows target 给 hermes 返回 PowerShell installer,跨 wsl.exe
-        //    后跑 Linux,要替换为 Unix 版官方 installer/update 命令。
+        //    后者在 Windows target 给 hermes 返回 PowerShell installer,且 Windows batch
+        //    语义也不适合跨 wsl.exe;这里统一替换为 POSIX 版安装/更新命令。
         if let Some(distro) = wsl_distro_for_tool(tool) {
             let command = wsl_tool_action_shell_command(tool, action)
                 .ok_or_else(|| format!("Unsupported tool action target: {tool}"))?;
@@ -1984,27 +2001,43 @@ fn static_fallback_command(tool: &str) -> String {
 /// - Hermes 使用官方 installer,避免用系统 Python/pip 安装时踩 Python >=3.11 与 pyenv
 ///   `python` shim 问题;更新路径若能锚定已安装 CLI,则走 `<hermes> update`。
 ///   **Hermes 没有 npm 包,install 端不享受 `||` 降级**——上游 installer 不可达就只能等。
-/// - 对**有 npm 包**的工具(claude/opencode),短路链(POSIX `||`)保证 URL 不可达/
-///   防火墙拦截时仍能装上,降级到裸 `npm i -g`。
-/// - 仅非 Windows 启用:claude.ai/install.sh、opencode.ai/install 都是 bash 脚本,
-///   Windows(及不带 bash 的环境)继续走 `tool_action_shell_command` 的 npm/PowerShell 命令。
-/// - 配套要求:`build_tool_lifecycle_command` 头部已开 `set -o pipefail`,确保
-///   `curl ... | bash` 中 curl 失败能让管道整体非零、`||` 兜底真正触发。
-#[cfg(not(target_os = "windows"))]
-fn install_command_for(tool: &str) -> String {
+/// - 对**有 npm 包**的工具(claude/opencode),短路链(POSIX `||`)保证官方脚本不可达/
+///   防火墙拦截时仍能装上,降级到裸 `npm i -g`。官方脚本本身不用 pipe,
+///   所以这条路径在 WSL 的 `sh -c` 子 shell 中也不依赖外层 `pipefail`。
+/// - Windows 原生不启用:claude.ai/install.sh、opencode.ai/install 都是 bash 脚本,
+///   Windows 原生继续走 `tool_action_shell_command` 的 npm/PowerShell 命令;WSL 作为
+///   Linux 环境复用这套 POSIX 安装优先级。
+fn installer_with_npm_fallback(installer: &str, tool: &str) -> String {
+    match npm_install_command_for(tool) {
+        Some(npm) => chain_update_commands(
+            installer.to_string(),
+            npm.to_string(),
+            LifecycleCommandShell::Posix,
+        ),
+        None => installer.to_string(),
+    }
+}
+
+fn posix_install_command_for(tool: &str) -> String {
     match tool {
-        "claude" => "curl -fsSL https://claude.ai/install.sh | bash || npm i -g @anthropic-ai/claude-code@latest".to_string(),
-        "opencode" => "curl -fsSL https://opencode.ai/install | bash || npm i -g opencode-ai@latest".to_string(),
+        "claude" => installer_with_npm_fallback(CLAUDE_INSTALL_UNIX, tool),
+        "opencode" => installer_with_npm_fallback(OPENCODE_INSTALL_UNIX, tool),
         "hermes" => HERMES_INSTALL_UNIX.to_string(),
         _ => static_fallback_command_for(tool, ToolLifecycleAction::Install),
     }
 }
 
+#[cfg(not(target_os = "windows"))]
+fn install_command_for(tool: &str) -> String {
+    posix_install_command_for(tool)
+}
+
 /// 计算某工具的升级命令与"是否需确认"。全平台共用一份:
-/// - **Windows + WSL 工具**(override 是 `\\wsl$\<distro>\...` UNC 路径)始终走静态、
-///   不锚定:锚定命令是 Windows 主机绝对路径,跨 `wsl.exe` 边界进入 distro 文件
-///   系统后完全无效;且 `enumerate_tool_installations` 不参与 WSL 文件系统、锚定
-///   无锚点。这一类显式短路到 `(unix_static, false, false)`,前端不会弹确认。
+/// - **Windows + WSL 工具**(override 是 `\\wsl$\<distro>\...` UNC 路径)的升级规划
+///   始终走 POSIX 静态命令、不锚定:锚定命令是 Windows 主机绝对路径,跨 `wsl.exe`
+///   边界进入 distro 文件系统后完全无效;且 `enumerate_tool_installations` 不参与
+///   WSL 文件系统、锚定无锚点。这一类显式短路到 `(unix_static, false, false)`,
+///   前端不会弹确认。
 ///   **必须用 `wsl_tool_action_shell_command`(unix 版)而非 `static_fallback_command`**
 ///   ——后者读 `tool_action_shell_command`,Windows target 给 hermes 返回 PowerShell
 ///   installer,跨 wsl.exe 后不适用;`build_tool_action_line` 的 WSL 分支也用同一 wrapper,
@@ -3495,6 +3528,32 @@ mod tests {
         }
 
         #[test]
+        fn wsl_install_uses_posix_install_priority() {
+            let claude =
+                wsl_tool_action_shell_command("claude", ToolLifecycleAction::Install).unwrap();
+            assert!(
+                claude.starts_with("bash -c 'tmp=$(mktemp) && curl -fsSL https://claude.ai/install.sh ")
+                    && claude.contains(" || npm i -g @anthropic-ai/claude-code@latest"),
+                "WSL claude install should prefer native POSIX installer with npm fallback: {claude}"
+            );
+            assert!(!claude.contains("| bash"));
+
+            let opencode =
+                wsl_tool_action_shell_command("opencode", ToolLifecycleAction::Install).unwrap();
+            assert!(
+                opencode.starts_with(
+                    "bash -c 'tmp=$(mktemp) && curl -fsSL https://opencode.ai/install "
+                ) && opencode.contains(" || npm i -g opencode-ai@latest"),
+                "WSL opencode install should prefer native POSIX installer with npm fallback: {opencode}"
+            );
+            assert!(!opencode.contains("| bash"));
+
+            let codex =
+                wsl_tool_action_shell_command("codex", ToolLifecycleAction::Install).unwrap();
+            assert_eq!(codex, "npm i -g @openai/codex@latest");
+        }
+
+        #[test]
         fn wsl_npm_tools_use_posix_update_chain_without_batch_call() {
             // WSL 内跑的是 POSIX shell,不能带 Windows batch 的 `call`。同时 update
             // fallback 仍应先尝试官方 CLI 自升级。
@@ -3970,6 +4029,10 @@ mod tests {
             let parts: Vec<&str> = cmd.split("||").collect();
             assert_eq!(parts.len(), 2, "should be a two-step short-circuit chain");
             assert!(parts[0].contains("install.sh"), "native first: {cmd}");
+            assert!(
+                !parts[0].contains('|'),
+                "native installer should avoid pipe: {cmd}"
+            );
             assert!(parts[1].contains("npm i -g"), "npm second: {cmd}");
         }
 
@@ -3986,6 +4049,10 @@ mod tests {
                 "should keep npm package as fallback: {cmd}"
             );
             assert!(cmd.contains("||"), "should chain fallback: {cmd}");
+            assert!(
+                !cmd.split("||").next().unwrap_or_default().contains('|'),
+                "native installer should avoid pipe: {cmd}"
+            );
         }
 
         #[test]
