@@ -23,6 +23,54 @@ use toml_edit::DocumentMut;
 
 const MIGRATION_NAME: &str = "codex-history-provider-migration-v1";
 const CODEX_STATE_DB_FILENAME: &str = "state_5.sqlite";
+const CC_SWITCH_LEGACY_CODEX_MODEL_PROVIDER_IDS: &[&str] = &[
+    "aicodemirror",
+    "aicoding",
+    "aigocode",
+    "aihubmix",
+    "ark_agentplan",
+    "bailian",
+    "bailing",
+    "byteplus",
+    "claudecn",
+    "compshare",
+    "compshare_coding",
+    "crazyrouter",
+    "ctok",
+    "cubence",
+    "deepseek",
+    "dmxapi",
+    "doubaoseed",
+    "eflowcode",
+    "kimi",
+    "lemondata",
+    "longcat",
+    "micu",
+    "minimax",
+    "minimax_en",
+    "modelscope",
+    "novita",
+    "nvidia",
+    "openrouter",
+    "packycode",
+    "patewayai",
+    "pipellm",
+    "qianfan_coding",
+    "relaxycode",
+    "rightcode",
+    "runapi",
+    "shengsuanyun",
+    "siliconflow",
+    "siliconflow_en",
+    "sssaicode",
+    "stepfun",
+    "stepfun_en",
+    "therouter",
+    "xiaomi_mimo",
+    "xiaomi_mimo_token_plan",
+    "zhipu_glm",
+    "zhipu_glm_en",
+];
 
 #[derive(Debug, Clone, Default)]
 pub struct CodexHistoryProviderBucketMigrationOutcome {
@@ -51,6 +99,7 @@ pub fn maybe_migrate_codex_third_party_history_provider_bucket(
                 source_provider_ids: Vec::new(),
                 migrated_jsonl_files: 0,
                 migrated_state_rows: 0,
+                scanned_history_files: true,
             },
         )?;
         return Ok(CodexHistoryProviderBucketMigrationOutcome {
@@ -74,6 +123,7 @@ pub fn maybe_migrate_codex_third_party_history_provider_bucket(
             source_provider_ids: source_provider_ids_vec.clone(),
             migrated_jsonl_files,
             migrated_state_rows,
+            scanned_history_files: true,
         },
     )?;
 
@@ -97,9 +147,12 @@ fn collect_source_model_provider_ids(db: &Database) -> Result<BTreeSet<String>, 
             continue;
         }
 
-        if is_migratable_source_id(&provider.id) {
-            ids.insert(provider.id.clone());
+        let is_cc_switch_custom_provider = is_cc_switch_created_custom_provider(provider);
+        if provider.category.as_deref() == Some("custom") && !is_cc_switch_custom_provider {
+            continue;
         }
+
+        insert_known_cc_switch_legacy_source_id(&mut ids, &provider.id);
 
         let Some(config_text) = provider
             .settings_config
@@ -110,13 +163,33 @@ fn collect_source_model_provider_ids(db: &Database) -> Result<BTreeSet<String>, 
         };
 
         if let Some(provider_id) = stable_codex_model_provider_id_from_config(config_text) {
-            if is_migratable_source_id(&provider_id) {
-                ids.insert(provider_id);
+            if is_cc_switch_custom_provider {
+                insert_migratable_source_id(&mut ids, &provider_id);
+            } else {
+                insert_known_cc_switch_legacy_source_id(&mut ids, &provider_id);
             }
+        }
+        if let Some(provider_id) =
+            legacy_codex_model_provider_id_from_normalized_config(config_text)
+        {
+            insert_migratable_source_id(&mut ids, &provider_id);
         }
     }
 
     Ok(ids)
+}
+
+fn is_cc_switch_created_custom_provider(provider: &crate::provider::Provider) -> bool {
+    provider.category.as_deref() == Some("custom")
+        && provider.created_at.is_some()
+        && provider.id != "default"
+}
+
+fn insert_migratable_source_id(ids: &mut BTreeSet<String>, provider_id: &str) {
+    let trimmed = provider_id.trim();
+    if is_migratable_source_id(trimmed) {
+        ids.insert(trimmed.to_string());
+    }
 }
 
 fn is_migratable_source_id(provider_id: &str) -> bool {
@@ -131,6 +204,56 @@ fn migration_backup_root() -> PathBuf {
         .join("backups")
         .join(MIGRATION_NAME)
         .join(Local::now().format("%Y%m%d_%H%M%S").to_string())
+}
+
+fn insert_known_cc_switch_legacy_source_id(ids: &mut BTreeSet<String>, provider_id: &str) {
+    let trimmed = provider_id.trim();
+    if is_known_cc_switch_legacy_codex_model_provider_id(trimmed) {
+        insert_migratable_source_id(ids, trimmed);
+    }
+}
+
+fn is_known_cc_switch_legacy_codex_model_provider_id(provider_id: &str) -> bool {
+    CC_SWITCH_LEGACY_CODEX_MODEL_PROVIDER_IDS
+        .iter()
+        .any(|known| known.eq_ignore_ascii_case(provider_id))
+}
+
+fn legacy_codex_model_provider_id_from_normalized_config(config_text: &str) -> Option<String> {
+    let doc = config_text.parse::<DocumentMut>().ok()?;
+    let provider_id = doc
+        .get("model_provider")
+        .and_then(|item| item.as_str())
+        .map(str::trim)?;
+    if provider_id != CC_SWITCH_CODEX_MODEL_PROVIDER_ID {
+        return None;
+    }
+
+    let name = doc
+        .get("model_providers")
+        .and_then(|item| item.as_table())
+        .and_then(|table| table.get(CC_SWITCH_CODEX_MODEL_PROVIDER_ID))
+        .and_then(|item| item.as_table())
+        .and_then(|table| table.get("name"))
+        .and_then(|item| item.as_str())?
+        .trim();
+
+    normalized_legacy_codex_provider_name(name).map(str::to_string)
+}
+
+fn normalized_legacy_codex_provider_name(name: &str) -> Option<&'static str> {
+    if is_known_cc_switch_legacy_codex_model_provider_id(name) {
+        return CC_SWITCH_LEGACY_CODEX_MODEL_PROVIDER_IDS
+            .iter()
+            .copied()
+            .find(|known| known.eq_ignore_ascii_case(name));
+    }
+
+    match name {
+        "E-FlowCode" => Some("eflowcode"),
+        "PIPELLM" => Some("pipellm"),
+        _ => None,
+    }
 }
 
 fn migrate_codex_jsonl_files(
@@ -323,7 +446,7 @@ fn migrate_codex_state_db_provider_bucket(
         return Ok(0);
     }
 
-    let conn = Connection::open(db_path)
+    let mut conn = Connection::open(db_path)
         .map_err(|e| AppError::Database(format!("打开 Codex state DB 失败: {e}")))?;
     conn.busy_timeout(Duration::from_secs(5))
         .map_err(|e| AppError::Database(format!("设置 Codex state DB busy_timeout 失败: {e}")))?;
@@ -355,9 +478,14 @@ fn migrate_codex_state_db_provider_bucket(
     let mut values = Vec::with_capacity(source_provider_ids.len() + 1);
     values.push(CC_SWITCH_CODEX_MODEL_PROVIDER_ID.to_string());
     values.extend(source_provider_ids.iter().cloned());
-    let changed = conn
+    let tx = conn
+        .transaction()
+        .map_err(|e| AppError::Database(format!("开启 Codex state DB 迁移事务失败: {e}")))?;
+    let changed = tx
         .execute(&update_sql, params_from_iter(values.iter()))
         .map_err(|e| AppError::Database(format!("迁移 Codex state DB provider 失败: {e}")))?;
+    tx.commit()
+        .map_err(|e| AppError::Database(format!("提交 Codex state DB 迁移事务失败: {e}")))?;
     Ok(changed)
 }
 
@@ -467,6 +595,78 @@ mod tests {
     }
 
     #[test]
+    fn does_not_rewrite_unknown_jsonl_history_without_trusted_source_id() {
+        let dir = tempdir().expect("tempdir");
+        let codex_dir = dir.path().join(".codex");
+        let session_dir = codex_dir.join("sessions/2026/05/20");
+        fs::create_dir_all(&session_dir).expect("create session dir");
+        let path = session_dir.join("rollout-rightcode.jsonl");
+        fs::write(
+            &path,
+            concat!(
+                "{\"type\":\"session_meta\",\"payload\":{\"id\":\"s1\",\"model_provider\":\"rightcode\"}}\n",
+                "{\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":\"hi\"}}\n"
+            ),
+        )
+        .expect("write session");
+
+        let backup_root = dir.path().join("backup");
+        let changed = migrate_codex_jsonl_files(
+            &codex_dir,
+            &source_ids(&["some-trusted-provider"]),
+            &backup_root,
+        )
+        .expect("migrate jsonl");
+
+        assert_eq!(changed, 0);
+        let next = fs::read_to_string(&path).expect("read session");
+        assert!(next.contains("\"model_provider\":\"rightcode\""));
+        assert!(!backup_root.exists());
+    }
+
+    #[test]
+    fn does_not_update_unknown_state_db_history_without_trusted_source_id() {
+        let dir = tempdir().expect("tempdir");
+        let codex_dir = dir.path().join(".codex");
+        fs::create_dir_all(&codex_dir).expect("create codex dir");
+        let db_path = codex_dir.join(CODEX_STATE_DB_FILENAME);
+        let conn = Connection::open(&db_path).expect("open db");
+        conn.execute_batch(
+            "CREATE TABLE threads (
+                id TEXT PRIMARY KEY,
+                model_provider TEXT NOT NULL
+            );
+            INSERT INTO threads (id, model_provider) VALUES
+                ('a', 'aihubmix'),
+                ('b', 'openai'),
+                ('c', 'custom');",
+        )
+        .expect("seed db");
+        drop(conn);
+
+        let backup_root = dir.path().join("backup");
+        let changed = migrate_codex_state_db_provider_bucket(
+            &db_path,
+            &codex_dir,
+            &source_ids(&["rightcode"]),
+            &backup_root,
+        )
+        .expect("migrate state db");
+
+        assert_eq!(changed, 0);
+        let conn = Connection::open(&db_path).expect("reopen db");
+        let aihubmix_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM threads WHERE model_provider = 'aihubmix'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count aihubmix");
+        assert_eq!(aihubmix_count, 1);
+        assert!(!backup_root.exists());
+    }
+
+    #[test]
     fn updates_codex_state_db_thread_provider_ids() {
         let dir = tempdir().expect("tempdir");
         let codex_dir = dir.path().join(".codex");
@@ -555,5 +755,87 @@ mod tests {
         assert!(ids.contains("aihubmix"));
         assert!(!ids.contains("openai"));
         assert!(!ids.contains("codex-official"));
+    }
+
+    #[test]
+    fn skips_unknown_non_custom_provider_model_provider_id() {
+        let db = Database::memory().expect("memory db");
+        let mut provider = Provider::with_id(
+            "manual-aggregator".to_string(),
+            "Manual Aggregator".to_string(),
+            serde_json::json!({
+                "auth": {},
+                "config": "model_provider = \"my-private-relay\"\n\n[model_providers.my-private-relay]\nname = \"Manual Relay\"\nbase_url = \"http://localhost:8080/v1\""
+            }),
+            None,
+        );
+        provider.category = Some("aggregator".to_string());
+
+        db.save_provider("codex", &provider).expect("save provider");
+
+        let ids = collect_source_model_provider_ids(&db).expect("collect ids");
+        assert!(ids.is_empty());
+    }
+
+    #[test]
+    fn collects_known_legacy_provider_id_from_normalized_preset_config() {
+        let db = Database::memory().expect("memory db");
+        let mut provider = Provider::with_id(
+            "generated-uuid".to_string(),
+            "AIHubMix".to_string(),
+            serde_json::json!({
+                "auth": {},
+                "config": "model_provider = \"custom\"\n\n[model_providers.custom]\nname = \"AIHubMix\"\nbase_url = \"https://aihubmix.example/v1\""
+            }),
+            None,
+        );
+        provider.category = Some("aggregator".to_string());
+
+        db.save_provider("codex", &provider).expect("save provider");
+
+        let ids = collect_source_model_provider_ids(&db).expect("collect ids");
+        assert!(ids.contains("aihubmix"));
+        assert!(!ids.contains("generated-uuid"));
+    }
+
+    #[test]
+    fn collects_custom_category_provider_when_created_by_cc_switch() {
+        let db = Database::memory().expect("memory db");
+        let mut provider = Provider::with_id(
+            "generated-uuid".to_string(),
+            "Manual Relay".to_string(),
+            serde_json::json!({
+                "auth": {},
+                "config": "model_provider = \"my-private-relay\"\n\n[model_providers.my-private-relay]\nname = \"Manual Relay\"\nbase_url = \"http://localhost:8080/v1\""
+            }),
+            None,
+        );
+        provider.category = Some("custom".to_string());
+        provider.created_at = Some(1);
+
+        db.save_provider("codex", &provider).expect("save provider");
+
+        let ids = collect_source_model_provider_ids(&db).expect("collect ids");
+        assert!(ids.contains("my-private-relay"));
+    }
+
+    #[test]
+    fn skips_custom_category_provider_even_when_config_has_custom_model_provider_id() {
+        let db = Database::memory().expect("memory db");
+        let mut provider = Provider::with_id(
+            "manual".to_string(),
+            "Manual Relay".to_string(),
+            serde_json::json!({
+                "auth": {},
+                "config": "model_provider = \"my-local-relay\"\n\n[model_providers.my-local-relay]\nname = \"Manual Relay\"\nbase_url = \"http://localhost:8080/v1\""
+            }),
+            None,
+        );
+        provider.category = Some("custom".to_string());
+
+        db.save_provider("codex", &provider).expect("save provider");
+
+        let ids = collect_source_model_provider_ids(&db).expect("collect ids");
+        assert!(ids.is_empty());
     }
 }

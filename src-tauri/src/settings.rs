@@ -198,6 +198,8 @@ pub struct CodexThirdPartyHistoryProviderBucketMigration {
     pub migrated_jsonl_files: usize,
     #[serde(default)]
     pub migrated_state_rows: usize,
+    #[serde(default)]
+    pub scanned_history_files: bool,
 }
 
 /// 应用设置结构
@@ -594,7 +596,7 @@ pub fn is_codex_third_party_history_provider_bucket_migrated() -> bool {
                 .codex_third_party_history_provider_bucket_v1
                 .as_ref()
         })
-        .is_some()
+        .is_some_and(|m| m.scanned_history_files)
 }
 
 pub fn mark_codex_third_party_history_provider_bucket_migrated(

@@ -233,6 +233,7 @@ mod tests {
                         source_provider_ids: vec!["rightcode".to_string()],
                         migrated_jsonl_files: 2,
                         migrated_state_rows: 3,
+                        scanned_history_files: true,
                     },
                 ),
             }),
