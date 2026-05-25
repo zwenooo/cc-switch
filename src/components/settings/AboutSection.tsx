@@ -115,7 +115,7 @@ npm i -g opencode-ai@latest
 # OpenClaw
 npm i -g openclaw@latest
 # Hermes
-python3 -m pip install --upgrade "hermes-agent[web]"`;
+curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash`;
 
 const TOOL_DISPLAY_NAMES: Record<ToolName, string> = {
   claude: "Claude Code",
@@ -474,15 +474,23 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
 
       // 逐工具串行执行：每个工具独立成败、独立刷新版本，一个失败不会连坐
       // 后续工具（后端把整批拼成单脚本 + set -e，会在首个失败处中止整批）。
-      // soft=true 表示"命令成功执行但版本探不到"（装上却跑不起来），
+      // soft=true 表示"命令成功执行但结果仍需用户介入"（版本没变/装上却跑不起来），
       // 与命令本身报错（soft=false）区别对待：前者不算硬失败，toast 降级为 warning。
-      const failures: { toolName: ToolName; detail: string; soft: boolean }[] =
-        [];
+      const failures: {
+        toolName: ToolName;
+        detail: string;
+        soft: boolean;
+        kind?: "notRunnable" | "versionUnchanged";
+      }[] = [];
       let succeeded = 0;
 
       for (const toolName of toolNames) {
         setToolActions((prev) => ({ ...prev, [toolName]: action }));
         try {
+          const previousTool = toolVersionByName.get(toolName);
+          const previousVersion = previousTool?.version ?? null;
+          const previousLatestVersion = previousTool?.latest_version ?? null;
+
           await settingsApi.runToolLifecycleAction(
             [toolName],
             action,
@@ -495,18 +503,46 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
           );
           const tool = refreshed.find((t) => t.name === toolName);
           if (tool?.version) {
-            succeeded += 1;
-            // 升级成功后无条件补诊：版本没变多半被另一处遮蔽，版本变了另一处也可能仍在，
-            // 两种都要刷新冲突展示（diagnoseToolSilently 无冲突时会自动清旧）。
-            if (action === "update") {
+            const latestVersion = tool.latest_version ?? previousLatestVersion;
+            const versionUnchangedAfterUpdate =
+              action === "update" &&
+              Boolean(previousVersion) &&
+              tool.version === previousVersion &&
+              Boolean(latestVersion) &&
+              tool.version !== latestVersion;
+
+            if (versionUnchangedAfterUpdate) {
+              // 有些上游 updater 会在未实际改动版本时仍返回 0。这里用刷新后的
+              // 当前版本 + latest_version 再确认一次，避免给用户误报升级成功。
+              failures.push({
+                toolName,
+                detail: t("settings.toolActionVersionUnchanged", {
+                  version: tool.version,
+                  latest: latestVersion ?? t("common.unknown"),
+                }),
+                soft: true,
+                kind: "versionUnchanged",
+              });
               void diagnoseToolSilently(toolName);
+            } else {
+              succeeded += 1;
+              // 升级成功后无条件补诊：版本没变多半被另一处遮蔽，版本变了另一处也可能仍在，
+              // 两种都要刷新冲突展示（diagnoseToolSilently 无冲突时会自动清旧）。
+              if (action === "update") {
+                void diagnoseToolSilently(toolName);
+              }
             }
           } else {
             // 命令退出码为 0、但刷新后仍探不到版本：多半是"装上了却跑不起来"
             // （如 openclaw 要求更高的 Node 版本）。refreshToolVersions 的 merge 已把
             // version 置空并写入后端 error，这里只需归类为软失败并展示原因。
             const detail = tool?.error?.trim() || t("settings.toolNotRunnable");
-            failures.push({ toolName, detail, soft: true });
+            failures.push({
+              toolName,
+              detail,
+              soft: true,
+              kind: "notRunnable",
+            });
             // 装了却跑不起来同样可能源于多处安装，自动诊断帮用户定位。
             void diagnoseToolSilently(toolName);
           }
@@ -560,13 +596,22 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
         : failures[0]?.detail;
 
       const hardFailures = failures.filter((f) => !f.soft);
+      const allSoftVersionUnchanged =
+        failures.length > 0 &&
+        failures.every((f) => f.soft && f.kind === "versionUnchanged");
 
       if (succeeded === 0 && hardFailures.length === 0) {
-        // 命令均成功执行、但工具都探不到版本（装上却跑不起来）→ 降级为 warning 并解释原因。
-        toast.warning(t("settings.toolActionInstalledNotRunnable"), {
-          description: failureDescription || undefined,
-          closeButton: true,
-        });
+        // 命令均成功执行、但结果需要用户介入（版本没变 / 装上却跑不起来）
+        // → 降级为 warning 并解释原因。
+        toast.warning(
+          allSoftVersionUnchanged
+            ? t("settings.toolActionVersionUnchangedTitle")
+            : t("settings.toolActionInstalledNotRunnable"),
+          {
+            description: failureDescription || undefined,
+            closeButton: true,
+          },
+        );
       } else if (succeeded === 0) {
         toast.error(t("settings.toolActionFailed"), {
           description: failureDescription || undefined,
@@ -584,7 +629,13 @@ export function AboutSection({ isPortable }: AboutSectionProps) {
         );
       }
     },
-    [t, wslShellByTool, refreshToolVersions, diagnoseToolSilently],
+    [
+      t,
+      wslShellByTool,
+      toolVersionByName,
+      refreshToolVersions,
+      diagnoseToolSilently,
+    ],
   );
 
   // 升级/安装的统一入口锁。所有动作在入口处先登记 preflight、出口处解锁;
