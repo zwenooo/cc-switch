@@ -427,14 +427,19 @@ impl CodexAdapter {
     fn extract_key(&self, provider: &Provider) -> Option<String> {
         // 1. 尝试从 env 中获取
         if let Some(env) = provider.settings_config.get("env") {
-            if let Some(key) = env.get("OPENAI_API_KEY").and_then(|v| v.as_str()) {
+            if let Some(key) = env
+                .get("OPENAI_API_KEY")
+                .and_then(|v| v.as_str())
+                .map(str::trim)
+                .filter(|key| !key.is_empty())
+            {
                 return Some(key.to_string());
             }
         }
 
         // 2. 尝试从 auth 中获取 (Codex CLI 格式)
         if let Some(auth) = provider.settings_config.get("auth") {
-            if let Some(key) = auth.get("OPENAI_API_KEY").and_then(|v| v.as_str()) {
+            if let Some(key) = crate::codex_config::extract_codex_auth_api_key(auth) {
                 return Some(key.to_string());
             }
         }
@@ -445,6 +450,8 @@ impl CodexAdapter {
             .get("apiKey")
             .or_else(|| provider.settings_config.get("api_key"))
             .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|key| !key.is_empty())
         {
             return Some(key.to_string());
         }
@@ -455,8 +462,18 @@ impl CodexAdapter {
                 .get("api_key")
                 .or_else(|| config.get("apiKey"))
                 .and_then(|v| v.as_str())
+                .map(str::trim)
+                .filter(|key| !key.is_empty())
             {
                 return Some(key.to_string());
+            }
+
+            if let Some(config_str) = config.as_str() {
+                if let Some(key) =
+                    crate::codex_config::extract_codex_experimental_bearer_token(config_str)
+                {
+                    return Some(key);
+                }
             }
         }
 
@@ -616,6 +633,25 @@ mod tests {
 
         let auth = adapter.extract_auth(&provider).unwrap();
         assert_eq!(auth.api_key, "sk-test-key-12345678");
+        assert_eq!(auth.strategy, AuthStrategy::Bearer);
+    }
+
+    #[test]
+    fn test_extract_auth_falls_back_to_config_bearer_when_auth_key_empty() {
+        let adapter = CodexAdapter::new();
+        let provider = create_provider(json!({
+            "auth": {
+                "OPENAI_API_KEY": ""
+            },
+            "config": r#"model_provider = "custom"
+
+[model_providers.custom]
+experimental_bearer_token = "sk-config-key"
+"#
+        }));
+
+        let auth = adapter.extract_auth(&provider).unwrap();
+        assert_eq!(auth.api_key, "sk-config-key");
         assert_eq!(auth.strategy, AuthStrategy::Bearer);
     }
 

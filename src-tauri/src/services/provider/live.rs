@@ -580,12 +580,18 @@ fn restore_live_settings_for_provider_backfill(
     }
 
     let mut settings = live_settings;
-    if let Err(err) = crate::codex_config::restore_codex_settings_config_model_provider_for_backfill(
+    let restore_provider_token =
+        crate::codex_config::should_restore_codex_provider_token_for_backfill(
+            provider.category.as_deref(),
+            &provider.settings_config,
+        );
+    if let Err(err) = crate::codex_config::restore_codex_settings_for_backfill(
         &mut settings,
         &provider.settings_config,
+        restore_provider_token,
     ) {
         log::warn!(
-            "Failed to restore Codex provider id while backfilling '{}': {err}",
+            "Failed to restore Codex settings while backfilling '{}': {err}",
             provider.id
         );
     }
@@ -728,8 +734,9 @@ pub(crate) fn write_live_snapshot(app_type: &AppType, provider: &Provider) -> Re
                 .ok_or_else(|| AppError::Config("Codex 供应商配置缺少 'auth' 字段".to_string()))?;
             let config_str = obj.get("config").and_then(|v| v.as_str());
 
-            crate::codex_config::write_codex_live_with_catalog(
+            crate::codex_config::write_codex_provider_live_with_catalog(
                 &provider.settings_config,
+                provider.category.as_deref(),
                 auth,
                 config_str,
             )?;
@@ -951,17 +958,7 @@ pub fn sync_current_to_live(state: &AppState) -> Result<(), AppError> {
 pub fn read_live_settings(app_type: AppType) -> Result<Value, AppError> {
     match app_type {
         AppType::Codex => {
-            let auth_path = get_codex_auth_path();
-            if !auth_path.exists() {
-                return Err(AppError::localized(
-                    "codex.auth.missing",
-                    "Codex 配置文件不存在：缺少 auth.json",
-                    "Codex configuration missing: auth.json not found",
-                ));
-            }
-            let auth: Value = read_json_file(&auth_path)?;
-            let cfg_text = crate::codex_config::read_and_validate_codex_config_text()?;
-            let mut result = json!({ "auth": auth, "config": cfg_text });
+            let mut result = crate::codex_config::read_codex_live_settings()?;
             // `modelCatalog` is a cc-switch private field that lives only in
             // the DB SSOT plus the `cc-switch-model-catalog.json` projection
             // file — it is never inlined into `auth.json` or `config.toml`.
@@ -1091,19 +1088,7 @@ pub fn import_default_config(state: &AppState, app_type: AppType) -> Result<bool
     }
 
     let settings_config = match app_type {
-        AppType::Codex => {
-            let auth_path = get_codex_auth_path();
-            if !auth_path.exists() {
-                return Err(AppError::localized(
-                    "codex.live.missing",
-                    "Codex 配置文件不存在",
-                    "Codex configuration file is missing",
-                ));
-            }
-            let auth: Value = read_json_file(&auth_path)?;
-            let config_str = crate::codex_config::read_and_validate_codex_config_text()?;
-            json!({ "auth": auth, "config": config_str })
-        }
+        AppType::Codex => crate::codex_config::read_codex_live_settings()?,
         AppType::Claude => {
             let settings_path = get_claude_settings_path();
             if !settings_path.exists() {
@@ -1169,7 +1154,32 @@ pub fn import_default_config(state: &AppState, app_type: AppType) -> Result<bool
         settings_config,
         None,
     );
-    provider.category = Some("custom".to_string());
+    provider.category = Some(
+        if matches!(app_type, AppType::Codex) {
+            let config_text = provider
+                .settings_config
+                .get("config")
+                .and_then(Value::as_str);
+            let has_provider_key = crate::codex_config::extract_codex_api_key(
+                provider.settings_config.get("auth"),
+                config_text,
+            )
+            .is_some();
+            let has_login_material = provider
+                .settings_config
+                .get("auth")
+                .is_some_and(crate::codex_config::codex_auth_has_login_material);
+
+            if has_login_material && !has_provider_key {
+                "official"
+            } else {
+                "custom"
+            }
+        } else {
+            "custom"
+        }
+        .to_string(),
+    );
 
     state.db.save_provider(app_type.as_str(), &provider)?;
     state
