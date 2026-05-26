@@ -1,6 +1,7 @@
 // 供应商配置处理工具函数
 
 import type { TemplateValueConfig } from "../config/claudeProviderPresets";
+import { deepClone } from "@/utils/deepClone";
 import { normalizeTomlText } from "@/utils/textNormalization";
 import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
 
@@ -60,23 +61,6 @@ const isSubset = (target: any, source: any): boolean => {
   }
 
   return target === source;
-};
-
-// 深拷贝函数
-const deepClone = <T>(obj: T): T => {
-  if (obj === null || typeof obj !== "object") return obj;
-  if (obj instanceof Date) return new Date(obj.getTime()) as T;
-  if (obj instanceof Array) return obj.map((item) => deepClone(item)) as T;
-  if (obj instanceof Object) {
-    const clonedObj = {} as T;
-    for (const key in obj) {
-      if (obj.hasOwnProperty(key)) {
-        clonedObj[key] = deepClone(obj[key]);
-      }
-    }
-    return clonedObj;
-  }
-  return obj;
 };
 
 export interface UpdateCommonConfigResult {
