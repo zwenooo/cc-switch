@@ -9,6 +9,21 @@ export const iconMetadata: Record<string, IconMetadata> = {
     keywords: ["aigocode", "aigo", "code", "third-party"],
     defaultColor: "#5B7FFF",
   },
+  apikeyfun: {
+    name: "apikeyfun",
+    displayName: "APIKEY.FUN",
+    category: "ai-provider",
+    keywords: [
+      "apikeyfun",
+      "api key",
+      "gateway",
+      "relay",
+      "claude",
+      "codex",
+      "gemini",
+    ],
+    defaultColor: "#9C3F00",
+  },
   alibaba: {
     name: "alibaba",
     displayName: "Alibaba",

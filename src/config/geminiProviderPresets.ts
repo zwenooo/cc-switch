@@ -92,6 +92,26 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
     icon: "packycode",
   },
   {
+    name: "APIKEY.FUN",
+    websiteUrl: "https://apikey.fun",
+    apiKeyUrl: "https://apikey.fun/register?aff=CCSwitch",
+    settingsConfig: {
+      env: {
+        GOOGLE_GEMINI_BASE_URL: "https://api.apikey.fun",
+        GEMINI_API_KEY: "",
+        GEMINI_MODEL: "gemini-3-pro-preview",
+      },
+    },
+    baseURL: "https://api.apikey.fun",
+    model: "gemini-3-pro-preview",
+    description: "APIKEY.FUN",
+    category: "third_party",
+    isPartner: true,
+    partnerPromotionKey: "apikeyfun",
+    endpointCandidates: ["https://api.apikey.fun", "https://slb.apikey.fun"],
+    icon: "apikeyfun",
+  },
+  {
     name: "Cubence",
     websiteUrl: "https://cubence.com",
     apiKeyUrl: "https://cubence.com/signup?code=CCSWITCH&source=ccs",

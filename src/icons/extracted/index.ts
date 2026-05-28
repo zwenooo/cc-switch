@@ -1,6 +1,7 @@
 // Auto-generated icon index
 // Do not edit manually
 
+import _apikeyfun from "./apikeyfun.png";
 import _claudeapi from "./ClaudeApi.png";
 import _byteplus from "./byteplus.png";
 import _claudecn from "./claudecn.png";
@@ -87,6 +88,7 @@ export const icons: Record<string, string> = {
 };
 
 export const iconUrls: Record<string, string> = {
+  apikeyfun: _apikeyfun,
   byteplus: _byteplus,
   claudeapi: _claudeapi,
   claudecn: _claudecn,
