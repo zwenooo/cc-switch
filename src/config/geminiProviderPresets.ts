@@ -58,11 +58,11 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
     settingsConfig: {
       env: {
         GOOGLE_GEMINI_BASE_URL: "https://router.shengsuanyun.com/api",
-        GEMINI_MODEL: "gemini-3.1-pro",
+        GEMINI_MODEL: "google/gemini-3.1-pro-preview",
       },
     },
     baseURL: "https://router.shengsuanyun.com/api",
-    model: "gemini-3.1-pro",
+    model: "google/gemini-3.1-pro-preview",
     description: "Shengsuanyun",
     category: "aggregator",
     isPartner: true,

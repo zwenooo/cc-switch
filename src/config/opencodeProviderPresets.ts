@@ -310,8 +310,8 @@ export const opencodeProviderPresets: OpenCodeProviderPreset[] = [
         setCacheKey: true,
       },
       models: {
-        "claude-opus-4-7": { name: "Claude Opus 4.7" },
-        "claude-sonnet-4-6": { name: "Claude Sonnet 4.6" },
+        "anthropic/claude-opus-4.7": { name: "Claude Opus 4.7" },
+        "anthropic/claude-sonnet-4.6": { name: "Claude Sonnet 4.6" },
       },
     },
     category: "aggregator",

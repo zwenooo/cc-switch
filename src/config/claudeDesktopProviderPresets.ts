@@ -158,7 +158,11 @@ export const claudeDesktopProviderPresets: ClaudeDesktopProviderPreset[] = [
     baseUrl: "https://router.shengsuanyun.com/api",
     mode: "direct",
     apiFormat: "anthropic",
-    modelRoutes: passthroughRoutes(),
+    modelRoutes: mappedRoutes(
+      "anthropic/claude-sonnet-4.6",
+      "anthropic/claude-opus-4.7",
+      "anthropic/claude-haiku-4.5",
+    ),
     isPartner: true,
     partnerPromotionKey: "shengsuanyun",
     icon: "shengsuanyun",
