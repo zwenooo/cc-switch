@@ -172,17 +172,6 @@ pub(crate) fn is_custom_codex_model_provider_id(id: &str) -> bool {
             .any(|reserved| reserved.eq_ignore_ascii_case(id))
 }
 
-pub(crate) fn stable_codex_model_provider_id_from_config(config_text: &str) -> Option<String> {
-    let doc = config_text.parse::<DocumentMut>().ok()?;
-    let provider_id = active_codex_model_provider_id(&doc)?;
-
-    if is_custom_codex_model_provider_id(&provider_id) {
-        Some(provider_id)
-    } else {
-        None
-    }
-}
-
 /// Write only Codex `config.toml` for provider switching.
 ///
 /// Codex login state lives in `auth.json`; provider routing, endpoint, model,

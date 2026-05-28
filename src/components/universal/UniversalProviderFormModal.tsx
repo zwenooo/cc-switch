@@ -152,12 +152,12 @@ export function UniversalProviderFormModal({
     const codexBaseUrl = baseUrl.endsWith("/v1")
       ? baseUrl
       : `${baseUrl.replace(/\/+$/, "")}/v1`;
-    const configToml = `model_provider = "newapi"
+    const configToml = `model_provider = "custom"
 model = "${model}"
 model_reasoning_effort = "${reasoningEffort}"
 disable_response_storage = true
 
-[model_providers.newapi]
+[model_providers.custom]
 name = "NewAPI"
 base_url = "${codexBaseUrl}"
 wire_api = "responses"
