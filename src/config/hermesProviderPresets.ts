@@ -145,7 +145,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     partnerPromotionKey: "shengsuanyun",
     icon: "shengsuanyun",
     suggestedDefaults: {
-      model: { default: "openai/gpt-5.4", provider: "shengsuanyun" },
+      model: { default: "openai/gpt-5.5", provider: "shengsuanyun" },
     },
   },
   {
