@@ -35,7 +35,7 @@ export function isHermesReadOnlyProvider(settingsConfig: unknown): boolean {
  *
  * ```yaml
  * models:
- *   anthropic/claude-opus-4-7:
+ *   anthropic/claude-opus-4-8:
  *     context_length: 200000
  * ```
  *
@@ -250,8 +250,8 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
       api_mode: "chat_completions",
       models: [
         {
-          id: "anthropic/claude-opus-4-7",
-          name: "Claude Opus 4.7",
+          id: "anthropic/claude-opus-4-8",
+          name: "Claude Opus 4.8",
           context_length: 1000000,
         },
         {
@@ -280,7 +280,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     icon: "openrouter",
     iconColor: "#6366F1",
     suggestedDefaults: {
-      model: { default: "anthropic/claude-opus-4-7", provider: "openrouter" },
+      model: { default: "anthropic/claude-opus-4-8", provider: "openrouter" },
     },
   },
   {
@@ -733,7 +733,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
       api_key: "",
       api_mode: "anthropic_messages",
       models: [
-        { id: "claude-opus-4-7", name: "Claude Opus 4.7" },
+        { id: "claude-opus-4-8", name: "Claude Opus 4.8" },
         { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" },
         { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5" },
       ],
@@ -743,7 +743,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     partnerPromotionKey: "packycode",
     icon: "packycode",
     suggestedDefaults: {
-      model: { default: "claude-opus-4-7", provider: "packycode" },
+      model: { default: "claude-opus-4-8", provider: "packycode" },
     },
   },
   {
@@ -757,8 +757,8 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
       api_mode: "anthropic_messages",
       models: [
         {
-          id: "claude-opus-4-7",
-          name: "Claude Opus 4.7",
+          id: "claude-opus-4-8",
+          name: "Claude Opus 4.8",
           context_length: 1000000,
         },
         {
@@ -778,7 +778,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     partnerPromotionKey: "apikeyfun",
     icon: "apikeyfun",
     suggestedDefaults: {
-      model: { default: "claude-opus-4-7", provider: "apikeyfun" },
+      model: { default: "claude-opus-4-8", provider: "apikeyfun" },
     },
   },
   {
@@ -863,7 +863,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
       api_key: "",
       api_mode: "anthropic_messages",
       models: [
-        { id: "claude-opus-4-7", name: "Claude Opus 4.7" },
+        { id: "claude-opus-4-8", name: "Claude Opus 4.8" },
         { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" },
         { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5" },
       ],
@@ -874,7 +874,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     icon: "cubence",
     iconColor: "#000000",
     suggestedDefaults: {
-      model: { default: "claude-opus-4-7", provider: "cubence" },
+      model: { default: "claude-opus-4-8", provider: "cubence" },
     },
   },
   {
@@ -887,7 +887,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
       api_key: "",
       api_mode: "anthropic_messages",
       models: [
-        { id: "claude-opus-4-7", name: "Claude Opus 4.7" },
+        { id: "claude-opus-4-8", name: "Claude Opus 4.8" },
         { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" },
         { id: "claude-haiku-4-5", name: "Claude Haiku 4.5" },
       ],
@@ -917,7 +917,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
       api_key: "",
       api_mode: "anthropic_messages",
       models: [
-        { id: "claude-opus-4-7", name: "Claude Opus 4.7" },
+        { id: "claude-opus-4-8", name: "Claude Opus 4.8" },
         { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" },
         { id: "claude-haiku-4-5", name: "Claude Haiku 4.5" },
       ],
@@ -947,7 +947,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
       api_key: "",
       api_mode: "anthropic_messages",
       models: [
-        { id: "claude-opus-4-7", name: "Claude Opus 4.7" },
+        { id: "claude-opus-4-8", name: "Claude Opus 4.8" },
         { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" },
         { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5" },
       ],
@@ -958,7 +958,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     icon: "aigocode",
     iconColor: "#5B7FFF",
     suggestedDefaults: {
-      model: { default: "claude-opus-4-7", provider: "aigocode" },
+      model: { default: "claude-opus-4-8", provider: "aigocode" },
     },
   },
   {
@@ -971,7 +971,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
       api_key: "",
       api_mode: "anthropic_messages",
       models: [
-        { id: "claude-opus-4-7", name: "Claude Opus 4.7" },
+        { id: "claude-opus-4-8", name: "Claude Opus 4.8" },
         { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" },
         { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5" },
       ],
@@ -982,7 +982,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     icon: "rc",
     iconColor: "#E96B2C",
     suggestedDefaults: {
-      model: { default: "claude-opus-4-7", provider: "rightcode" },
+      model: { default: "claude-opus-4-8", provider: "rightcode" },
     },
   },
   {
@@ -995,7 +995,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
       api_key: "",
       api_mode: "anthropic_messages",
       models: [
-        { id: "claude-opus-4-7", name: "Claude Opus 4.7" },
+        { id: "claude-opus-4-8", name: "Claude Opus 4.8" },
         { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" },
         { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5" },
       ],
@@ -1006,7 +1006,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     icon: "aicodemirror",
     iconColor: "#000000",
     suggestedDefaults: {
-      model: { default: "claude-opus-4-7", provider: "aicodemirror" },
+      model: { default: "claude-opus-4-8", provider: "aicodemirror" },
     },
   },
   {
@@ -1019,7 +1019,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
       api_key: "",
       api_mode: "anthropic_messages",
       models: [
-        { id: "claude-opus-4-7", name: "Claude Opus 4.7" },
+        { id: "claude-opus-4-8", name: "Claude Opus 4.8" },
         { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" },
         { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5" },
       ],
@@ -1030,7 +1030,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     icon: "crazyrouter",
     iconColor: "#000000",
     suggestedDefaults: {
-      model: { default: "claude-opus-4-7", provider: "crazyrouter" },
+      model: { default: "claude-opus-4-8", provider: "crazyrouter" },
     },
   },
   {
@@ -1043,7 +1043,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
       api_key: "",
       api_mode: "anthropic_messages",
       models: [
-        { id: "claude-opus-4-7", name: "Claude Opus 4.7" },
+        { id: "claude-opus-4-8", name: "Claude Opus 4.8" },
         { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" },
         { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5" },
       ],
@@ -1054,7 +1054,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     icon: "sssaicode",
     iconColor: "#000000",
     suggestedDefaults: {
-      model: { default: "claude-opus-4-7", provider: "sssaicode" },
+      model: { default: "claude-opus-4-8", provider: "sssaicode" },
     },
   },
   {
@@ -1111,7 +1111,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
       api_key: "",
       api_mode: "anthropic_messages",
       models: [
-        { id: "claude-opus-4-7", name: "Claude Opus 4.7" },
+        { id: "claude-opus-4-8", name: "Claude Opus 4.8" },
         { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" },
         { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5" },
       ],
@@ -1122,7 +1122,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     icon: "micu",
     iconColor: "#000000",
     suggestedDefaults: {
-      model: { default: "claude-opus-4-7", provider: "micu" },
+      model: { default: "claude-opus-4-8", provider: "micu" },
     },
   },
   {
@@ -1135,7 +1135,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
       api_key: "",
       api_mode: "anthropic_messages",
       models: [
-        { id: "claude-opus-4-7", name: "Claude Opus 4.7" },
+        { id: "claude-opus-4-8", name: "Claude Opus 4.8" },
         { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" },
         { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5" },
       ],
@@ -1146,7 +1146,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     icon: "ctok",
     iconColor: "#000000",
     suggestedDefaults: {
-      model: { default: "claude-opus-4-7", provider: "ctok" },
+      model: { default: "claude-opus-4-8", provider: "ctok" },
     },
   },
   {
@@ -1159,7 +1159,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
       api_key: "",
       api_mode: "anthropic_messages",
       models: [
-        { id: "claude-opus-4-7", name: "Claude Opus 4.7" },
+        { id: "claude-opus-4-8", name: "Claude Opus 4.8" },
         { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" },
         { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5" },
       ],
@@ -1168,7 +1168,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     icon: "eflowcode",
     iconColor: "#000000",
     suggestedDefaults: {
-      model: { default: "claude-opus-4-7", provider: "eflowcode" },
+      model: { default: "claude-opus-4-8", provider: "eflowcode" },
     },
   },
   {
@@ -1259,7 +1259,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
       api_key: "",
       api_mode: "anthropic_messages",
       models: [
-        { id: "claude-opus-4-7", name: "Claude Opus 4.7" },
+        { id: "claude-opus-4-8", name: "Claude Opus 4.8" },
         { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" },
         {
           id: "claude-haiku-4-5-20251001",
@@ -1270,7 +1270,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     category: "aggregator",
     icon: "pipellm",
     suggestedDefaults: {
-      model: { default: "claude-opus-4-7", provider: "pipellm" },
+      model: { default: "claude-opus-4-8", provider: "pipellm" },
     },
   },
   {

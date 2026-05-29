@@ -24,7 +24,7 @@ describe("TheRouter provider presets", () => {
     expect(env.ANTHROPIC_DEFAULT_SONNET_MODEL).toBe(
       "anthropic/claude-sonnet-4.6",
     );
-    expect(env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBe("anthropic/claude-opus-4.7");
+    expect(env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBe("anthropic/claude-opus-4.8");
   });
 
   it("uses the OpenAI-compatible v1 endpoint for Codex", () => {

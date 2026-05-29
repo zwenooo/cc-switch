@@ -32,6 +32,9 @@ pub const ANTHROPIC_CLAUDE_ROUTE_PREFIX: &str = "anthropic/claude-";
 /// Claude Desktop schema 不接受此后缀，import 边界翻译为 `supports1m` 字段。
 pub const ONE_M_CONTEXT_MARKER: &str = "[1m]";
 
+const CURRENT_OPUS_ROUTE_ID: &str = "claude-opus-4-8";
+const LEGACY_OPUS_ROUTE_ID: &str = "claude-opus-4-7";
+
 const NON_ANTHROPIC_ROUTE_MARKERS: &[&str] = &[
     "ark-code",
     "astron",
@@ -87,7 +90,7 @@ pub const DEFAULT_PROXY_ROUTES: &[ClaudeDesktopDefaultRoute] = &[
         supports_1m: true,
     },
     ClaudeDesktopDefaultRoute {
-        route_id: "claude-opus-4-7",
+        route_id: CURRENT_OPUS_ROUTE_ID,
         env_key: "ANTHROPIC_DEFAULT_OPUS_MODEL",
         supports_1m: true,
     },
@@ -710,7 +713,11 @@ pub fn map_proxy_request_model(mut body: Value, provider: &Provider) -> Result<V
         })?;
 
     let routes = proxy_model_routes(provider)?;
-    let route = routes.iter().find(|r| r.route_id == requested);
+    let route = routes.iter().find(|r| r.route_id == requested).or_else(|| {
+        routes
+            .iter()
+            .find(|r| is_compatible_opus_route_alias(&r.route_id, &requested))
+    });
     let Some(route) = route else {
         return Err(AppError::localized(
             "claude_desktop.provider.route_unknown",
@@ -724,6 +731,14 @@ pub fn map_proxy_request_model(mut body: Value, provider: &Provider) -> Result<V
         normalize_mimo_anthropic_thinking_history(&mut body);
     }
     Ok(body)
+}
+
+fn is_compatible_opus_route_alias(route_id: &str, requested: &str) -> bool {
+    matches!(
+        (route_id, requested),
+        (CURRENT_OPUS_ROUTE_ID, LEGACY_OPUS_ROUTE_ID)
+            | (LEGACY_OPUS_ROUTE_ID, CURRENT_OPUS_ROUTE_ID)
+    )
 }
 
 fn should_normalize_mimo_anthropic_thinking_history(
@@ -1520,9 +1535,55 @@ mod tests {
         assert_eq!(models["data"][0]["id"], json!("claude-sonnet-4-6"));
         assert_eq!(models["data"][0]["supports1m"], json!(true));
 
-        let err = map_proxy_request_model(json!({"model": "claude-opus-4-7"}), &provider)
+        let err = map_proxy_request_model(json!({"model": "claude-opus-4-8"}), &provider)
             .expect_err("unknown route should fail");
-        assert!(err.to_string().contains("claude-opus-4-7"));
+        assert!(err.to_string().contains("claude-opus-4-8"));
+    }
+
+    #[test]
+    fn claude_desktop_proxy_accepts_opus_4_7_4_8_alias_during_rollout() {
+        let mut provider = proxy_provider("proxy");
+        let current_routes = std::collections::HashMap::from([(
+            "claude-opus-4-8".to_string(),
+            ClaudeDesktopModelRoute {
+                model: "upstream-opus-new".to_string(),
+                label_override: None,
+                supports_1m: Some(true),
+            },
+        )]);
+        provider
+            .meta
+            .as_mut()
+            .expect("meta")
+            .claude_desktop_model_routes = current_routes;
+
+        let mapped = map_proxy_request_model(
+            json!({"model": "claude-opus-4-7", "messages": []}),
+            &provider,
+        )
+        .expect("legacy Opus route should map to current route");
+        assert_eq!(mapped["model"], json!("upstream-opus-new"));
+
+        let legacy_routes = std::collections::HashMap::from([(
+            "claude-opus-4-7".to_string(),
+            ClaudeDesktopModelRoute {
+                model: "upstream-opus-legacy".to_string(),
+                label_override: None,
+                supports_1m: Some(true),
+            },
+        )]);
+        provider
+            .meta
+            .as_mut()
+            .expect("meta")
+            .claude_desktop_model_routes = legacy_routes;
+
+        let mapped = map_proxy_request_model(
+            json!({"model": "claude-opus-4-8", "messages": []}),
+            &provider,
+        )
+        .expect("current Opus route should map to legacy saved route");
+        assert_eq!(mapped["model"], json!("upstream-opus-legacy"));
     }
 
     #[test]
@@ -1652,12 +1713,12 @@ mod tests {
             .iter()
             .find(|route| route.upstream_model == "deepseek-v4-pro")
             .expect("repaired route");
-        assert_eq!(repaired.route_id, "claude-opus-4-7");
+        assert_eq!(repaired.route_id, "claude-opus-4-8");
         assert_eq!(repaired.label_override.as_deref(), Some("deepseek-v4-pro"));
         assert!(repaired.supports_1m);
 
         let mapped = map_proxy_request_model(
-            json!({"model": "claude-opus-4-7", "messages": []}),
+            json!({"model": "claude-opus-4-8", "messages": []}),
             &provider,
         )
         .expect("map repaired route");

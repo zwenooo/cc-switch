@@ -1818,9 +1818,9 @@
       "addModel": "添加模型",
       "noModels": "暂无模型配置。切换到此供应商时将不会更新默认模型。",
       "modelId": "模型 ID",
-      "modelIdPlaceholder": "anthropic/claude-opus-4-7",
+      "modelIdPlaceholder": "anthropic/claude-opus-4-8",
       "modelName": "显示名称",
-      "modelNamePlaceholder": "Claude Opus 4.7",
+      "modelNamePlaceholder": "Claude Opus 4.8",
       "contextLength": "上下文长度",
       "advancedOptions": "高级选项",
       "modelsHint": "切换到此供应商时，第一个模型会写入顶层 model.default。",
@@ -2623,7 +2623,7 @@
       "artistry": "高度创意与艺术性任务类别，激发新颖想法和创造性解决方案，默认使用 Gemini 3 Pro 的最大变体。",
       "quick": "轻量任务类别，用于单文件修改、错别字修复、简单调整等琐碎工作，默认使用 Claude Haiku 4.5 快速模型。",
       "unspecifiedLow": "未归类低工作量任务类别，适用于不适合其他类别且工作量较小的任务，默认使用 Claude Sonnet 4.5。",
-      "unspecifiedHigh": "未归类高工作量任务类别，适用于不适合其他类别且工作量较大的任务，默认使用 Claude Opus 4.7 的最大变体。",
+      "unspecifiedHigh": "未归类高工作量任务类别，适用于不适合其他类别且工作量较大的任务，默认使用 Claude Opus 4.8 的最大变体。",
       "writing": "写作类别，专注于文档、散文和技术写作，默认使用 Gemini 3 Flash 快速生成模型。"
     },
     "slimAgentDesc": {

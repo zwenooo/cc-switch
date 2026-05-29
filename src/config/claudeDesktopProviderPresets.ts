@@ -31,7 +31,7 @@ export interface ClaudeDesktopRoutePreset {
  */
 export const CLAUDE_DESKTOP_ROLE_ROUTE_IDS = {
   sonnet: "claude-sonnet-4-6",
-  opus: "claude-opus-4-7",
+  opus: "claude-opus-4-8",
   haiku: "claude-haiku-4-5",
 } as const;
 
@@ -160,7 +160,7 @@ export const claudeDesktopProviderPresets: ClaudeDesktopProviderPreset[] = [
     apiFormat: "anthropic",
     modelRoutes: mappedRoutes(
       "anthropic/claude-sonnet-4.6",
-      "anthropic/claude-opus-4.7",
+      "anthropic/claude-opus-4.8",
       "anthropic/claude-haiku-4.5",
     ),
     isPartner: true,
@@ -888,7 +888,7 @@ export const claudeDesktopProviderPresets: ClaudeDesktopProviderPreset[] = [
     apiFormat: "anthropic",
     modelRoutes: mappedRoutes(
       "anthropic/claude-sonnet-4.6",
-      "anthropic/claude-opus-4.7",
+      "anthropic/claude-opus-4.8",
       "anthropic/claude-haiku-4.5",
       true,
     ),
@@ -905,7 +905,7 @@ export const claudeDesktopProviderPresets: ClaudeDesktopProviderPreset[] = [
     apiFormat: "anthropic",
     modelRoutes: mappedRoutes(
       "anthropic/claude-sonnet-4.6",
-      "anthropic/claude-opus-4.7",
+      "anthropic/claude-opus-4.8",
       "anthropic/claude-haiku-4.5",
       true,
     ),
