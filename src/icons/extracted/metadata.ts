@@ -54,6 +54,22 @@ export const iconMetadata: Record<string, IconMetadata> = {
     ],
     defaultColor: "#111111",
   },
+  sudocode: {
+    name: "sudocode",
+    displayName: "SudoCode",
+    category: "ai-provider",
+    keywords: [
+      "sudocode",
+      "sudo code",
+      "gateway",
+      "relay",
+      "claude",
+      "codex",
+      "gemini",
+      "openclaw",
+    ],
+    defaultColor: "#111111",
+  },
   alibaba: {
     name: "alibaba",
     displayName: "Alibaba",
