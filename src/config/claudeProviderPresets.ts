@@ -662,6 +662,27 @@ export const providerPresets: ProviderPreset[] = [
     icon: "apinebula",
   },
   {
+    name: "AtlasCloud",
+    websiteUrl: "https://www.atlascloud.ai/console/coding-plan",
+    apiKeyUrl: "https://www.atlascloud.ai/console/coding-plan",
+    settingsConfig: {
+      env: {
+        ANTHROPIC_BASE_URL: "https://api.atlascloud.ai",
+        ANTHROPIC_AUTH_TOKEN: "",
+        ANTHROPIC_MODEL: "zai-org/glm-5.1",
+        ANTHROPIC_DEFAULT_HAIKU_MODEL: "zai-org/glm-5.1",
+        ANTHROPIC_DEFAULT_SONNET_MODEL: "zai-org/glm-5.1",
+        ANTHROPIC_DEFAULT_OPUS_MODEL: "zai-org/glm-5.1",
+        CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: "1",
+      },
+    },
+    endpointCandidates: ["https://api.atlascloud.ai"],
+    category: "aggregator",
+    isPartner: true,
+    partnerPromotionKey: "atlascloud",
+    icon: "atlascloud",
+  },
+  {
     name: "ClaudeAPI",
     websiteUrl: "https://claudeapi.com",
     apiKeyUrl: "https://console.claudeapi.com/register?aff=pCLD",

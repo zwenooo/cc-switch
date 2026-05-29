@@ -878,6 +878,30 @@ requires_openai_auth = true`,
     icon: "apinebula",
   },
   {
+    name: "AtlasCloud",
+    websiteUrl: "https://www.atlascloud.ai/console/coding-plan",
+    apiKeyUrl: "https://www.atlascloud.ai/console/coding-plan",
+    category: "aggregator",
+    auth: generateThirdPartyAuth(""),
+    config: `model_provider = "custom"
+model = "zai-org/glm-5.1"
+disable_response_storage = true
+
+[model_providers.custom]
+name = "AtlasCloud"
+base_url = "https://api.atlascloud.ai/v1"
+wire_api = "responses"
+requires_openai_auth = true`,
+    endpointCandidates: ["https://api.atlascloud.ai/v1"],
+    apiFormat: "openai_chat",
+    modelCatalog: modelCatalog([
+      { model: "zai-org/glm-5.1", displayName: "GLM 5.1" },
+    ]),
+    isPartner: true,
+    partnerPromotionKey: "atlascloud",
+    icon: "atlascloud",
+  },
+  {
     name: "ClaudeCN",
     websiteUrl: "https://claudecn.top",
     apiKeyUrl: "https://claudecn.top/register?aff=ccswitch",

@@ -806,6 +806,30 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     },
   },
   {
+    name: "AtlasCloud",
+    websiteUrl: "https://www.atlascloud.ai/console/coding-plan",
+    apiKeyUrl: "https://www.atlascloud.ai/console/coding-plan",
+    settingsConfig: {
+      name: "atlascloud",
+      base_url: "https://api.atlascloud.ai/v1",
+      api_key: "",
+      api_mode: "chat_completions",
+      models: [
+        {
+          id: "zai-org/glm-5.1",
+          name: "GLM 5.1",
+        },
+      ],
+    },
+    category: "aggregator",
+    isPartner: true,
+    partnerPromotionKey: "atlascloud",
+    icon: "atlascloud",
+    suggestedDefaults: {
+      model: { default: "zai-org/glm-5.1", provider: "atlascloud" },
+    },
+  },
+  {
     name: "Cubence",
     websiteUrl: "https://cubence.com",
     apiKeyUrl: "https://cubence.com/signup?code=CCSWITCH&source=ccs",

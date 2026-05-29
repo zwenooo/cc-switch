@@ -140,6 +140,11 @@ Claude Code / Codex / Gemini 公式チャンネルが最安で元価格の 38% /
 <td>本プロジェクトは「APINEBULA」のスポンサーシップにより運営されています！APINEBULA は、「銀河録像局」傘下のエンタープライズ向け AI 統合プラットフォームです。大手の豊富なリソースを背景に、開発者、チーム、そして企業ユーザーの皆様へ、安定性とコストパフォーマンスに優れた大規模言語モデル（LLM）の API 連携サービスを提供しています。Claude、GPT、Gemini をはじめとする世界中の主要なフルスペック（満血）モデルを 1 つの API に集約。世界トップクラスの AI モデルを、<strong>最大 90% OFF（元の価格の 1 割〜）</strong>という圧倒的な低価格でご利用いただけます。また、企業向けの高度な並行処理（高コンカレンシー）、正式な契約締結、法人口座振り込み、請求書・領収書発行など、ビジネス利用に必要なサポートも万全です。AI プログラミング、AI エージェント開発、業務システムへの統合など、様々なシーンに最適です。<a href="https://apinebula.com/02rw5X">こちらのリンク</a>から登録し、チャージ時にプロモコード <strong>「ccswitch」を入力すると、さらに 10% OFF</strong> の割引特典が適用されます！</td>
 </tr>
 
+<tr>
+<td width="180"><a href="https://www.atlascloud.ai/console/coding-plan"><img src="assets/partners/logos/atlascloud_banner.png" alt="Atlas Cloud" width="150"></a></td>
+<td>Atlas Cloud は、1 つの API で動画・画像生成や LLM（大規模言語モデル）を利用できる全モーダル対応の AI 推論プラットフォームです。複数のベンダーを個別に管理する手間を省き、一度の接続で 300 以上の厳選されたマルチモーダルモデルにアクセスできます。より低コストで API を利用できる、開発者向けの新しい「コーディングプラン」プロモーションをぜひチェックしてください：<a href="https://www.atlascloud.ai/console/coding-plan">https://www.atlascloud.ai/console/coding-plan</a></td>
+</tr>
+
 </table>
 
 </details>

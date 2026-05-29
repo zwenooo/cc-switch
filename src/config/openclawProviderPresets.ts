@@ -1505,6 +1505,38 @@ export const openclawProviderPresets: OpenClawProviderPreset[] = [
     },
   },
   {
+    name: "AtlasCloud",
+    websiteUrl: "https://www.atlascloud.ai/console/coding-plan",
+    apiKeyUrl: "https://www.atlascloud.ai/console/coding-plan",
+    settingsConfig: {
+      baseUrl: "https://api.atlascloud.ai/v1",
+      apiKey: "",
+      api: "openai-completions",
+      models: [
+        {
+          id: "zai-org/glm-5.1",
+          name: "GLM 5.1",
+        },
+      ],
+    },
+    category: "aggregator",
+    isPartner: true,
+    partnerPromotionKey: "atlascloud",
+    icon: "atlascloud",
+    templateValues: {
+      apiKey: {
+        label: "API Key",
+        placeholder: "",
+        editorValue: "",
+      },
+    },
+    suggestedDefaults: {
+      model: {
+        primary: "atlascloud/zai-org/glm-5.1",
+      },
+    },
+  },
+  {
     name: "Cubence",
     websiteUrl: "https://cubence.com",
     apiKeyUrl: "https://cubence.com/signup?code=CCSWITCH&source=ccs",

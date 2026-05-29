@@ -39,6 +39,21 @@ export const iconMetadata: Record<string, IconMetadata> = {
     ],
     defaultColor: "#C86F49",
   },
+  atlascloud: {
+    name: "atlascloud",
+    displayName: "AtlasCloud",
+    category: "ai-provider",
+    keywords: [
+      "atlascloud",
+      "atlas cloud",
+      "coding plan",
+      "openai",
+      "anthropic",
+      "codex",
+      "claude",
+    ],
+    defaultColor: "#111111",
+  },
   alibaba: {
     name: "alibaba",
     displayName: "Alibaba",

@@ -1265,6 +1265,34 @@ export const opencodeProviderPresets: OpenCodeProviderPreset[] = [
     },
   },
   {
+    name: "AtlasCloud",
+    websiteUrl: "https://www.atlascloud.ai/console/coding-plan",
+    apiKeyUrl: "https://www.atlascloud.ai/console/coding-plan",
+    settingsConfig: {
+      npm: "@ai-sdk/openai-compatible",
+      name: "AtlasCloud",
+      options: {
+        baseURL: "https://api.atlascloud.ai/v1",
+        apiKey: "",
+        setCacheKey: true,
+      },
+      models: {
+        "zai-org/glm-5.1": { name: "GLM 5.1" },
+      },
+    },
+    category: "aggregator",
+    isPartner: true,
+    partnerPromotionKey: "atlascloud",
+    icon: "atlascloud",
+    templateValues: {
+      apiKey: {
+        label: "API Key",
+        placeholder: "",
+        editorValue: "",
+      },
+    },
+  },
+  {
     name: "Cubence",
     websiteUrl: "https://cubence.com",
     apiKeyUrl: "https://cubence.com/signup?code=CCSWITCH&source=ccs",
