@@ -138,7 +138,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
       base_url: "https://router.shengsuanyun.com/api/v1",
       api_key: "",
       api_mode: "chat_completions",
-      models: [{ id: "openai/gpt-5.4", name: "GPT-5.4" }],
+      models: [{ id: "openai/gpt-5.5", name: "GPT-5.5" }],
     },
     category: "aggregator",
     isPartner: true,
@@ -265,13 +265,13 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
           context_length: 200000,
         },
         {
-          id: "openai/gpt-5.4",
-          name: "GPT-5.4",
+          id: "openai/gpt-5.5",
+          name: "GPT-5.5",
           context_length: 400000,
         },
         {
-          id: "google/gemini-3-pro",
-          name: "Gemini 3 Pro",
+          id: "google/gemini-3.5-flash",
+          name: "Gemini 3.5 Flash",
           context_length: 1000000,
         },
       ],
@@ -396,13 +396,13 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
       base_url: "https://open.bigmodel.cn/api/paas/v4",
       api_key: "",
       api_mode: "chat_completions",
-      models: [{ id: "glm-5", name: "GLM-5" }],
+      models: [{ id: "glm-5.1", name: "GLM-5.1" }],
     },
     category: "cn_official",
     icon: "zhipu",
     iconColor: "#0F62FE",
     suggestedDefaults: {
-      model: { default: "glm-5", provider: "zhipu_glm" },
+      model: { default: "glm-5.1", provider: "zhipu_glm" },
     },
   },
   {
@@ -414,13 +414,13 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
       base_url: "https://api.z.ai/api/paas/v4",
       api_key: "",
       api_mode: "chat_completions",
-      models: [{ id: "glm-5", name: "GLM-5" }],
+      models: [{ id: "glm-5.1", name: "GLM-5.1" }],
     },
     category: "cn_official",
     icon: "zhipu",
     iconColor: "#0F62FE",
     suggestedDefaults: {
-      model: { default: "glm-5", provider: "zhipu_glm_en" },
+      model: { default: "glm-5.1", provider: "zhipu_glm_en" },
     },
   },
   {
@@ -523,13 +523,13 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
       base_url: "https://api-inference.modelscope.cn/v1",
       api_key: "",
       api_mode: "chat_completions",
-      models: [{ id: "ZhipuAI/GLM-5", name: "ZhipuAI / GLM-5" }],
+      models: [{ id: "ZhipuAI/GLM-5.1", name: "ZhipuAI / GLM-5.1" }],
     },
     category: "aggregator",
     icon: "modelscope",
     iconColor: "#624AFF",
     suggestedDefaults: {
-      model: { default: "ZhipuAI/GLM-5", provider: "modelscope" },
+      model: { default: "ZhipuAI/GLM-5.1", provider: "modelscope" },
     },
   },
   {
@@ -645,13 +645,13 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
       base_url: "https://aihubmix.com/v1",
       api_key: "",
       api_mode: "chat_completions",
-      models: [{ id: "gpt-5.4", name: "GPT-5.4" }],
+      models: [{ id: "gpt-5.5", name: "GPT-5.5" }],
     },
     category: "aggregator",
     icon: "aihubmix",
     iconColor: "#006FFB",
     suggestedDefaults: {
-      model: { default: "gpt-5.4", provider: "aihubmix" },
+      model: { default: "gpt-5.5", provider: "aihubmix" },
     },
   },
   {
@@ -714,13 +714,13 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
       base_url: "https://www.dmxapi.cn/v1",
       api_key: "",
       api_mode: "chat_completions",
-      models: [{ id: "gpt-5.4", name: "GPT-5.4" }],
+      models: [{ id: "gpt-5.5", name: "GPT-5.5" }],
     },
     category: "aggregator",
     isPartner: true,
     partnerPromotionKey: "dmxapi",
     suggestedDefaults: {
-      model: { default: "gpt-5.4", provider: "dmxapi" },
+      model: { default: "gpt-5.5", provider: "dmxapi" },
     },
   },
   {
@@ -1068,7 +1068,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
       base_url: "https://api.modelverse.cn/v1",
       api_key: "",
       api_mode: "chat_completions",
-      models: [{ id: "gpt-5.4", name: "GPT-5.4" }],
+      models: [{ id: "gpt-5.5", name: "GPT-5.5" }],
     },
     category: "aggregator",
     isPartner: true,
@@ -1076,7 +1076,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     icon: "ucloud",
     iconColor: "#000000",
     suggestedDefaults: {
-      model: { default: "gpt-5.4", provider: "compshare" },
+      model: { default: "gpt-5.5", provider: "compshare" },
     },
   },
   {
@@ -1090,7 +1090,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
       base_url: "https://cp.compshare.cn/v1",
       api_key: "",
       api_mode: "chat_completions",
-      models: [{ id: "gpt-5.4", name: "GPT-5.4" }],
+      models: [{ id: "gpt-5.5", name: "GPT-5.5" }],
     },
     category: "aggregator",
     isPartner: true,
@@ -1098,7 +1098,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     icon: "ucloud",
     iconColor: "#000000",
     suggestedDefaults: {
-      model: { default: "gpt-5.4", provider: "compshare_coding" },
+      model: { default: "gpt-5.5", provider: "compshare_coding" },
     },
   },
   {
@@ -1180,14 +1180,14 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
       base_url: "https://api.lemondata.cc/v1",
       api_key: "",
       api_mode: "chat_completions",
-      models: [{ id: "gpt-5.4", name: "GPT-5.4" }],
+      models: [{ id: "gpt-5.5", name: "GPT-5.5" }],
     },
     category: "third_party",
     isPartner: true,
     partnerPromotionKey: "lemondata",
     icon: "lemondata",
     suggestedDefaults: {
-      model: { default: "gpt-5.4", provider: "lemondata" },
+      model: { default: "gpt-5.5", provider: "lemondata" },
     },
   },
   {
@@ -1200,7 +1200,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
       api_key: "",
       api_mode: "chat_completions",
       models: [
-        { id: "openai/gpt-5.4", name: "GPT-5.4" },
+        { id: "openai/gpt-5.5", name: "GPT-5.5" },
         { id: "openai/gpt-5.4-mini", name: "GPT-5.4 mini" },
         { id: "openai/gpt-5.4-nano", name: "GPT-5.4 nano" },
       ],
@@ -1208,7 +1208,7 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
     category: "aggregator",
     suggestedDefaults: {
       model: {
-        default: "openai/gpt-5.4",
+        default: "openai/gpt-5.5",
         provider: "therouter",
       },
     },
@@ -1222,13 +1222,13 @@ export const hermesProviderPresets: HermesProviderPreset[] = [
       base_url: "https://api.novita.ai/v3/openai",
       api_key: "",
       api_mode: "chat_completions",
-      models: [{ id: "zai-org/glm-5", name: "Zai-Org / GLM-5" }],
+      models: [{ id: "zai-org/glm-5.1", name: "Zai-Org / GLM-5.1" }],
     },
     category: "aggregator",
     icon: "novita",
     iconColor: "#000000",
     suggestedDefaults: {
-      model: { default: "zai-org/glm-5", provider: "novita" },
+      model: { default: "zai-org/glm-5.1", provider: "novita" },
     },
   },
   {

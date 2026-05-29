@@ -2563,14 +2563,14 @@
       "writing": "寫作"
     },
     "categoryTooltip": {
-      "visualEngineering": "前端與視覺工程類別，專注於 UI/UX 設計、樣式、動畫和介面實作，預設使用 Gemini 3 Pro 模型。",
+      "visualEngineering": "前端與視覺工程類別，專注於 UI/UX 設計、樣式、動畫和介面實作，預設使用 Gemini 3.5 Flash 模型。",
       "ultrabrain": "深度邏輯推理類別，用於需要廣泛分析的複雜架構決策，預設使用 GPT-5.3 Codex 的超高推理變體。",
       "deep": "深度自主問題解決類別，目標導向執行，行動前進行徹底研究，適用於需要深度理解的棘手問題。",
-      "artistry": "高度創意與藝術性任務類別，激發新穎想法和創造性解決方案，預設使用 Gemini 3 Pro 的最大變體。",
+      "artistry": "高度創意與藝術性任務類別，激發新穎想法和創造性解決方案，預設使用 Gemini 3.5 Flash 的高推理變體。",
       "quick": "輕量任務類別，用於單檔案修改、錯別字修復、簡單調整等瑣碎工作，預設使用 Claude Haiku 4.5 快速模型。",
       "unspecifiedLow": "未分類低工作量任務類別，適用於不適合其他類別且工作量較小的任務，預設使用 Claude Sonnet 4.5。",
       "unspecifiedHigh": "未分類高工作量任務類別，適用於不適合其他類別且工作量較大的任務，預設使用 Claude Opus 4.8 的最大變體。",
-      "writing": "寫作類別，專注於文件、散文和技術寫作，預設使用 Gemini 3 Flash 快速產生模型。"
+      "writing": "寫作類別，專注於文件、散文和技術寫作，預設使用 Kimi K2.5 模型。"
     },
     "slimAgentDesc": {
       "orchestrator": "協調器",

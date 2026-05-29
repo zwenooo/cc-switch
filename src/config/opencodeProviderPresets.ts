@@ -49,8 +49,8 @@ export const OPENCODE_PRESET_MODEL_VARIANTS: Record<
       modalities: { input: ["text"], output: ["text"] },
     },
     {
-      id: "glm-5",
-      name: "GLM 5",
+      id: "glm-5.1",
+      name: "GLM 5.1",
       contextLimit: 204800,
       outputLimit: 131072,
       modalities: { input: ["text"], output: ["text"] },
@@ -91,8 +91,8 @@ export const OPENCODE_PRESET_MODEL_VARIANTS: Record<
       },
     },
     {
-      id: "gemini-3-flash-preview",
-      name: "Gemini 3 Flash Preview",
+      id: "gemini-3.5-flash",
+      name: "Gemini 3.5 Flash",
       contextLimit: 1048576,
       outputLimit: 65536,
       modalities: {
@@ -114,29 +114,11 @@ export const OPENCODE_PRESET_MODEL_VARIANTS: Record<
         },
       },
     },
-    {
-      id: "gemini-3-pro-preview",
-      name: "Gemini 3 Pro Preview",
-      contextLimit: 1048576,
-      outputLimit: 65536,
-      modalities: {
-        input: ["text", "image", "pdf", "video", "audio"],
-        output: ["text"],
-      },
-      variants: {
-        low: {
-          thinkingConfig: { includeThoughts: true, thinkingLevel: "low" },
-        },
-        high: {
-          thinkingConfig: { includeThoughts: true, thinkingLevel: "high" },
-        },
-      },
-    },
   ],
   "@ai-sdk/openai": [
     {
-      id: "gpt-5.4",
-      name: "GPT-5.4",
+      id: "gpt-5.5",
+      name: "GPT-5.5",
       contextLimit: 400000,
       outputLimit: 128000,
       modalities: { input: ["text", "image"], output: ["text"] },
@@ -465,7 +447,7 @@ export const opencodeProviderPresets: OpenCodeProviderPreset[] = [
         setCacheKey: true,
       },
       models: {
-        "glm-5": { name: "GLM-5" },
+        "glm-5.1": { name: "GLM-5.1" },
       },
     },
     category: "cn_official",
@@ -498,7 +480,7 @@ export const opencodeProviderPresets: OpenCodeProviderPreset[] = [
         setCacheKey: true,
       },
       models: {
-        "glm-5": { name: "GLM-5" },
+        "glm-5.1": { name: "GLM-5.1" },
       },
     },
     category: "cn_official",
@@ -722,7 +704,7 @@ export const opencodeProviderPresets: OpenCodeProviderPreset[] = [
         setCacheKey: true,
       },
       models: {
-        "ZhipuAI/GLM-5": { name: "GLM-5" },
+        "ZhipuAI/GLM-5.1": { name: "GLM-5.1" },
       },
     },
     category: "aggregator",
@@ -1079,8 +1061,8 @@ export const opencodeProviderPresets: OpenCodeProviderPreset[] = [
         "anthropic/claude-sonnet-4.6": { name: "Claude Sonnet 4.6" },
         "openai/gpt-5.3-codex": { name: "GPT-5.3 Codex" },
         "openai/gpt-5.2": { name: "GPT-5.2" },
-        "google/gemini-3-flash-preview": {
-          name: "Gemini 3 Flash Preview",
+        "google/gemini-3.5-flash": {
+          name: "Gemini 3.5 Flash",
         },
         "qwen/qwen3-coder-480b": { name: "Qwen3 Coder 480B" },
       },
@@ -1107,7 +1089,7 @@ export const opencodeProviderPresets: OpenCodeProviderPreset[] = [
         setCacheKey: true,
       },
       models: {
-        "zai-org/glm-5": { name: "GLM-5" },
+        "zai-org/glm-5.1": { name: "GLM-5.1" },
       },
     },
     category: "aggregator",
@@ -1393,7 +1375,7 @@ export const opencodeProviderPresets: OpenCodeProviderPreset[] = [
         setCacheKey: true,
       },
       models: {
-        "gpt-5.4": { name: "GPT-5.4" },
+        "gpt-5.5": { name: "GPT-5.5" },
       },
     },
     category: "third_party",
@@ -1662,7 +1644,7 @@ export const opencodeProviderPresets: OpenCodeProviderPreset[] = [
         setCacheKey: true,
       },
       models: {
-        "gpt-5.4": { name: "GPT-5.4" },
+        "gpt-5.5": { name: "GPT-5.5" },
       },
     },
     category: "third_party",
