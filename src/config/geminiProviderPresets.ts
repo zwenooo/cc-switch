@@ -112,6 +112,26 @@ export const geminiProviderPresets: GeminiProviderPreset[] = [
     icon: "apikeyfun",
   },
   {
+    name: "APINebula",
+    websiteUrl: "https://apinebula.com",
+    apiKeyUrl: "https://apinebula.com/02rw5X",
+    settingsConfig: {
+      env: {
+        GOOGLE_GEMINI_BASE_URL: "https://apinebula.com",
+        GEMINI_API_KEY: "",
+        GEMINI_MODEL: "gemini-3-pro-preview",
+      },
+    },
+    baseURL: "https://apinebula.com",
+    model: "gemini-3-pro-preview",
+    description: "APINebula",
+    category: "third_party",
+    isPartner: true,
+    partnerPromotionKey: "apinebula",
+    endpointCandidates: ["https://apinebula.com"],
+    icon: "apinebula",
+  },
+  {
     name: "Cubence",
     websiteUrl: "https://cubence.com",
     apiKeyUrl: "https://cubence.com/signup?code=CCSWITCH&source=ccs",

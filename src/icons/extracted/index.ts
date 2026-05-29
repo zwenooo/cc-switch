@@ -2,6 +2,7 @@
 // Do not edit manually
 
 import _apikeyfun from "./apikeyfun.png";
+import _apinebula from "./apinebula_icon.png";
 import _claudeapi from "./ClaudeApi.png";
 import _byteplus from "./byteplus.png";
 import _claudecn from "./claudecn.png";
@@ -89,6 +90,7 @@ export const icons: Record<string, string> = {
 
 export const iconUrls: Record<string, string> = {
   apikeyfun: _apikeyfun,
+  apinebula: _apinebula,
   byteplus: _byteplus,
   claudeapi: _claudeapi,
   claudecn: _claudecn,

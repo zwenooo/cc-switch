@@ -24,6 +24,21 @@ export const iconMetadata: Record<string, IconMetadata> = {
     ],
     defaultColor: "#9C3F00",
   },
+  apinebula: {
+    name: "apinebula",
+    displayName: "APINebula",
+    category: "ai-provider",
+    keywords: [
+      "apinebula",
+      "api nebula",
+      "gateway",
+      "relay",
+      "claude",
+      "codex",
+      "gemini",
+    ],
+    defaultColor: "#C86F49",
+  },
   alibaba: {
     name: "alibaba",
     displayName: "Alibaba",
