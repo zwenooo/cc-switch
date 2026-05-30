@@ -253,8 +253,9 @@ pub struct AppSettings {
     /// Whether to show the failover toggle independently on the main page
     #[serde(default)]
     pub enable_failover_toggle: bool,
-    /// Keep Codex ChatGPT login material in auth.json when switching to third-party providers
-    #[serde(default = "default_true")]
+    /// Keep Codex ChatGPT login material in auth.json when switching to third-party providers.
+    /// Opt-in: defaults to false so third-party switches cleanly overwrite auth.json.
+    #[serde(default)]
     pub preserve_codex_official_auth_on_switch: bool,
     /// User has confirmed the failover toggle first-run notice
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -369,7 +370,7 @@ impl Default for AppSettings {
             usage_confirmed: None,
             stream_check_confirmed: None,
             enable_failover_toggle: false,
-            preserve_codex_official_auth_on_switch: true,
+            preserve_codex_official_auth_on_switch: false,
             failover_confirmed: None,
             first_run_notice_confirmed: None,
             common_config_confirmed: None,
