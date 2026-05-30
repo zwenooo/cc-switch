@@ -596,6 +596,19 @@ fn restore_live_settings_for_provider_backfill(
         );
     }
 
+    // `modelCatalog` is a cc-switch–private field whose SSOT is the DB. Live's
+    // `config.toml` only carries a lossy projection (`model_catalog_json` →
+    // generated catalog file) that proxy takeover/restore cycles and Codex.app
+    // config rewrites can drop, so `read_live_settings` may reconstruct it as
+    // absent. Never let a switch-away backfill from Live erase the stored
+    // mapping: prefer the DB provider's `modelCatalog`, falling back to whatever
+    // Live reconstructed only when the DB has none.
+    if let Some(stored_catalog) = provider.settings_config.get("modelCatalog") {
+        if let Some(obj) = settings.as_object_mut() {
+            obj.insert("modelCatalog".to_string(), stored_catalog.clone());
+        }
+    }
+
     settings
 }
 
@@ -1646,5 +1659,79 @@ mod tests {
             .map(|value| value.as_str().expect("tool id should be string"))
             .collect();
         assert_eq!(values, vec!["tool2"]);
+    }
+
+    #[test]
+    fn codex_switch_backfill_preserves_stored_model_catalog_when_live_lacks_it() {
+        // Reproduces the data-loss bug: switching away from a Codex provider
+        // backfills the outgoing provider from Live, but Live's config.toml had
+        // already lost its `model_catalog_json` projection (proxy cycle /
+        // Codex.app rewrite), so `read_live_settings` reconstructs no catalog.
+        // The stored mapping must survive the backfill.
+        let mut provider = Provider::with_id(
+            "deepseek".to_string(),
+            "DeepSeek".to_string(),
+            json!({
+                "auth": { "OPENAI_API_KEY": "sk-deepseek" },
+                "config": "model_provider = \"custom\"\nmodel = \"deepseek-v4-pro\"\n",
+                "modelCatalog": {
+                    "models": [
+                        { "model": "deepseek-v4-pro", "contextWindow": 1_000_000 }
+                    ]
+                }
+            }),
+            None,
+        );
+        provider.category = Some("cn_official".to_string());
+
+        // Live snapshot as captured during switch: no `modelCatalog` field.
+        let live_settings = json!({
+            "auth": { "OPENAI_API_KEY": "sk-deepseek" },
+            "config": "model_provider = \"custom\"\nmodel = \"deepseek-v4-pro\"\n"
+        });
+
+        let result =
+            restore_live_settings_for_provider_backfill(&AppType::Codex, &provider, live_settings);
+
+        assert_eq!(
+            result.get("modelCatalog"),
+            provider.settings_config.get("modelCatalog"),
+            "switch-away backfill must keep the DB-stored modelCatalog when Live has none"
+        );
+    }
+
+    #[test]
+    fn codex_switch_backfill_keeps_live_catalog_when_db_has_none() {
+        // When the DB provider has no stored catalog, a catalog reconstructed
+        // from Live (if any) should be left intact — the DB-preference overlay
+        // must not wipe it.
+        let mut provider = Provider::with_id(
+            "deepseek".to_string(),
+            "DeepSeek".to_string(),
+            json!({
+                "auth": { "OPENAI_API_KEY": "sk-deepseek" },
+                "config": "model_provider = \"custom\"\nmodel = \"deepseek-v4-pro\"\n"
+            }),
+            None,
+        );
+        provider.category = Some("cn_official".to_string());
+
+        let live_settings = json!({
+            "auth": { "OPENAI_API_KEY": "sk-deepseek" },
+            "config": "model_provider = \"custom\"\nmodel = \"deepseek-v4-pro\"\n",
+            "modelCatalog": { "models": [ { "model": "deepseek-v4-pro" } ] }
+        });
+
+        let result = restore_live_settings_for_provider_backfill(
+            &AppType::Codex,
+            &provider,
+            live_settings.clone(),
+        );
+
+        assert_eq!(
+            result.get("modelCatalog"),
+            live_settings.get("modelCatalog"),
+            "backfill must keep the Live-reconstructed catalog when the DB has none"
+        );
     }
 }
