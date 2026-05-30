@@ -242,11 +242,11 @@ export function SettingsPage({
                         handleAutoSave({ skillSyncMethod: method })
                       }
                     />
-                    <WindowSettings
+                    <CodexAuthSettings
                       settings={settings}
                       onChange={handleAutoSave}
                     />
-                    <CodexAuthSettings
+                    <WindowSettings
                       settings={settings}
                       onChange={handleAutoSave}
                     />

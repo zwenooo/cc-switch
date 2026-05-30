@@ -562,9 +562,9 @@
     "enableClaudePluginIntegrationDescription": "開啟後 Vscode Claude Code 外掛程式的供應商將隨本軟體切換",
     "skipClaudeOnboarding": "跳過 Claude Code 初次安裝確認",
     "skipClaudeOnboardingDescription": "開啟後跳過 Claude Code 初次安裝確認",
-    "codexAuth": "Codex 認證",
+    "codexAuth": "Codex 應用增強",
     "preserveCodexOfficialAuthOnSwitch": "切換第三方時保留官方登入",
-    "preserveCodexOfficialAuthOnSwitchDescription": "開啟後切換第三方 Codex 供應商只更新 config.toml，並保留 auth.json 中的 ChatGPT 登入狀態；關閉後會用目前供應商 auth 覆寫 auth.json。",
+    "preserveCodexOfficialAuthOnSwitchDescription": "開啟後可以在使用第三方 API 的時候使用 Codex 應用的官方外掛、手機遠端操作等功能",
     "appVisibility": {
       "title": "主頁面顯示",
       "description": "選擇在主頁面顯示的應用程式",

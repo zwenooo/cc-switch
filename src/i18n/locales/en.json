@@ -562,9 +562,9 @@
     "enableClaudePluginIntegrationDescription": "When enabled, the VS Code Claude Code extension provider will switch with this app",
     "skipClaudeOnboarding": "Skip Claude Code first-run confirmation",
     "skipClaudeOnboardingDescription": "When enabled, Claude Code will skip the first-run confirmation",
-    "codexAuth": "Codex Authentication",
+    "codexAuth": "Codex App Enhancements",
     "preserveCodexOfficialAuthOnSwitch": "Keep official login when switching third-party providers",
-    "preserveCodexOfficialAuthOnSwitchDescription": "When enabled, third-party Codex switches update only config.toml and keep the ChatGPT login in auth.json. When disabled, auth.json is overwritten with the active provider auth.",
+    "preserveCodexOfficialAuthOnSwitchDescription": "When enabled, you can use the Codex app's official plugins, mobile remote control, and other features while using third-party APIs.",
     "appVisibility": {
       "title": "Homepage Display",
       "description": "Choose which apps to show on the homepage",

@@ -739,7 +739,10 @@ fn set_codex_experimental_bearer_token(config_text: &str, token: &str) -> Result
     Ok(doc.to_string())
 }
 
-fn remove_codex_experimental_bearer_token(config_text: &str) -> Result<String, AppError> {
+pub fn remove_codex_experimental_bearer_token_if(
+    config_text: &str,
+    predicate: impl Fn(&str) -> bool,
+) -> Result<String, AppError> {
     if config_text.trim().is_empty() || !config_text.contains("experimental_bearer_token") {
         return Ok(config_text.to_string());
     }
@@ -755,12 +758,30 @@ fn remove_codex_experimental_bearer_token(config_text: &str) -> Result<String, A
             .and_then(|table| table.get_mut(provider_id.as_str()))
             .and_then(|item| item.as_table_mut())
         {
-            provider_table.remove("experimental_bearer_token");
+            let should_remove = provider_table
+                .get("experimental_bearer_token")
+                .and_then(|item| item.as_str())
+                .map(str::trim)
+                .is_some_and(&predicate);
+            if should_remove {
+                provider_table.remove("experimental_bearer_token");
+            }
         }
     }
 
-    doc.as_table_mut().remove("experimental_bearer_token");
+    let should_remove_top_level = doc
+        .get("experimental_bearer_token")
+        .and_then(|item| item.as_str())
+        .map(str::trim)
+        .is_some_and(&predicate);
+    if should_remove_top_level {
+        doc.as_table_mut().remove("experimental_bearer_token");
+    }
     Ok(doc.to_string())
+}
+
+fn remove_codex_experimental_bearer_token(config_text: &str) -> Result<String, AppError> {
+    remove_codex_experimental_bearer_token_if(config_text, |_| true)
 }
 
 /// Read the current Codex live settings as a `{ auth, config }` object.
