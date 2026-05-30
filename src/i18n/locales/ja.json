@@ -561,6 +561,9 @@
     "enableClaudePluginIntegrationDescription": "オンにすると VS Code の Claude Code 拡張のプロバイダーも同期します",
     "skipClaudeOnboarding": "Claude Code の初回確認をスキップ",
     "skipClaudeOnboardingDescription": "オンにすると Claude Code の初回インストール確認をスキップします",
+    "codexAuth": "Codex 認証",
+    "preserveCodexOfficialAuthOnSwitch": "サードパーティ切替時に公式ログインを保持",
+    "preserveCodexOfficialAuthOnSwitchDescription": "オンにするとサードパーティ Codex への切替では config.toml のみ更新し、auth.json の ChatGPT ログインを保持します。オフにすると auth.json を現在のプロバイダー認証で上書きします。",
     "appVisibility": {
       "title": "ホームページ表示",
       "description": "ホームページに表示するアプリを選択",

@@ -788,15 +788,19 @@ pub fn read_codex_live_settings() -> Result<Value, AppError> {
 
 /// Route a Codex live write between full auth+config or config-only.
 ///
-/// Official providers with usable login material own `auth.json`; everyone
-/// else only touches `config.toml` so the user's ChatGPT login cache survives
-/// third-party switches.
+/// Official providers with usable login material own `auth.json`. Third-party
+/// providers only touch `config.toml` when the compatibility setting is enabled
+/// so the user's ChatGPT login cache survives provider switches.
 pub fn write_codex_live_for_provider(
     category: Option<&str>,
     auth: &Value,
     config_text: Option<&str>,
 ) -> Result<(), AppError> {
     if category == Some("official") && codex_auth_has_login_material(auth) {
+        write_codex_live_atomic(auth, config_text)
+    } else if category != Some("official")
+        && !crate::settings::preserve_codex_official_auth_on_switch()
+    {
         write_codex_live_atomic(auth, config_text)
     } else {
         let live_config = prepare_codex_provider_live_config(auth, config_text.unwrap_or(""))?;

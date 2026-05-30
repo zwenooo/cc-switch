@@ -561,6 +561,9 @@
     "enableClaudePluginIntegrationDescription": "开启后 Vscode Claude Code 插件的供应商将随本软件切换",
     "skipClaudeOnboarding": "跳过 Claude Code 初次安装确认",
     "skipClaudeOnboardingDescription": "开启后跳过 Claude Code 初次安装确认",
+    "codexAuth": "Codex 认证",
+    "preserveCodexOfficialAuthOnSwitch": "切换第三方时保留官方登录",
+    "preserveCodexOfficialAuthOnSwitchDescription": "开启后切换第三方 Codex 供应商只更新 config.toml，并保留 auth.json 中的 ChatGPT 登录态；关闭后会用当前供应商 auth 覆盖 auth.json。",
     "appVisibility": {
       "title": "主页面显示",
       "description": "选择在主页面显示的应用",
