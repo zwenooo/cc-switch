@@ -385,6 +385,13 @@ impl ProxyService {
         });
     }
 
+    pub(crate) async fn lock_switch_for_app(
+        &self,
+        app_type: &str,
+    ) -> tokio::sync::OwnedMutexGuard<()> {
+        self.switch_locks.lock_for_app(app_type).await
+    }
+
     /// 启动代理服务器
     pub async fn start(&self) -> Result<ProxyServerInfo, String> {
         // 1. 启动时自动设置 proxy_enabled = true
@@ -535,6 +542,7 @@ impl ProxyService {
     pub async fn set_takeover_for_app(&self, app_type: &str, enabled: bool) -> Result<(), String> {
         let app = AppType::from_str(app_type).map_err(|e| format!("无效的应用类型: {e}"))?;
         let app_type_str = app.as_str();
+        let _guard = self.switch_locks.lock_for_app(app_type_str).await;
 
         if enabled {
             // 1) 代理服务未运行则自动启动
@@ -549,6 +557,7 @@ impl ProxyService {
                 .await
                 .map_err(|e| format!("获取 {app_type_str} 配置失败: {e}"))?;
 
+            let mut restore_existing_backup_before_takeover = false;
             if current_config.enabled {
                 let has_backup = match self.db.get_live_backup(app_type_str).await {
                     Ok(v) => v.is_some(),
@@ -557,33 +566,45 @@ impl ProxyService {
                         false
                     }
                 };
-                let live_taken_over = self.detect_takeover_in_live_config_for_app(&app);
+                let live_matches_current_proxy =
+                    match self.live_takeover_matches_current_proxy(&app).await {
+                        Ok(value) => value,
+                        Err(e) => {
+                            log::warn!("检测 {app_type_str} 接管配置失败（将继续重建接管）: {e}");
+                            false
+                        }
+                    };
 
-                // 必须 backup AND live 占位符同时存在才算真接管。
-                // 只看其一会出现「UI 显示已接管但 Live 已被恢复」或「Live 仍是占位符但备份丢失」
-                // 两种脏角落，下面的重建分支会把这些情况修复成一致状态。
-                if has_backup && live_taken_over {
+                // 必须 backup 存在，且 live 确实指向当前代理地址，才算真接管。
+                // 只看占位符会把半接管/旧端口残留误判为可复用，导致开启接管后
+                // live 文件仍停留在普通供应商配置。
+                if has_backup && live_matches_current_proxy {
                     return Ok(());
                 }
+                restore_existing_backup_before_takeover = has_backup;
 
                 log::warn!(
-                    "{app_type_str} 标记为已接管，但 backup={has_backup} live_taken_over={live_taken_over}，正在重新接管并补齐备份"
+                    "{app_type_str} 标记为已接管，但 backup={has_backup} live_matches_current_proxy={live_matches_current_proxy}，正在重新接管并补齐 Live"
                 );
             }
 
             // 3) 备份 Live 配置（严格：目标 app 不存在则报错）
-            self.backup_live_config_strict(&app).await?;
+            if restore_existing_backup_before_takeover {
+                self.restore_live_config_for_app_inner(&app).await?;
+            } else {
+                self.backup_live_config_strict(&app).await?;
 
-            // 4) 同步 Live Token 到数据库（仅当前 app）
-            if let Err(e) = self.sync_live_to_provider(&app).await {
-                let _ = self.db.delete_live_backup(app_type_str).await;
-                return Err(e);
+                // 4) 同步 Live Token 到数据库（仅当前 app）
+                if let Err(e) = self.sync_live_to_provider(&app).await {
+                    let _ = self.db.delete_live_backup(app_type_str).await;
+                    return Err(e);
+                }
             }
 
             // 5) 写入接管配置（仅当前 app）
             if let Err(e) = self.takeover_live_config_strict(&app).await {
                 log::error!("{app_type_str} 接管 Live 配置失败，尝试恢复: {e}");
-                match self.restore_live_config_for_app(&app).await {
+                match self.restore_live_config_for_app_inner(&app).await {
                     Ok(()) => {
                         // 恢复成功才清理备份，避免失败场景下丢失唯一可回滚来源
                         let _ = self.db.delete_live_backup(app_type_str).await;
@@ -650,7 +671,8 @@ impl ProxyService {
         // 必须走 with_fallback 版本：备份 → SSOT → 清理占位符 的三层兜底。
         // 简版 restore_live_config_for_app 在备份缺失时会静默 Ok(())，
         // 留下接管时写入的占位符（代理地址/PROXY_MANAGED token），客户端无法工作。
-        self.restore_live_config_for_app_with_fallback(&app).await?;
+        self.restore_live_config_for_app_with_fallback_inner(&app)
+            .await?;
 
         // 2) 删除该 app 的备份（避免长期存储敏感 Token）
         self.db
@@ -1360,12 +1382,6 @@ impl ProxyService {
         Ok(())
     }
 
-    /// 恢复指定应用的 Live 配置（若无备份则不做任何操作）
-    async fn restore_live_config_for_app(&self, app_type: &AppType) -> Result<(), String> {
-        let _guard = self.switch_locks.lock_for_app(app_type.as_str()).await;
-        self.restore_live_config_for_app_inner(app_type).await
-    }
-
     async fn restore_live_config_for_app_inner(&self, app_type: &AppType) -> Result<(), String> {
         match app_type {
             AppType::Claude => {
@@ -1558,6 +1574,82 @@ impl ProxyService {
             || rest.starts_with("::")
     }
 
+    fn proxy_urls_match(actual: &str, expected: &str) -> bool {
+        actual.trim().trim_end_matches('/') == expected.trim().trim_end_matches('/')
+    }
+
+    fn codex_config_has_base_url_matching(
+        config_text: &str,
+        predicate: impl Fn(&str) -> bool,
+    ) -> bool {
+        let Ok(doc) = toml::from_str::<toml::Value>(config_text) else {
+            return false;
+        };
+
+        let active_provider = doc
+            .get("model_provider")
+            .and_then(|value| value.as_str())
+            .map(str::trim)
+            .filter(|id| !id.is_empty());
+
+        if let Some(provider_id) = active_provider {
+            if doc
+                .get("model_providers")
+                .and_then(|value| value.get(provider_id))
+                .and_then(|value| value.get("base_url"))
+                .and_then(|value| value.as_str())
+                .is_some_and(&predicate)
+            {
+                return true;
+            }
+        }
+
+        doc.get("base_url")
+            .and_then(|value| value.as_str())
+            .is_some_and(predicate)
+    }
+
+    async fn live_takeover_matches_current_proxy(
+        &self,
+        app_type: &AppType,
+    ) -> Result<bool, String> {
+        let (proxy_url, proxy_codex_base_url) = self.build_proxy_urls().await?;
+
+        match app_type {
+            AppType::Claude => {
+                let config = self.read_claude_live()?;
+                let base_url_matches = config
+                    .get("env")
+                    .and_then(|value| value.get("ANTHROPIC_BASE_URL"))
+                    .and_then(|value| value.as_str())
+                    .is_some_and(|url| Self::proxy_urls_match(url, &proxy_url));
+                Ok(Self::is_claude_live_taken_over(&config) && base_url_matches)
+            }
+            AppType::Codex => {
+                let config = self.read_codex_live()?;
+                let base_url_matches = config
+                    .get("config")
+                    .and_then(|value| value.as_str())
+                    .is_some_and(|config_text| {
+                        Self::codex_config_has_base_url_matching(config_text, |url| {
+                            Self::proxy_urls_match(url, &proxy_codex_base_url)
+                        })
+                    });
+                Ok(Self::codex_live_has_proxy_placeholder(&config) && base_url_matches)
+            }
+            AppType::Gemini => {
+                let config = self.read_gemini_live()?;
+                let base_url_matches = config
+                    .get("env")
+                    .and_then(|value| value.get("GOOGLE_GEMINI_BASE_URL"))
+                    .and_then(|value| value.as_str())
+                    .is_some_and(|url| Self::proxy_urls_match(url, &proxy_url));
+                Ok(Self::is_gemini_live_taken_over(&config) && base_url_matches)
+            }
+            _ => Ok(false),
+        }
+    }
+
     fn cleanup_claude_takeover_placeholders_in_live(&self) -> Result<(), String> {
         let mut config = self.read_claude_live()?;
 
@@ -1718,7 +1810,7 @@ impl ProxyService {
         false
     }
 
-    fn is_codex_live_taken_over(config: &Value) -> bool {
+    fn codex_live_has_proxy_placeholder(config: &Value) -> bool {
         if config
             .get("auth")
             .and_then(|v| v.as_object())
@@ -1735,6 +1827,10 @@ impl ProxyService {
             .and_then(crate::codex_config::extract_codex_experimental_bearer_token)
             .as_deref()
             == Some(PROXY_TOKEN_PLACEHOLDER)
+    }
+
+    fn is_codex_live_taken_over(config: &Value) -> bool {
+        Self::codex_live_has_proxy_placeholder(config)
     }
 
     fn is_gemini_live_taken_over(config: &Value) -> bool {
@@ -1788,6 +1884,7 @@ impl ProxyService {
                     &mut effective_settings,
                     existing_value,
                 )?;
+                Self::preserve_codex_oauth_auth_in_backup(&mut effective_settings, existing_value)?;
             }
         }
 
@@ -1824,7 +1921,14 @@ impl ProxyService {
         provider_id: &str,
     ) -> Result<HotSwitchOutcome, String> {
         let _guard = self.switch_locks.lock_for_app(app_type).await;
+        self.hot_switch_provider_inner(app_type, provider_id).await
+    }
 
+    pub(crate) async fn hot_switch_provider_inner(
+        &self,
+        app_type: &str,
+        provider_id: &str,
+    ) -> Result<HotSwitchOutcome, String> {
         let app_type_enum =
             AppType::from_str(app_type).map_err(|_| format!("无效的应用类型: {app_type}"))?;
         let provider = self
@@ -1970,6 +2074,40 @@ impl ProxyService {
         }
 
         target_obj.insert("config".to_string(), json!(target_doc.to_string()));
+        Ok(())
+    }
+
+    fn preserve_codex_oauth_auth_in_backup(
+        target_settings: &mut Value,
+        existing_backup: &Value,
+    ) -> Result<(), String> {
+        if !crate::settings::preserve_codex_official_auth_on_switch() {
+            return Ok(());
+        }
+
+        let Some(existing_auth) = existing_backup
+            .get("auth")
+            .filter(|auth| crate::codex_config::codex_auth_has_oauth_login_material(auth))
+            .cloned()
+        else {
+            return Ok(());
+        };
+
+        let Some(target_obj) = target_settings.as_object_mut() else {
+            return Ok(());
+        };
+
+        let provider_auth = target_obj.get("auth").cloned().unwrap_or_else(|| json!({}));
+        if let Some(config_text) = target_obj.get("config").and_then(|value| value.as_str()) {
+            let live_config = crate::codex_config::prepare_codex_provider_live_config(
+                &provider_auth,
+                config_text,
+            )
+            .map_err(|e| format!("更新 Codex 备份配置失败: {e}"))?;
+            target_obj.insert("config".to_string(), json!(live_config));
+        }
+        target_obj.insert("auth".to_string(), existing_auth);
+
         Ok(())
     }
 
@@ -2937,6 +3075,450 @@ wire_api = "responses"
             "takeover placeholder should move into config.toml"
         );
 
+        crate::settings::update_settings(crate::settings::AppSettings::default())
+            .expect("reset settings");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn codex_set_takeover_for_app_preserves_oauth_auth_json_when_preserve_enabled() {
+        let _home = TempHome::new();
+        crate::settings::reload_settings().expect("reload settings");
+        crate::settings::update_settings(crate::settings::AppSettings {
+            preserve_codex_official_auth_on_switch: true,
+            ..Default::default()
+        })
+        .expect("enable Codex official auth preservation");
+
+        let db = Arc::new(Database::memory().expect("init db"));
+        let service = ProxyService::new(db.clone());
+        let oauth_auth = json!({
+            "auth_mode": "chatgpt",
+            "tokens": {
+                "id_token": "oauth-id",
+                "access_token": "oauth-access"
+            }
+        });
+        let deepseek_live_config = r#"model_provider = "deepseek"
+model = "deepseek-v4-flash"
+
+[model_providers.deepseek]
+name = "DeepSeek"
+base_url = "https://api.deepseek.com/v1"
+wire_api = "responses"
+experimental_bearer_token = "deepseek-key"
+"#;
+        crate::codex_config::write_codex_live_atomic(&oauth_auth, Some(deepseek_live_config))
+            .expect("seed live OAuth auth with DeepSeek config");
+
+        let mut provider = Provider::with_id(
+            "deepseek".to_string(),
+            "DeepSeek".to_string(),
+            json!({
+                "auth": {
+                    "OPENAI_API_KEY": "deepseek-key"
+                },
+                "config": r#"model_provider = "deepseek"
+model = "deepseek-v4-flash"
+
+[model_providers.deepseek]
+name = "DeepSeek"
+base_url = "https://api.deepseek.com/v1"
+wire_api = "responses"
+"#
+            }),
+            None,
+        );
+        provider.category = Some("official".to_string());
+        db.save_provider("codex", &provider)
+            .expect("save misclassified DeepSeek provider");
+        db.set_current_provider("codex", "deepseek")
+            .expect("set current provider");
+        crate::settings::set_current_provider(&AppType::Codex, Some("deepseek"))
+            .expect("set local current provider");
+
+        service
+            .set_takeover_for_app("codex", true)
+            .await
+            .expect("enable Codex takeover");
+
+        let live_auth: Value =
+            crate::config::read_json_file(&crate::codex_config::get_codex_auth_path())
+                .expect("read live auth");
+        assert_eq!(
+            live_auth, oauth_auth,
+            "the public takeover command path must not rewrite auth.json when preservation is enabled"
+        );
+
+        service
+            .set_takeover_for_app("codex", false)
+            .await
+            .expect("disable Codex takeover");
+        crate::settings::update_settings(crate::settings::AppSettings::default())
+            .expect("reset settings");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn codex_sync_current_to_live_during_takeover_preserves_oauth_auth_json() {
+        let _home = TempHome::new();
+        crate::settings::reload_settings().expect("reload settings");
+        crate::settings::update_settings(crate::settings::AppSettings {
+            preserve_codex_official_auth_on_switch: true,
+            ..Default::default()
+        })
+        .expect("enable Codex official auth preservation");
+
+        let db = Arc::new(Database::memory().expect("init db"));
+        let state = crate::store::AppState::new(db.clone());
+        let oauth_auth = json!({
+            "auth_mode": "chatgpt",
+            "tokens": {
+                "id_token": "oauth-id",
+                "access_token": "oauth-access"
+            }
+        });
+        let deepseek_live_config = r#"model_provider = "deepseek"
+model = "deepseek-v4-flash"
+
+[model_providers.deepseek]
+name = "DeepSeek"
+base_url = "https://api.deepseek.com/v1"
+wire_api = "responses"
+experimental_bearer_token = "deepseek-key"
+"#;
+        crate::codex_config::write_codex_live_atomic(&oauth_auth, Some(deepseek_live_config))
+            .expect("seed live OAuth auth with DeepSeek config");
+
+        let mut provider = Provider::with_id(
+            "deepseek".to_string(),
+            "DeepSeek".to_string(),
+            json!({
+                "auth": {
+                    "OPENAI_API_KEY": "deepseek-key"
+                },
+                "config": r#"model_provider = "deepseek"
+model = "deepseek-v4-flash"
+
+[model_providers.deepseek]
+name = "DeepSeek"
+base_url = "https://api.deepseek.com/v1"
+wire_api = "responses"
+"#
+            }),
+            None,
+        );
+        provider.category = Some("official".to_string());
+        db.save_provider("codex", &provider)
+            .expect("save misclassified DeepSeek provider");
+        db.set_current_provider("codex", "deepseek")
+            .expect("set current provider");
+        crate::settings::set_current_provider(&AppType::Codex, Some("deepseek"))
+            .expect("set local current provider");
+
+        state
+            .proxy_service
+            .set_takeover_for_app("codex", true)
+            .await
+            .expect("enable Codex takeover");
+
+        crate::services::provider::ProviderService::sync_current_to_live(&state)
+            .expect("sync current providers while Codex is taken over");
+
+        let live_auth: Value =
+            crate::config::read_json_file(&crate::codex_config::get_codex_auth_path())
+                .expect("read live auth");
+        assert_eq!(
+            live_auth, oauth_auth,
+            "post-change provider sync must not rewrite Codex auth.json during takeover"
+        );
+
+        let backup = db
+            .get_live_backup("codex")
+            .await
+            .expect("get live backup")
+            .expect("backup exists");
+        let backup_value: Value =
+            serde_json::from_str(&backup.original_config).expect("parse backup");
+        assert_eq!(
+            backup_value.get("auth"),
+            Some(&oauth_auth),
+            "provider-derived takeover backup should preserve official OAuth auth"
+        );
+        assert!(
+            backup_value
+                .get("config")
+                .and_then(|value| value.as_str())
+                .is_some_and(|config| config.contains("deepseek-key")),
+            "provider token should be carried by config.toml in the restore backup"
+        );
+
+        state
+            .proxy_service
+            .set_takeover_for_app("codex", false)
+            .await
+            .expect("disable Codex takeover");
+        let restored_auth: Value =
+            crate::config::read_json_file(&crate::codex_config::get_codex_auth_path())
+                .expect("read restored auth");
+        assert_eq!(
+            restored_auth, oauth_auth,
+            "turning takeover off should restore the preserved official OAuth auth"
+        );
+
+        crate::settings::update_settings(crate::settings::AppSettings::default())
+            .expect("reset settings");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn codex_sync_current_to_live_during_takeover_activation_keeps_proxy_live_config() {
+        let _home = TempHome::new();
+        crate::settings::reload_settings().expect("reload settings");
+        crate::settings::update_settings(crate::settings::AppSettings {
+            preserve_codex_official_auth_on_switch: true,
+            ..Default::default()
+        })
+        .expect("enable Codex official auth preservation");
+
+        let db = Arc::new(Database::memory().expect("init db"));
+        let state = crate::store::AppState::new(db.clone());
+        let oauth_auth = json!({
+            "auth_mode": "chatgpt",
+            "tokens": {
+                "id_token": "oauth-id",
+                "access_token": "oauth-access"
+            }
+        });
+        let deepseek_live_config = r#"model_provider = "deepseek"
+model = "deepseek-v4-flash"
+
+[model_providers.deepseek]
+name = "DeepSeek"
+base_url = "https://api.deepseek.com/v1"
+wire_api = "responses"
+experimental_bearer_token = "deepseek-key"
+"#;
+        crate::codex_config::write_codex_live_atomic(&oauth_auth, Some(deepseek_live_config))
+            .expect("seed live OAuth auth with DeepSeek config");
+
+        let mut provider = Provider::with_id(
+            "deepseek".to_string(),
+            "DeepSeek".to_string(),
+            json!({
+                "auth": {
+                    "OPENAI_API_KEY": "deepseek-key"
+                },
+                "config": r#"model_provider = "deepseek"
+model = "deepseek-v4-flash"
+
+[model_providers.deepseek]
+name = "DeepSeek"
+base_url = "https://api.deepseek.com/v1"
+wire_api = "responses"
+"#
+            }),
+            None,
+        );
+        provider.category = Some("official".to_string());
+        db.save_provider("codex", &provider)
+            .expect("save misclassified DeepSeek provider");
+        db.set_current_provider("codex", "deepseek")
+            .expect("set current provider");
+        crate::settings::set_current_provider(&AppType::Codex, Some("deepseek"))
+            .expect("set local current provider");
+
+        state
+            .proxy_service
+            .backup_live_config_strict(&AppType::Codex)
+            .await
+            .expect("backup Codex live config");
+        state
+            .proxy_service
+            .takeover_live_config_strict(&AppType::Codex)
+            .await
+            .expect("take over Codex live config");
+        assert!(
+            !db.get_proxy_config_for_app("codex")
+                .await
+                .expect("get Codex proxy config")
+                .enabled,
+            "this reproduces the activation window before set_takeover_for_app marks enabled=true"
+        );
+
+        crate::services::provider::ProviderService::sync_current_to_live(&state)
+            .expect("sync current providers during takeover activation");
+
+        let live_auth: Value =
+            crate::config::read_json_file(&crate::codex_config::get_codex_auth_path())
+                .expect("read live auth");
+        assert_eq!(
+            live_auth, oauth_auth,
+            "activation-time provider sync must not rewrite Codex OAuth auth.json"
+        );
+
+        let live_config = std::fs::read_to_string(crate::codex_config::get_codex_config_path())
+            .expect("read live config");
+        assert!(
+            live_config.contains(PROXY_TOKEN_PLACEHOLDER),
+            "activation-time provider sync must keep the proxy bearer placeholder"
+        );
+        assert!(
+            live_config.contains("http://127.0.0.1"),
+            "activation-time provider sync must keep the local proxy base_url"
+        );
+        assert!(
+            state
+                .proxy_service
+                .detect_takeover_in_live_config_for_app(&AppType::Codex),
+            "Codex live config should still be detected as taken over"
+        );
+
+        crate::settings::update_settings(crate::settings::AppSettings::default())
+            .expect("reset settings");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn codex_set_takeover_rebuilds_stale_enabled_state_without_overwriting_backup() {
+        let _home = TempHome::new();
+        crate::settings::reload_settings().expect("reload settings");
+        crate::settings::update_settings(crate::settings::AppSettings {
+            preserve_codex_official_auth_on_switch: true,
+            ..Default::default()
+        })
+        .expect("enable Codex official auth preservation");
+
+        let db = Arc::new(Database::memory().expect("init db"));
+        let service = ProxyService::new(db.clone());
+        let oauth_auth = json!({
+            "auth_mode": "chatgpt",
+            "tokens": {
+                "id_token": "oauth-id",
+                "access_token": "oauth-access"
+            }
+        });
+        let original_deepseek_config = r#"model_provider = "deepseek"
+model = "deepseek-v4-flash"
+
+[model_providers.deepseek]
+name = "DeepSeek"
+base_url = "https://api.deepseek.com/v1"
+wire_api = "responses"
+experimental_bearer_token = "deepseek-key"
+"#;
+        let stale_live_config = r#"model_provider = "deepseek"
+model = "deepseek-v4-flash"
+
+[model_providers.deepseek]
+name = "DeepSeek"
+base_url = "https://api.deepseek.com/v1"
+wire_api = "responses"
+experimental_bearer_token = "PROXY_MANAGED"
+"#;
+        crate::codex_config::write_codex_live_atomic(&oauth_auth, Some(stale_live_config))
+            .expect("seed stale Codex live config");
+
+        let mut provider = Provider::with_id(
+            "deepseek".to_string(),
+            "DeepSeek".to_string(),
+            json!({
+                "auth": {
+                    "OPENAI_API_KEY": "deepseek-key"
+                },
+                "config": r#"model_provider = "deepseek"
+model = "deepseek-v4-flash"
+
+[model_providers.deepseek]
+name = "DeepSeek"
+base_url = "https://api.deepseek.com/v1"
+wire_api = "responses"
+"#
+            }),
+            None,
+        );
+        provider.category = Some("official".to_string());
+        db.save_provider("codex", &provider)
+            .expect("save misclassified DeepSeek provider");
+        db.set_current_provider("codex", "deepseek")
+            .expect("set current provider");
+        crate::settings::set_current_provider(&AppType::Codex, Some("deepseek"))
+            .expect("set local current provider");
+        db.save_live_backup(
+            "codex",
+            &serde_json::to_string(&json!({
+                "auth": oauth_auth,
+                "config": original_deepseek_config
+            }))
+            .expect("serialize original backup"),
+        )
+        .await
+        .expect("seed original live backup");
+        let mut proxy_config = db
+            .get_proxy_config_for_app("codex")
+            .await
+            .expect("get Codex proxy config");
+        proxy_config.enabled = true;
+        db.update_proxy_config_for_app(proxy_config)
+            .await
+            .expect("mark Codex takeover enabled");
+
+        service
+            .set_takeover_for_app("codex", true)
+            .await
+            .expect("rebuild Codex takeover");
+
+        let live_auth: Value =
+            crate::config::read_json_file(&crate::codex_config::get_codex_auth_path())
+                .expect("read live auth");
+        assert_eq!(
+            live_auth, oauth_auth,
+            "repairing stale takeover must restore the preserved OAuth auth from backup"
+        );
+
+        let live_config = std::fs::read_to_string(crate::codex_config::get_codex_config_path())
+            .expect("read live config");
+        assert!(
+            live_config.contains("http://127.0.0.1:15721/v1"),
+            "stale enabled takeover must be rebuilt to the current proxy base_url"
+        );
+        assert!(
+            live_config.contains(PROXY_TOKEN_PLACEHOLDER),
+            "rebuilt takeover should keep the proxy bearer placeholder"
+        );
+        assert!(
+            service
+                .live_takeover_matches_current_proxy(&AppType::Codex)
+                .await
+                .expect("detect rebuilt Codex takeover"),
+            "rebuilt Codex live config should match the active proxy address"
+        );
+
+        let backup = db
+            .get_live_backup("codex")
+            .await
+            .expect("get Codex live backup")
+            .expect("backup exists");
+        let backup_value: Value =
+            serde_json::from_str(&backup.original_config).expect("parse backup");
+        assert_eq!(
+            backup_value.get("auth"),
+            Some(&oauth_auth),
+            "rebuilding stale takeover must not overwrite the original OAuth backup"
+        );
+        assert!(
+            backup_value
+                .get("config")
+                .and_then(|value| value.as_str())
+                .is_some_and(|config| config.contains("deepseek-key")
+                    && !config.contains("http://127.0.0.1")),
+            "backup should remain the restorable DeepSeek config, not the proxy config"
+        );
+
+        service
+            .set_takeover_for_app("codex", false)
+            .await
+            .expect("disable Codex takeover");
         crate::settings::update_settings(crate::settings::AppSettings::default())
             .expect("reset settings");
     }

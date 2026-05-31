@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Development since v3.16.0 focuses on preserving Codex OAuth auth and model catalogs during provider switches / proxy takeover, improving Codex proxy error diagnostics, adding DeepSeek routing documentation, and fixing Windows tool version probing.
+
+**Stats**: 12 commits | 41 files changed | +1,992 insertions | -739 deletions
+
+### Added
+
+- **Codex Official Auth Preservation Setting**: Added an opt-in setting that keeps the official ChatGPT / Codex OAuth login in `auth.json` when switching third-party Codex providers, while moving third-party provider tokens into `config.toml` when enabled.
+- **Codex DeepSeek Routing Guides**: Added localized DeepSeek routing guides for Codex in English, Chinese, and Japanese, with screenshots covering provider routing requirements, Codex provider setup, and Local Routing takeover.
+
+### Changed
+
+- **Codex Auth Preservation Is Opt-In**: The new official-auth preservation setting now defaults to off, so third-party Codex switches keep the legacy behavior of writing the active provider auth unless users explicitly enable preservation.
+- **Codex Provider Switch Restart Hint**: Successful Codex provider switches now tell users to restart the Codex client so catalog and config changes take effect.
+- **Sponsor Ordering**: Swapped the Shengsuanyun and AICodeMirror sponsor blocks across README locales.
+- **Docs Organization**: Moved the Chinese proxy guide under `docs/guides/` and removed the obsolete working-directory plan document.
+
+### Fixed
+
+- **Codex Provider Edit Dialog Under Takeover**: The Codex provider edit form now shows an explicit notice and storage-aware auth / config hints clarifying that it displays the stored provider config (not the proxy-managed live `auth.json` / `config.toml`), so the official OAuth token is no longer mistaken as lost while takeover is active. The dialog also treats takeover as active regardless of whether the proxy server is currently running.
+- **Codex OAuth Auth During Proxy Takeover**: Fixed multiple preserve-mode takeover paths that could clear or overwrite the official ChatGPT / Codex OAuth `auth.json`. Takeover detection now recognizes `PROXY_MANAGED` in `config.toml`, cleanup only removes placeholder bearer tokens, config-only takeover writes are used consistently, and mis-categorized third-party providers no longer trigger the official-provider auth overwrite path. Provider sync and switching now treat the restore backup and live placeholders as the takeover-ownership signal (instead of the lagging `enabled` / proxy-running flags) and serialize switch/takeover per app, so a just-activated or proxy-stopped takeover can no longer be overwritten by a normal live write.
+- **Codex Model Catalog Data Loss**: Fixed cases where Codex `modelCatalog` could be wiped by live-config backfill, active-provider edit dialogs, or proxy takeover-off restore. Snapshot backups now keep existing `model_catalog_json` pointers, while provider-rebuilt backups regenerate the catalog projection from the database source of truth.
+- **Codex Proxy Error Diagnostics**: Codex forwarding failures now return richer JSON errors with provider, model, endpoint, upstream status, stable `cc_switch_*` codes, and HTTP statuses aligned with the canonical `ProxyError` response mapping.
+- **Windows Tool Version Probing**: Fixed Windows version checks that could misquote `.cmd` / `.bat` commands and decode localized command output as mojibake, causing working tools to appear as "installed but not runnable".
+
 ## [3.16.0] - 2026-05-29
 
 Development since v3.15.0 focuses on making third-party Codex providers work like first-class citizens through Chat Completions routing, stabilizing Codex provider identity and history, adding an in-app managed CLI tool lifecycle, expanding the partner preset catalog, refreshing the default model / pricing matrix around GPT-5.5 and Claude Opus 4.8, and improving usage observability, localization, docs, and proxy robustness.
