@@ -2131,7 +2131,29 @@ impl ProxyService {
         let auth = config.get("auth");
         let config_str = config.get("config").and_then(|v| v.as_str());
 
-        match (auth, config_str) {
+        // Decide the config.toml text ONCE, before splitting on auth. A stored
+        // Codex backup comes in two shapes needing opposite handling:
+        //  - snapshot backup (`read_codex_live_settings`): no inline `modelCatalog`;
+        //    the config text already carries the live `model_catalog_json` pointer
+        //    → keep raw, or projection would strip it.
+        //  - provider-rebuilt backup (`update_live_backup_from_provider`): inline
+        //    `modelCatalog` (DB SSOT) with a pointer-less config text → project,
+        //    or the mapping is lost on restore.
+        // The projection decision is orthogonal to auth: a provider-rebuilt backup
+        // can pair an inline `modelCatalog` with empty/absent `auth.json` (the key
+        // living in the config's `experimental_bearer_token`). Computing it up here
+        // keeps every config-writing branch — write-auth, delete-auth, no-auth —
+        // consistent instead of letting the empty-auth path skip projection.
+        let prepared_cfg = config_str
+            .map(|cfg| {
+                crate::codex_config::prepare_codex_live_config_text_with_optional_catalog(
+                    config, cfg,
+                )
+            })
+            .transpose()
+            .map_err(|e| format!("写入 Codex 配置失败: {e}"))?;
+
+        match (auth, prepared_cfg.as_deref()) {
             (Some(auth), Some(cfg)) => {
                 let auth_path = get_codex_auth_path();
                 if auth.as_object().is_some_and(|obj| obj.is_empty()) {
@@ -2140,7 +2162,7 @@ impl ProxyService {
                     crate::config::write_text_file(&config_path, cfg)
                         .map_err(|e| format!("写入 Codex config 失败: {e}"))?;
                 } else {
-                    crate::codex_config::write_codex_live_with_catalog(config, auth, Some(cfg))
+                    crate::codex_config::write_codex_live_atomic(auth, Some(cfg))
                         .map_err(|e| format!("写入 Codex 配置失败: {e}"))?;
                 }
             }
@@ -4469,6 +4491,201 @@ requires_openai_auth = true
         assert!(
             message.contains("写入 Codex 配置失败") || message.contains("原子替换失败"),
             "switch should surface catalog write failure, got: {message}"
+        );
+    }
+
+    /// Regression: turning proxy takeover off restores Live from the backup. The
+    /// backup snapshot is `read_codex_live_settings()` output (`{auth, config}`,
+    /// never an inline `modelCatalog`). The restore must NOT route the config
+    /// through catalog projection, which would see no specs and strip the
+    /// `model_catalog_json` pointer — silently dropping the user's Codex model
+    /// mapping from Live even though the DB SSOT still holds it.
+    #[tokio::test]
+    #[serial]
+    async fn codex_restore_from_backup_preserves_model_catalog_pointer() {
+        let _home = TempHome::new();
+        crate::settings::reload_settings().expect("reload settings");
+
+        let db = Arc::new(Database::memory().expect("init db"));
+        let service = ProxyService::new(db.clone());
+
+        // Pre-takeover Live state: config.toml points at the cc-switch generated
+        // catalog file, and that file exists on disk (takeover never touches it).
+        let catalog_path = crate::codex_config::get_codex_model_catalog_path();
+        if let Some(parent) = catalog_path.parent() {
+            std::fs::create_dir_all(parent).expect("create codex dir");
+        }
+        std::fs::write(
+            &catalog_path,
+            r#"{"models":[{"slug":"deepseek-v4-flash"}]}"#,
+        )
+        .expect("seed generated catalog file");
+
+        let pointer = catalog_path.to_string_lossy().to_string();
+        let backup_config = format!(
+            "model_provider = \"custom\"\n\
+             model = \"deepseek-v4-flash\"\n\
+             model_catalog_json = \"{pointer}\"\n\n\
+             [model_providers.custom]\n\
+             name = \"DeepSeek\"\n\
+             base_url = \"https://api.deepseek.example/v1\"\n\
+             wire_api = \"responses\"\n"
+        );
+        let backup_json = serde_json::to_string(&json!({
+            "auth": { "OPENAI_API_KEY": "deepseek-key" },
+            "config": backup_config,
+        }))
+        .expect("serialize backup");
+        db.save_live_backup("codex", &backup_json)
+            .await
+            .expect("seed live backup");
+
+        // Turning takeover off restores Live from this backup.
+        service
+            .restore_live_config_for_app_with_fallback(&AppType::Codex)
+            .await
+            .expect("restore codex live from backup");
+
+        let restored = std::fs::read_to_string(crate::codex_config::get_codex_config_path())
+            .expect("read restored config.toml");
+        assert!(
+            restored.contains("model_catalog_json"),
+            "restore must preserve the model_catalog_json pointer, got:\n{restored}"
+        );
+        assert!(
+            restored.contains(pointer.as_str()),
+            "restored pointer must still reference the cc-switch generated catalog file"
+        );
+    }
+
+    /// Regression: a hot-switch during takeover rebuilds the backup from the DB
+    /// provider (`update_live_backup_from_provider`), so the backup carries an
+    /// inline `modelCatalog` (DB SSOT) but a `config.toml` text WITHOUT a
+    /// `model_catalog_json` pointer. Restoring that backup must project the
+    /// inline catalog — (re)generating both the catalog file and the pointer —
+    /// or the Codex model mapping vanishes from Live after takeover-off.
+    #[tokio::test]
+    #[serial]
+    async fn codex_restore_from_backup_projects_inline_model_catalog() {
+        let _home = TempHome::new();
+        crate::settings::reload_settings().expect("reload settings");
+
+        let db = Arc::new(Database::memory().expect("init db"));
+        let service = ProxyService::new(db.clone());
+
+        // Catalog projection needs a model template; seed `models_cache.json`
+        // with the template slug so we don't depend on the `codex` CLI.
+        let codex_dir = crate::codex_config::get_codex_config_dir();
+        std::fs::create_dir_all(&codex_dir).expect("create codex dir");
+        std::fs::write(
+            codex_dir.join("models_cache.json"),
+            r#"{"models":[{"slug":"gpt-5.5"}]}"#,
+        )
+        .expect("seed models_cache template");
+
+        // Provider-rebuilt backup shape: inline modelCatalog, pointer-less config.
+        let backup_json = serde_json::to_string(&json!({
+            "auth": { "OPENAI_API_KEY": "deepseek-key" },
+            "config": "model_provider = \"custom\"\nmodel = \"deepseek-v4-flash\"\n\n[model_providers.custom]\nname = \"DeepSeek\"\nbase_url = \"https://api.deepseek.example/v1\"\nwire_api = \"responses\"\n",
+            "modelCatalog": {
+                "models": [
+                    { "model": "deepseek-v4-flash", "displayName": "DeepSeek V4 Flash", "contextWindow": 1_000_000 }
+                ]
+            }
+        }))
+        .expect("serialize backup");
+        db.save_live_backup("codex", &backup_json)
+            .await
+            .expect("seed live backup");
+
+        service
+            .restore_live_config_for_app_with_fallback(&AppType::Codex)
+            .await
+            .expect("restore codex live from backup");
+
+        let restored = std::fs::read_to_string(crate::codex_config::get_codex_config_path())
+            .expect("read restored config.toml");
+        let catalog_path = crate::codex_config::get_codex_model_catalog_path();
+        assert!(
+            restored.contains("model_catalog_json"),
+            "restore must (re)generate the model_catalog_json pointer from inline catalog, got:\n{restored}"
+        );
+        assert!(
+            catalog_path.exists(),
+            "restore must generate the cc-switch catalog file on disk"
+        );
+        let catalog: Value = serde_json::from_str(
+            &std::fs::read_to_string(&catalog_path).expect("read generated catalog"),
+        )
+        .expect("parse generated catalog");
+        let slugs: Vec<&str> = catalog
+            .get("models")
+            .and_then(|m| m.as_array())
+            .expect("catalog models")
+            .iter()
+            .filter_map(|m| m.get("slug").and_then(|s| s.as_str()))
+            .collect();
+        assert!(
+            slugs.contains(&"deepseek-v4-flash"),
+            "generated catalog must contain the inline model, got slugs: {slugs:?}"
+        );
+    }
+
+    /// Regression: a provider-rebuilt backup can pair an inline `modelCatalog`
+    /// with EMPTY `auth.json` (`{}`) — the bearer-token / Mobile-compat shape
+    /// where the API key lives in the config's `experimental_bearer_token`. The
+    /// empty-auth restore branch deletes `auth.json` and writes config raw; it
+    /// must still project the inline catalog (decision is orthogonal to auth), or
+    /// the model mapping vanishes on takeover-off for this provider shape.
+    #[tokio::test]
+    #[serial]
+    async fn codex_restore_empty_auth_backup_still_projects_inline_catalog() {
+        let _home = TempHome::new();
+        crate::settings::reload_settings().expect("reload settings");
+
+        let db = Arc::new(Database::memory().expect("init db"));
+        let service = ProxyService::new(db.clone());
+
+        let codex_dir = crate::codex_config::get_codex_config_dir();
+        std::fs::create_dir_all(&codex_dir).expect("create codex dir");
+        std::fs::write(
+            codex_dir.join("models_cache.json"),
+            r#"{"models":[{"slug":"gpt-5.5"}]}"#,
+        )
+        .expect("seed models_cache template");
+
+        // Empty auth.json + key carried in config.toml's experimental_bearer_token,
+        // plus the inline modelCatalog (DB SSOT).
+        let backup_json = serde_json::to_string(&json!({
+            "auth": {},
+            "config": "model_provider = \"custom\"\nmodel = \"deepseek-v4-flash\"\n\n[model_providers.custom]\nname = \"DeepSeek\"\nbase_url = \"https://api.deepseek.example/v1\"\nwire_api = \"responses\"\nexperimental_bearer_token = \"sk-deepseek\"\n",
+            "modelCatalog": {
+                "models": [ { "model": "deepseek-v4-flash", "displayName": "DeepSeek V4 Flash" } ]
+            }
+        }))
+        .expect("serialize backup");
+        db.save_live_backup("codex", &backup_json)
+            .await
+            .expect("seed live backup");
+
+        service
+            .restore_live_config_for_app_with_fallback(&AppType::Codex)
+            .await
+            .expect("restore codex live from backup");
+
+        let restored = std::fs::read_to_string(crate::codex_config::get_codex_config_path())
+            .expect("read restored config.toml");
+        assert!(
+            restored.contains("model_catalog_json"),
+            "empty-auth restore must still project the inline catalog pointer, got:\n{restored}"
+        );
+        assert!(
+            crate::codex_config::get_codex_model_catalog_path().exists(),
+            "empty-auth restore must generate the cc-switch catalog file"
+        );
+        assert!(
+            !crate::codex_config::get_codex_auth_path().exists(),
+            "empty-auth restore must delete auth.json rather than write an empty one"
         );
     }
 }
