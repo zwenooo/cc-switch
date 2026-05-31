@@ -42,6 +42,7 @@ vi.mock("@/components/providers/forms/ProviderForm", () => ({
   ProviderForm: ({
     initialData,
     onSubmit,
+    isProxyTakeover,
   }: {
     initialData: {
       name?: string;
@@ -61,6 +62,7 @@ vi.mock("@/components/providers/forms/ProviderForm", () => ({
       icon?: string;
       iconColor?: string;
     }) => void;
+    isProxyTakeover?: boolean;
   }) => (
     <form
       id="provider-form"
@@ -79,6 +81,9 @@ vi.mock("@/components/providers/forms/ProviderForm", () => ({
     >
       <output data-testid="settings-config">
         {JSON.stringify(initialData.settingsConfig ?? {})}
+      </output>
+      <output data-testid="is-proxy-takeover">
+        {isProxyTakeover ? "true" : "false"}
       </output>
     </form>
   ),
@@ -152,5 +157,49 @@ describe("EditProviderDialog", () => {
       ...liveSettings,
       modelCatalog: dbModelCatalog,
     });
+  });
+
+  it("代理接管中编辑 Codex 供应商时展示数据库配置而不是读取 live 代理配置", async () => {
+    const provider: Provider = {
+      id: "deepseek",
+      name: "DeepSeek",
+      category: "custom",
+      settingsConfig: {
+        auth: {
+          OPENAI_API_KEY: "db-key",
+        },
+        config:
+          'model_provider = "custom"\n[model_providers.custom]\nbase_url = "https://api.deepseek.com/v1"\n',
+      },
+    };
+
+    apiMocks.getCurrent.mockResolvedValue(provider.id);
+    apiMocks.getLiveProviderSettings.mockResolvedValue({
+      auth: {
+        OPENAI_API_KEY: "PROXY_MANAGED",
+      },
+      config:
+        'model_provider = "custom"\n[model_providers.custom]\nbase_url = "http://127.0.0.1:15721/v1"\nexperimental_bearer_token = "PROXY_MANAGED"\n',
+    });
+
+    render(
+      <EditProviderDialog
+        open
+        provider={provider}
+        onOpenChange={vi.fn()}
+        onSubmit={vi.fn()}
+        appId="codex"
+        isProxyTakeover
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("is-proxy-takeover").textContent).toBe("true");
+    });
+
+    expect(apiMocks.getLiveProviderSettings).not.toHaveBeenCalled();
+    expect(
+      JSON.parse(screen.getByTestId("settings-config").textContent ?? "{}"),
+    ).toEqual(provider.settingsConfig);
   });
 });

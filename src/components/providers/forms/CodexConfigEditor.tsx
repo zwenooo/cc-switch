@@ -1,6 +1,9 @@
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { Info } from "lucide-react";
 import { CodexAuthSection, CodexConfigSection } from "./CodexConfigSections";
 import { CodexCommonConfigModal } from "./CodexCommonConfigModal";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface CodexConfigEditorProps {
   authValue: string;
@@ -10,6 +13,8 @@ interface CodexConfigEditorProps {
   providerName?: string;
 
   showRemoteCompaction?: boolean;
+
+  isProxyTakeover?: boolean;
 
   onAuthChange: (value: string) => void;
 
@@ -43,6 +48,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
   configValue,
   providerName,
   showRemoteCompaction,
+  isProxyTakeover = false,
   onAuthChange,
   onConfigChange,
   onAuthBlur,
@@ -57,6 +63,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
   onExtract,
   isExtracting,
 }) => {
+  const { t } = useTranslation();
   const [isCommonConfigModalOpen, setIsCommonConfigModalOpen] = useState(false);
 
   const handleCloseCommonConfigModal = () => {
@@ -66,12 +73,22 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
 
   return (
     <div className="space-y-6">
+      {isProxyTakeover && (
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertDescription>
+            {t("codexConfig.proxyTakeoverStorageNotice")}
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Auth JSON Section */}
       <CodexAuthSection
         value={authValue}
         onChange={onAuthChange}
         onBlur={onAuthBlur}
         error={authError}
+        isProxyTakeover={isProxyTakeover}
       />
 
       {/* Config TOML Section */}
@@ -85,6 +102,7 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
         onEditCommonConfig={() => setIsCommonConfigModalOpen(true)}
         commonConfigError={commonConfigError}
         configError={configError}
+        isProxyTakeover={isProxyTakeover}
       />
 
       {/* Common Config Modal */}
