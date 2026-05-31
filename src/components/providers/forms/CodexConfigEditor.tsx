@@ -1,9 +1,7 @@
 import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Info } from "lucide-react";
 import { CodexAuthSection, CodexConfigSection } from "./CodexConfigSections";
 import { CodexCommonConfigModal } from "./CodexCommonConfigModal";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface CodexConfigEditorProps {
   authValue: string;
@@ -74,12 +72,11 @@ const CodexConfigEditor: React.FC<CodexConfigEditorProps> = ({
   return (
     <div className="space-y-6">
       {isProxyTakeover && (
-        <Alert>
-          <Info className="h-4 w-4" />
-          <AlertDescription>
+        <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg">
+          <p className="text-xs text-amber-600 dark:text-amber-400">
             {t("codexConfig.proxyTakeoverStorageNotice")}
-          </AlertDescription>
-        </Alert>
+          </p>
+        </div>
       )}
 
       {/* Auth JSON Section */}
