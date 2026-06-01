@@ -5,8 +5,9 @@ use super::{
         extract_reasoning_field_text, split_leading_think_block, strip_leading_think_open_tag,
     },
     transform_codex_chat::{
-        chat_usage_to_responses_usage, response_id_from_chat_id,
-        response_status_from_finish_reason, response_tool_call_item_from_chat_name,
+        chat_usage_to_responses_usage, custom_tool_input_from_chat_arguments,
+        response_id_from_chat_id, response_status_from_finish_reason,
+        response_tool_call_item_from_chat_name, response_tool_call_item_id_from_chat_name,
         CodexToolContext,
     },
 };
@@ -420,6 +421,7 @@ impl ChatToResponsesState {
         let mut output_index = None;
         let mut item_id = String::new();
         let mut pending_arguments = String::new();
+        let current_name: String;
 
         {
             let state = self.tools.entry(chat_index).or_default();
@@ -446,8 +448,10 @@ impl ChatToResponsesState {
                 output_index = state.output_index;
                 item_id = state.item_id.clone();
             }
+            current_name = state.name.clone();
         }
 
+        let is_custom_tool = self.tool_context.is_custom_tool_chat_name(&current_name);
         let mut events = Vec::new();
 
         if should_add {
@@ -463,7 +467,12 @@ impl ChatToResponsesState {
                 state.name = "unknown_tool".to_string();
             }
             state.output_index = Some(assigned);
-            state.item_id = format!("fc_{}", state.call_id);
+            let is_custom_tool = self.tool_context.is_custom_tool_chat_name(&state.name);
+            state.item_id = response_tool_call_item_id_from_chat_name(
+                &state.call_id,
+                &state.name,
+                &self.tool_context,
+            );
             item_id = state.item_id.clone();
 
             let item = response_tool_call_item_from_chat_name(
@@ -485,7 +494,7 @@ impl ChatToResponsesState {
                 }),
             ));
 
-            if !pending_arguments.is_empty() {
+            if !pending_arguments.is_empty() && !is_custom_tool {
                 events.push(sse_event(
                     "response.function_call_arguments.delta",
                     json!({
@@ -496,7 +505,7 @@ impl ChatToResponsesState {
                     }),
                 ));
             }
-        } else if !args_delta.is_empty() {
+        } else if !args_delta.is_empty() && !is_custom_tool {
             if let Some(output_index) = output_index {
                 events.push(sse_event(
                     "response.function_call_arguments.delta",
@@ -679,7 +688,11 @@ impl ChatToResponsesState {
                     state.name = "unknown_tool".to_string();
                 }
                 state.output_index = Some(assigned);
-                state.item_id = format!("fc_{}", state.call_id);
+                state.item_id = response_tool_call_item_id_from_chat_name(
+                    &state.call_id,
+                    &state.name,
+                    &self.tool_context,
+                );
                 let item = response_tool_call_item_from_chat_name(
                     &state.item_id,
                     "in_progress",
@@ -708,6 +721,7 @@ impl ChatToResponsesState {
             };
             let output_index = state.output_index.unwrap_or(0);
             let arguments = canonicalize_tool_arguments_str(&state.arguments);
+            let is_custom_tool = self.tool_context.is_custom_tool_chat_name(&state.name);
             let item = response_tool_call_item_from_chat_name(
                 &state.item_id,
                 "completed",
@@ -720,15 +734,39 @@ impl ChatToResponsesState {
             state.done = true;
             self.output_items.push((output_index, item.clone()));
 
-            events.push(sse_event(
-                "response.function_call_arguments.done",
-                json!({
-                    "type": "response.function_call_arguments.done",
-                    "item_id": state.item_id,
-                    "output_index": output_index,
-                    "arguments": arguments
-                }),
-            ));
+            if is_custom_tool {
+                let input = custom_tool_input_from_chat_arguments(&arguments);
+                if !input.is_empty() {
+                    events.push(sse_event(
+                        "response.custom_tool_call_input.delta",
+                        json!({
+                            "type": "response.custom_tool_call_input.delta",
+                            "item_id": state.item_id,
+                            "output_index": output_index,
+                            "delta": input.clone()
+                        }),
+                    ));
+                }
+                events.push(sse_event(
+                    "response.custom_tool_call_input.done",
+                    json!({
+                        "type": "response.custom_tool_call_input.done",
+                        "item_id": state.item_id,
+                        "output_index": output_index,
+                        "input": input
+                    }),
+                ));
+            } else {
+                events.push(sse_event(
+                    "response.function_call_arguments.done",
+                    json!({
+                        "type": "response.function_call_arguments.done",
+                        "item_id": state.item_id,
+                        "output_index": output_index,
+                        "arguments": arguments
+                    }),
+                ));
+            }
             events.push(sse_event(
                 "response.output_item.done",
                 json!({
@@ -1036,6 +1074,35 @@ mod tests {
         assert!(output.contains("event: response.function_call_arguments.done"));
         assert!(output.contains("\"type\":\"function_call\""));
         assert!(output.contains("\"call_id\":\"call_1\""));
+    }
+
+    #[tokio::test]
+    async fn restores_custom_tool_input_stream_events() {
+        let request = json!({
+            "model": "gpt-5.4",
+            "tools": [{ "type": "custom", "name": "exec" }]
+        });
+        let context =
+            super::super::transform_codex_chat::build_codex_tool_context_from_request(&request);
+        let output = collect_with_context(
+            vec![
+                "data: {\"id\":\"chatcmpl_custom\",\"model\":\"gpt-5.4\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_custom\",\"type\":\"function\",\"function\":{\"name\":\"exec\"}}]}}]}\n\n",
+                "data: {\"id\":\"chatcmpl_custom\",\"model\":\"gpt-5.4\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"input\\\":\"}}]}}]}\n\n",
+                "data: {\"id\":\"chatcmpl_custom\",\"model\":\"gpt-5.4\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"ls -la\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}]}\n\n",
+                "data: [DONE]\n\n",
+            ],
+            context,
+        )
+        .await;
+
+        assert!(output.contains("event: response.custom_tool_call_input.delta"));
+        assert!(output.contains("event: response.custom_tool_call_input.done"));
+        assert!(!output.contains("event: response.function_call_arguments.delta"));
+        assert!(!output.contains("event: response.function_call_arguments.done"));
+        assert!(output.contains("\"id\":\"ctc_call_custom\""));
+        assert!(output.contains("\"type\":\"custom_tool_call\""));
+        assert!(output.contains("\"name\":\"exec\""));
+        assert!(output.contains("\"input\":\"ls -la\""));
     }
 
     #[tokio::test]

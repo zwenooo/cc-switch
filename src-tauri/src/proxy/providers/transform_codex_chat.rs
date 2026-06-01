@@ -73,6 +73,11 @@ impl CodexToolContext {
         self.chat_name_to_spec.get(chat_name)
     }
 
+    pub(crate) fn is_custom_tool_chat_name(&self, chat_name: &str) -> bool {
+        self.lookup_chat_name(chat_name)
+            .is_some_and(|spec| matches!(&spec.kind, CodexToolKind::Custom))
+    }
+
     fn chat_name_for_response_function(&self, name: &str, namespace: Option<&str>) -> String {
         if let Some(namespace) = namespace.filter(|value| !value.is_empty()) {
             if let Some(chat_name) = self
@@ -1351,7 +1356,7 @@ fn chat_tool_call_to_response_item(
     let name = function.get("name").and_then(|v| v.as_str()).unwrap_or("");
     let arguments = canonicalize_tool_arguments(function.get("arguments"));
 
-    let item_id = format!("fc_{call_id}");
+    let item_id = response_tool_call_item_id_from_chat_name(&call_id, name, tool_context);
     response_tool_call_item_from_chat_name(
         &item_id,
         "completed",
@@ -1379,7 +1384,7 @@ fn chat_legacy_function_call_to_response_item(
         .unwrap_or("");
     let arguments = canonicalize_tool_arguments(function_call.get("arguments"));
 
-    let item_id = format!("fc_{call_id}");
+    let item_id = response_tool_call_item_id_from_chat_name(call_id, name, tool_context);
     response_tool_call_item_from_chat_name(
         &item_id,
         "completed",
@@ -1389,6 +1394,18 @@ fn chat_legacy_function_call_to_response_item(
         reasoning,
         tool_context,
     )
+}
+
+pub(crate) fn response_tool_call_item_id_from_chat_name(
+    call_id: &str,
+    chat_name: &str,
+    tool_context: &CodexToolContext,
+) -> String {
+    if tool_context.is_custom_tool_chat_name(chat_name) {
+        format!("ctc_{call_id}")
+    } else {
+        format!("fc_{call_id}")
+    }
 }
 
 pub(crate) fn response_tool_call_item_from_chat_name(
@@ -1448,7 +1465,7 @@ fn response_custom_tool_call_item(
     arguments: &str,
     reasoning: Option<&str>,
 ) -> Value {
-    let input = parse_custom_tool_input(arguments);
+    let input = custom_tool_input_from_chat_arguments(arguments);
     let mut item = json!({
         "id": item_id,
         "type": "custom_tool_call",
@@ -1471,7 +1488,7 @@ fn parse_tool_arguments_object(arguments: &str) -> Value {
         .unwrap_or_else(|| json!({ "query": arguments }))
 }
 
-fn parse_custom_tool_input(arguments: &str) -> String {
+pub(crate) fn custom_tool_input_from_chat_arguments(arguments: &str) -> String {
     if arguments.trim().is_empty() {
         return String::new();
     }
@@ -2631,6 +2648,7 @@ mod tests {
         let result = chat_completion_to_response_with_context(chat, &context).unwrap();
 
         assert_eq!(result["output"][0]["type"], "custom_tool_call");
+        assert_eq!(result["output"][0]["id"], "ctc_call_patch");
         assert_eq!(result["output"][0]["call_id"], "call_patch");
         assert_eq!(result["output"][0]["name"], "apply_patch");
         assert_eq!(
