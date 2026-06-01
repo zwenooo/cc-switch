@@ -322,15 +322,19 @@ impl ProxyService {
         &self,
         provider: &Provider,
     ) -> Result<(), String> {
-        let mut effective_settings = match self.read_codex_live() {
-            Ok(config) => config,
-            Err(_) => build_effective_settings_with_common_config(
-                self.db.as_ref(),
-                &AppType::Codex,
-                provider,
-            )
-            .map_err(|e| format!("构建 codex 有效配置失败: {e}"))?,
-        };
+        let existing_live = self.read_codex_live().ok();
+        let mut effective_settings = build_effective_settings_with_common_config(
+            self.db.as_ref(),
+            &AppType::Codex,
+            provider,
+        )
+        .map_err(|e| format!("构建 codex 有效配置失败: {e}"))?;
+        if let Some(existing_live) = existing_live.as_ref() {
+            Self::preserve_codex_mcp_servers_from_existing_config(
+                &mut effective_settings,
+                existing_live,
+            )?;
+        }
         let (_, proxy_codex_base_url) = self.build_proxy_urls().await?;
 
         if let Some(auth) = effective_settings
@@ -1880,7 +1884,7 @@ impl ProxyService {
                 .transpose()?;
 
             if let Some(existing_value) = existing_backup_value.as_ref() {
-                Self::preserve_codex_mcp_servers_in_backup(
+                Self::preserve_codex_mcp_servers_from_existing_config(
                     &mut effective_settings,
                     existing_value,
                 )?;
@@ -2016,9 +2020,9 @@ impl ProxyService {
         self.switch_locks.lock_for_app(app_type).await
     }
 
-    fn preserve_codex_mcp_servers_in_backup(
+    fn preserve_codex_mcp_servers_from_existing_config(
         target_settings: &mut Value,
-        existing_backup: &Value,
+        existing_config: &Value,
     ) -> Result<(), String> {
         let target_obj = target_settings
             .as_object_mut()
@@ -2036,7 +2040,7 @@ impl ProxyService {
                 .map_err(|e| format!("解析新的 Codex config.toml 失败: {e}"))?
         };
 
-        let existing_config = existing_backup
+        let existing_config = existing_config
             .get("config")
             .and_then(|v| v.as_str())
             .unwrap_or("");
@@ -2063,7 +2067,7 @@ impl ProxyService {
                         }
                     } else {
                         log::warn!(
-                            "Codex config contains a non-table mcp_servers section; skipping backup MCP merge"
+                            "Codex config contains a non-table mcp_servers section; skipping MCP merge"
                         );
                     }
                 }
@@ -2111,7 +2115,7 @@ impl ProxyService {
         Ok(())
     }
 
-    /// 代理模式下切换供应商（热切换，不写 Live）
+    /// 代理模式下切换供应商（热切换，并按需刷新代理安全的 Live 显示字段）
     pub async fn switch_proxy_target(
         &self,
         app_type: &str,
@@ -4803,6 +4807,36 @@ requires_openai_auth = true
             "provider id should point at the hot-switched provider endpoint"
         );
 
+        let live = service.read_codex_live().expect("read Codex live config");
+        let live_config = live
+            .get("config")
+            .and_then(|v| v.as_str())
+            .expect("live config string");
+        let parsed_live: toml::Value = toml::from_str(live_config).expect("parse live config");
+        assert_eq!(
+            parsed_live.get("model_provider").and_then(|v| v.as_str()),
+            Some("aihubmix"),
+            "hot-switched Codex live config should expose the selected provider"
+        );
+        assert_eq!(
+            parsed_live
+                .get("model_providers")
+                .and_then(|v| v.get("aihubmix"))
+                .and_then(|v| v.get("name"))
+                .and_then(|v| v.as_str()),
+            Some("AiHubMix"),
+            "Codex app provider label should follow the selected provider"
+        );
+        assert_eq!(
+            parsed_live
+                .get("model_providers")
+                .and_then(|v| v.get("aihubmix"))
+                .and_then(|v| v.get("base_url"))
+                .and_then(|v| v.as_str()),
+            Some("http://127.0.0.1:15721/v1"),
+            "taken-over live config should stay pointed at the local proxy"
+        );
+
         service
             .restore_live_config_for_app_with_fallback(&AppType::Codex)
             .await
@@ -4830,7 +4864,7 @@ requires_openai_auth = true
 
     #[tokio::test]
     #[serial]
-    async fn hot_switch_codex_chat_provider_uses_upstream_model_without_changing_live_provider() {
+    async fn hot_switch_codex_chat_provider_updates_live_provider_display() {
         let _home = TempHome::new();
         crate::settings::reload_settings().expect("reload settings");
 
@@ -4925,7 +4959,23 @@ requires_openai_auth = true
 
         assert_eq!(
             parsed_live.get("model_provider").and_then(|v| v.as_str()),
-            Some("stable")
+            Some("deepseek")
+        );
+        assert_eq!(
+            parsed_live
+                .get("model_providers")
+                .and_then(|v| v.get("deepseek"))
+                .and_then(|v| v.get("name"))
+                .and_then(|v| v.as_str()),
+            Some("DeepSeek")
+        );
+        assert_eq!(
+            parsed_live
+                .get("model_providers")
+                .and_then(|v| v.get("deepseek"))
+                .and_then(|v| v.get("base_url"))
+                .and_then(|v| v.as_str()),
+            Some("http://127.0.0.1:15721/v1")
         );
         assert_eq!(
             parsed_live.get("model").and_then(|v| v.as_str()),

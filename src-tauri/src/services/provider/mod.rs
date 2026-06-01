@@ -1563,7 +1563,7 @@ impl ProviderService {
     /// Switch flow:
     /// 1. Validate target provider exists
     /// 2. Check if proxy takeover mode is active AND proxy server is running
-    /// 3. If takeover mode active: hot-switch proxy target only (no Live config write)
+    /// 3. If takeover mode active: hot-switch proxy target and refresh proxy-safe Live labels
     /// 4. If normal mode:
     ///    a. **Backfill mechanism**: Backfill current live config to current provider
     ///    b. Update local settings current_provider_xxx (device-level)
@@ -1631,7 +1631,9 @@ impl ProviderService {
         }
 
         if should_hot_switch {
-            // Proxy takeover mode: hot-switch only, don't write Live config
+            // Proxy takeover mode: hot-switch without restoring upstream Live config.
+            // The proxy layer may still refresh proxy-safe Live fields so client labels
+            // follow the selected provider while endpoints remain local.
             log::info!(
                 "代理接管模式：热切换 {} 的目标供应商为 {}",
                 app_type.as_str(),
@@ -1645,8 +1647,8 @@ impl ProviderService {
             )
             .map_err(|e| AppError::Message(format!("热切换失败: {e}")))?;
 
-            // Note: No Live config write, no MCP sync
-            // The proxy server will route requests to the new provider via is_current
+            // The proxy server will route requests to the new provider via is_current.
+            // MCP sync is intentionally skipped while Live config is owned by takeover.
             return Ok(SwitchResult::default());
         }
 
