@@ -265,6 +265,8 @@ export interface RectifierConfig {
   enabled: boolean;
   requestThinkingSignature: boolean;
   requestThinkingBudget: boolean;
+  requestMediaFallback: boolean;
+  requestMediaHeuristic: boolean;
 }
 
 export interface OptimizerConfig {
