@@ -1320,7 +1320,8 @@
       "all": "全部",
       "claude": "Claude Code",
       "codex": "Codex",
-      "gemini": "Gemini"
+      "gemini": "Gemini",
+      "opencode": "OpenCode"
     },
     "rawInputLabel": "原始",
     "dataSources": "資料來源",
@@ -1329,7 +1330,8 @@
       "session_log": "工作階段日誌",
       "codex_db": "Codex 資料庫",
       "codex_session": "Codex 工作階段日誌",
-      "gemini_session": "Gemini 工作階段日誌"
+      "gemini_session": "Gemini 工作階段日誌",
+      "opencode_session": "OpenCode 工作階段日誌"
     },
     "sessionSync": {
       "trigger": "同步工作階段日誌",
