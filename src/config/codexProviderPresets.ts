@@ -117,6 +117,22 @@ export const codexProviderPresets: CodexProviderPreset[] = [
     icon: "shengsuanyun",
   },
   {
+    name: "CCSub",
+    websiteUrl: "https://www.ccsub.net",
+    apiKeyUrl: "https://www.ccsub.net/register?ref=Y6Z8DXEA",
+    category: "aggregator",
+    auth: generateThirdPartyAuth(""),
+    config: generateThirdPartyConfig(
+      "ccsub",
+      "https://www.ccsub.net/v1",
+      "gpt-5.5",
+    ),
+    endpointCandidates: ["https://www.ccsub.net/v1"],
+    isPartner: true,
+    partnerPromotionKey: "ccsub",
+    icon: "ccsub",
+  },
+  {
     name: "PatewayAI",
     websiteUrl: "https://pateway.ai",
     apiKeyUrl: "https://pateway.ai/?ch=etzpm8&aff=WB6M6F67#/",
