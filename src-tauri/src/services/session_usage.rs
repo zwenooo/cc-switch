@@ -314,8 +314,23 @@ fn sync_single_file(db: &Database, file_path: &Path) -> Result<(u32, u32), AppEr
     let mut skipped: u32 = 0;
 
     for msg in messages.values() {
-        // 只导入有 stop_reason 的最终条目（完整的 API 调用）
-        if msg.stop_reason.is_none() {
+        // 只要产生了真实计费 token 就导入，不再强制要求 stop_reason 或 output>0。
+        //
+        // Anthropic 在受理请求时即对 input + cache_read + cache_creation 计费
+        // （这些在请求开始就确定），output 按实际生成量计。Workflow / 子 agent 的
+        // 并行短命请求经常只写了 message_start 快照（output=1、stop_reason=None）
+        // 却没有写最终块，但其 cache/input 成本已被真实计费。旧逻辑用 stop_reason
+        // 非空 + output>0 双重过滤，会把这类请求整条丢弃，实测系统性低估约 4.1%，
+        // 且 92% 集中在 workflow/subagent。这里改为「任一计费维度 > 0 即导入」。
+        //
+        // 去重选择逻辑（上方按 message.id 取 stop_reason 优先 / output 最大者）保持
+        // 不变：它选出的代表行的 input/cache 本就准确；request_id = session:msg_id
+        // 主键 + INSERT OR IGNORE 保证一个 message 仍只落库一次，放宽 gate 不会双算。
+        let has_billable_tokens = msg.input_tokens > 0
+            || msg.output_tokens > 0
+            || msg.cache_read_tokens > 0
+            || msg.cache_creation_tokens > 0;
+        if !has_billable_tokens {
             continue;
         }
 
@@ -324,11 +339,6 @@ fn sync_single_file(db: &Database, file_path: &Path) -> Result<(u32, u32), AppEr
             crate::proxy::usage::parser::SESSION_REQUEST_ID_PREFIX,
             msg.message_id
         );
-
-        // 跳过 output_tokens 为 0 的无意义条目
-        if msg.output_tokens == 0 {
-            continue;
-        }
 
         match insert_session_log_entry(db, &request_id, msg) {
             Ok(true) => imported += 1,
@@ -491,7 +501,7 @@ fn insert_session_log_entry(
                 total_cost,
                 0i64,               // latency_ms: 会话日志无此数据
                 Option::<i64>::None, // first_token_ms
-                200i64,             // status_code: 有 stop_reason 说明请求成功
+                200i64,             // status_code: 会话日志中的请求只要产生计费 token 即视为成功
                 Option::<String>::None, // error_message
                 msg.session_id,
                 Some("session_log"), // provider_type
@@ -743,5 +753,46 @@ mod tests {
         );
 
         fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn test_sync_imports_billable_message_without_stop_reason() -> Result<(), AppError> {
+        // 回归：stop_reason 缺失但有真实 cache/input 成本的 message（Workflow /
+        // 子 agent 常见的「只有 message_start 快照、没写最终块」形态）必须被计入，
+        // 不能因缺 stop_reason 或 output==0 而整条丢弃；全 0 token 的占位行仍应跳过。
+        let db = Database::memory()?;
+        let tmp = std::env::temp_dir().join(format!("cc-switch-test-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&tmp).unwrap();
+        let file = tmp.join("agent-wf.jsonl");
+
+        // 第一行：无 stop_reason、output=1，但 cache_read/cache_creation 很大 → 应导入
+        // 第二行：全部 token 为 0 → 应跳过（无计费意义）
+        let billable = r#"{"type":"assistant","message":{"id":"msg_nostop","model":"claude-opus-4-8","usage":{"input_tokens":2,"output_tokens":1,"cache_read_input_tokens":48719,"cache_creation_input_tokens":2061}},"timestamp":"2026-06-07T13:01:23Z","sessionId":"session-wf"}"#;
+        let empty = r#"{"type":"assistant","message":{"id":"msg_empty","model":"claude-opus-4-8","usage":{"input_tokens":0,"output_tokens":0,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}},"timestamp":"2026-06-07T13:01:24Z","sessionId":"session-wf"}"#;
+        fs::write(&file, format!("{billable}\n{empty}\n")).unwrap();
+
+        let (imported, _skipped) = sync_single_file(&db, &file)?;
+        assert_eq!(
+            imported, 1,
+            "有 cache 成本但无 stop_reason 的 message 必须被导入"
+        );
+
+        let conn = lock_conn!(db.conn);
+        let cache_read: i64 = conn.query_row(
+            "SELECT cache_read_tokens FROM proxy_request_logs WHERE request_id = 'session:msg_nostop'",
+            [],
+            |row| row.get(0),
+        )?;
+        assert_eq!(cache_read, 48719, "cache_read 必须被完整记录");
+        let empty_exists: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM proxy_request_logs WHERE request_id = 'session:msg_empty')",
+            [],
+            |row| row.get(0),
+        )?;
+        assert!(!empty_exists, "全 0 token 的 message 应被跳过");
+        drop(conn);
+
+        fs::remove_dir_all(&tmp).ok();
+        Ok(())
     }
 }
