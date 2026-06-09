@@ -225,6 +225,33 @@ pub fn anthropic_to_openai_with_reasoning_content(
     Ok(result)
 }
 
+/// 为 OpenAI Chat Completions 流式请求注入 `stream_options.include_usage`。
+///
+/// OpenAI 兼容上游在流式下默认不在 SSE 里返回 usage，必须显式声明 include_usage
+/// 才会在末尾吐 usage chunk。缺这一注入会导致流式请求的 token/成本/缓存全部漏记
+/// （input/output/cache 全为 0）。保留客户端可能透传的其它 stream_options 字段，
+/// 仅补 include_usage；非流式请求不动。
+///
+/// 由 Claude→openai_chat（claude.rs）与 Codex Responses→Chat（transform_codex_chat.rs）
+/// 两条转换路径共用，确保两个客户端方向行为一致。
+pub(crate) fn inject_openai_stream_include_usage(result: &mut Value) {
+    let is_stream = result
+        .get("stream")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    if !is_stream {
+        return;
+    }
+    match result.get_mut("stream_options") {
+        Some(Value::Object(opts)) => {
+            opts.insert("include_usage".to_string(), json!(true));
+        }
+        _ => {
+            result["stream_options"] = json!({ "include_usage": true });
+        }
+    }
+}
+
 /// Translate an Anthropic `tool_choice` into the OpenAI Chat Completions form.
 ///
 /// Anthropic forms:
