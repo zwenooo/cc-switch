@@ -38,6 +38,11 @@ pub struct ForwardResult {
     pub response: ProxyResponse,
     pub provider: Provider,
     pub claude_api_format: Option<String>,
+    /// 实际发往上游的模型名（路由接管/模型映射后的真值）。
+    ///
+    /// usage 归因不能依赖 ctx.request_model（映射前的客户端别名）：上游响应
+    /// 缺失 model 或回显别名时，接管流量会被记成 claude-* 并按其定价计费。
+    pub outbound_model: Option<String>,
     /// 活跃连接 RAII guard：随响应一起流转到 response_processor / handle_claude_transform，
     /// 最终被 move 进流式 body future（或非流式响应作用域），覆盖整个响应生命周期。
     pub(crate) connection_guard: Option<ActiveConnectionGuard>,
@@ -463,7 +468,7 @@ impl RequestForwarder {
                 )
                 .await
             {
-                Ok((response, claude_api_format)) => {
+                Ok((response, claude_api_format, outbound_model)) => {
                     // 成功：普通闭合熔断状态异步记录，避免阻塞流式首包返回；
                     // HalfOpen 探测仍同步等待，保证 permit 与熔断状态及时释放。
                     self.record_success_result(&provider.id, app_type_str, used_half_open_permit)
@@ -511,6 +516,7 @@ impl RequestForwarder {
                         response,
                         provider: provider.clone(),
                         claude_api_format,
+                        outbound_model,
                         connection_guard: None,
                     });
                 }
@@ -561,7 +567,7 @@ impl RequestForwarder {
                                 )
                                 .await
                             {
-                                Ok((response, claude_api_format)) => {
+                                Ok((response, claude_api_format, outbound_model)) => {
                                     log::info!(
                                         "[{app_type_str}] [Media] Unsupported-image retry succeeded"
                                     );
@@ -613,6 +619,7 @@ impl RequestForwarder {
                                         response,
                                         provider: provider.clone(),
                                         claude_api_format,
+                                        outbound_model,
                                         connection_guard: None,
                                     });
                                 }
@@ -706,7 +713,7 @@ impl RequestForwarder {
                                     )
                                     .await
                                 {
-                                    Ok((response, claude_api_format)) => {
+                                    Ok((response, claude_api_format, outbound_model)) => {
                                         log::info!("[{app_type_str}] [RECT-002] 整流重试成功");
                                         self.record_success_result(
                                             &provider.id,
@@ -761,6 +768,7 @@ impl RequestForwarder {
                                             response,
                                             provider: provider.clone(),
                                             claude_api_format,
+                                            outbound_model,
                                             connection_guard: None,
                                         });
                                     }
@@ -871,7 +879,7 @@ impl RequestForwarder {
                                 )
                                 .await
                             {
-                                Ok((response, claude_api_format)) => {
+                                Ok((response, claude_api_format, outbound_model)) => {
                                     log::info!("[{app_type_str}] [RECT-011] budget 整流重试成功");
                                     self.record_success_result(
                                         &provider.id,
@@ -920,6 +928,7 @@ impl RequestForwarder {
                                         response,
                                         provider: provider.clone(),
                                         claude_api_format,
+                                        outbound_model,
                                         connection_guard: None,
                                     });
                                 }
@@ -1077,6 +1086,9 @@ impl RequestForwarder {
     }
 
     /// 转发单个请求（使用适配器）
+    ///
+    /// 成功时返回 `(response, claude_api_format, outbound_model)`，其中
+    /// `outbound_model` 是最终发往上游的模型名（所有映射/改写之后）。
     #[allow(clippy::too_many_arguments)]
     async fn forward(
         &self,
@@ -1088,7 +1100,7 @@ impl RequestForwarder {
         headers: &axum::http::HeaderMap,
         extensions: &Extensions,
         adapter: &dyn ProviderAdapter,
-    ) -> Result<(ProxyResponse, Option<String>), ProxyError> {
+    ) -> Result<(ProxyResponse, Option<String>, Option<String>), ProxyError> {
         // 使用适配器提取 base_url
         let mut base_url = adapter.extract_base_url(provider)?;
 
@@ -1320,6 +1332,15 @@ impl RequestForwarder {
             adapter.build_url(&base_url, &effective_endpoint)
         };
 
+        // 记录映射后的出站模型名（此时 mapped_body 已完成接管映射 / [1m] 剥离 /
+        // Copilot 归一化）。格式转换后若 body 仍带 model 字段会在下方刷新覆盖；
+        // gemini_native 等模型在 URL 中的格式则保留此处的转换前真值。
+        let mut outbound_model = mapped_body
+            .get("model")
+            .and_then(|m| m.as_str())
+            .filter(|m| !m.is_empty())
+            .map(str::to_string);
+
         // 转换请求体（如果需要）
         let mut request_body = if codex_responses_to_chat {
             let mut mapped_body = mapped_body;
@@ -1366,6 +1387,14 @@ impl RequestForwarder {
         // 过滤私有参数（以 `_` 开头的字段），防止内部信息泄露到上游
         // 默认使用空白名单，过滤所有 _ 前缀字段
         let filtered_body = prepare_upstream_request_body(request_body);
+        // 出站 body 定稿后刷新真值（覆盖 Codex chat 上游模型覆写、转换层模型改写）
+        if let Some(m) = filtered_body
+            .get("model")
+            .and_then(|m| m.as_str())
+            .filter(|m| !m.is_empty())
+        {
+            outbound_model = Some(m.to_string());
+        }
         log_prompt_cache_trace(
             app_type,
             provider,
@@ -1878,7 +1907,7 @@ impl RequestForwarder {
             let response = self
                 .prepare_success_response_for_failover(response, request_is_streaming)
                 .await?;
-            Ok((response, resolved_claude_api_format))
+            Ok((response, resolved_claude_api_format, outbound_model))
         } else {
             let status_code = status.as_u16();
             let body_text = String::from_utf8(response.bytes().await?.to_vec()).ok();

@@ -270,14 +270,21 @@ pub async fn handle_non_streaming(
         if let Ok(json_value) = serde_json::from_slice::<Value>(&body_bytes) {
             // 解析使用量
             if let Some(usage) = (parser_config.response_parser)(&json_value) {
-                // 优先使用 usage 中解析出的模型名称，其次使用响应中的 model 字段，最后回退到请求模型
-                let model = if let Some(ref m) = usage.model {
-                    m.clone()
-                } else if let Some(m) = json_value.get("model").and_then(|m| m.as_str()) {
-                    m.to_string()
-                } else {
-                    ctx.request_model.clone()
-                };
+                // 归因优先级：usage 解析出的模型 → 响应 model 字段 → 映射后的出站
+                // 模型（路由接管真值）→ 客户端请求模型。空字符串视为缺失。
+                let model = usage
+                    .model
+                    .clone()
+                    .filter(|m| !m.is_empty())
+                    .or_else(|| {
+                        json_value
+                            .get("model")
+                            .and_then(|m| m.as_str())
+                            .filter(|m| !m.is_empty())
+                            .map(str::to_string)
+                    })
+                    .or_else(|| ctx.outbound_model.clone())
+                    .unwrap_or_else(|| ctx.request_model.clone());
 
                 spawn_log_usage(
                     state,
@@ -292,8 +299,10 @@ pub async fn handle_non_streaming(
                 let model = json_value
                     .get("model")
                     .and_then(|m| m.as_str())
-                    .unwrap_or(&ctx.request_model)
-                    .to_string();
+                    .filter(|m| !m.is_empty())
+                    .map(str::to_string)
+                    .or_else(|| ctx.outbound_model.clone())
+                    .unwrap_or_else(|| ctx.request_model.clone());
                 spawn_log_usage(
                     state,
                     ctx,
@@ -318,7 +327,7 @@ pub async fn handle_non_streaming(
                 state,
                 ctx,
                 TokenUsage::default(),
-                &ctx.request_model,
+                ctx.outbound_model.as_deref().unwrap_or(&ctx.request_model),
                 &ctx.request_model,
                 status.as_u16(),
                 false,
@@ -500,7 +509,16 @@ fn create_usage_collector(
     let state = state.clone();
     let provider_id = ctx.provider.id.clone();
     let request_model = ctx.request_model.clone();
-    let app_type_str = parser_config.app_type_str;
+    // 流式事件缺失模型名时的归因兜底：映射后的出站模型（路由接管真值）优先，
+    // 其次才是客户端请求别名
+    let fallback_model = ctx
+        .outbound_model
+        .clone()
+        .unwrap_or_else(|| ctx.request_model.clone());
+    // 用 ctx 的 app_type 而不是 parser_config 的：Claude Desktop 流式透传复用
+    // CLAUDE_PARSER_CONFIG（app_type_str="claude"），按 parser_config 记账会把
+    // claude-desktop 的行错记到 claude 名下，导致供应商计价覆盖解析不到。
+    let app_type_str = ctx.app_type_str;
     let tag = ctx.tag;
     let start_time = ctx.start_time;
     let stream_parser = parser_config.stream_parser;
@@ -512,13 +530,14 @@ fn create_usage_collector(
         parser_config.stream_event_filter,
         move |events, first_token_ms| {
             if let Some(usage) = stream_parser(&events) {
-                let model = model_extractor(&events, &request_model);
+                let model = model_extractor(&events, &fallback_model);
                 let latency_ms = start_time.elapsed().as_millis() as u64;
 
                 let state = state.clone();
                 let provider_id = provider_id.clone();
                 let session_id = session_id.clone();
                 let request_model = request_model.clone();
+                let outbound_model = fallback_model.clone();
 
                 tokio::spawn(async move {
                     log_usage_internal(
@@ -527,6 +546,7 @@ fn create_usage_collector(
                         app_type_str,
                         &model,
                         &request_model,
+                        &outbound_model,
                         usage,
                         latency_ms,
                         first_token_ms,
@@ -537,12 +557,13 @@ fn create_usage_collector(
                     .await;
                 });
             } else {
-                let model = model_extractor(&events, &request_model);
+                let model = model_extractor(&events, &fallback_model);
                 let latency_ms = start_time.elapsed().as_millis() as u64;
                 let state = state.clone();
                 let provider_id = provider_id.clone();
                 let session_id = session_id.clone();
                 let request_model = request_model.clone();
+                let outbound_model = fallback_model.clone();
 
                 tokio::spawn(async move {
                     log_usage_internal(
@@ -551,6 +572,7 @@ fn create_usage_collector(
                         app_type_str,
                         &model,
                         &request_model,
+                        &outbound_model,
                         TokenUsage::default(),
                         latency_ms,
                         first_token_ms,
@@ -588,6 +610,11 @@ fn spawn_log_usage(
     let app_type_str = ctx.app_type_str.to_string();
     let model = model.to_string();
     let request_model = request_model.to_string();
+    // 「按请求计价」模式的锚点：映射后的出站模型，无映射时等于 request_model
+    let outbound_model = ctx
+        .outbound_model
+        .clone()
+        .unwrap_or_else(|| ctx.request_model.clone());
     let latency_ms = ctx.latency_ms();
     let session_id = ctx.session_id.clone();
 
@@ -598,6 +625,7 @@ fn spawn_log_usage(
             &app_type_str,
             &model,
             &request_model,
+            &outbound_model,
             usage,
             latency_ms,
             None,
@@ -618,6 +646,11 @@ pub(crate) fn usage_logging_enabled(state: &ProxyState) -> bool {
 }
 
 /// 内部使用量记录函数
+///
+/// `outbound_model` 是「按请求计价」模式的锚点：实际发往上游的模型
+/// （路由接管映射后的真值，无映射时等于 request_model）。该模式的语义是
+/// 「按代理发出的请求计价、不信任上游回显」，接管场景下发出的请求模型是
+/// 映射后的 Y 而非客户端别名 X，按 X 计价会用错定价表行。
 #[allow(clippy::too_many_arguments)]
 async fn log_usage_internal(
     state: &ProxyState,
@@ -625,6 +658,7 @@ async fn log_usage_internal(
     app_type: &str,
     model: &str,
     request_model: &str,
+    outbound_model: &str,
     usage: TokenUsage,
     latency_ms: u64,
     first_token_ms: Option<u64>,
@@ -638,7 +672,7 @@ async fn log_usage_internal(
     let (multiplier, pricing_model_source) =
         logger.resolve_pricing_config(provider_id, app_type).await;
     let pricing_model = if pricing_model_source == PRICING_SOURCE_REQUEST {
-        request_model
+        outbound_model
     } else {
         model
     };
@@ -1015,6 +1049,7 @@ mod tests {
             app_type,
             "resp-model",
             "req-model",
+            "req-model",
             usage,
             10,
             None,
@@ -1048,6 +1083,95 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_request_pricing_mode_anchors_to_outbound_model() -> Result<(), AppError> {
+        let db = Arc::new(Database::memory()?);
+        let app_type = "claude";
+
+        db.set_pricing_model_source(app_type, "request").await?;
+        seed_pricing(&db)?;
+        {
+            let conn = crate::database::lock_conn!(db.conn);
+            conn.execute(
+                "INSERT OR REPLACE INTO model_pricing (model_id, display_name, input_cost_per_million, output_cost_per_million)
+                 VALUES ('outbound-model', 'Outbound Model', '4.0', '0')",
+                [],
+            )
+            .map_err(|e| AppError::Database(e.to_string()))?;
+        }
+
+        insert_provider(&db, "provider-3", app_type, ProviderMeta::default())?;
+
+        let state = build_state(db.clone());
+        let usage = TokenUsage {
+            input_tokens: 1_000_000,
+            output_tokens: 0,
+            cache_read_tokens: 0,
+            cache_creation_tokens: 0,
+            model: None,
+            message_id: None,
+        };
+
+        // 路由接管场景：客户端请求 req-model（$2/M），代理实际发出 outbound-model
+        // （$4/M），上游回显 resp-model。「按请求计价」必须锚定实际发出的模型。
+        log_usage_internal(
+            &state,
+            "provider-3",
+            app_type,
+            "resp-model",
+            "req-model",
+            "outbound-model",
+            usage,
+            10,
+            None,
+            false,
+            200,
+            None,
+        )
+        .await;
+
+        let conn = crate::database::lock_conn!(db.conn);
+        let (model, request_model, total_cost): (String, String, String) = conn
+            .query_row(
+                "SELECT model, request_model, total_cost_usd
+                 FROM proxy_request_logs WHERE provider_id = ?1",
+                ["provider-3"],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .map_err(|e| AppError::Database(e.to_string()))?;
+
+        // model / request_model 列不受计价锚点影响
+        assert_eq!(model, "resp-model");
+        assert_eq!(request_model, "req-model");
+        // 按 outbound-model（$4/M）计价，而不是 req-model（$2/M）或 resp-model（$1/M）
+        assert_eq!(
+            Decimal::from_str(&total_cost).unwrap(),
+            Decimal::from_str("4").unwrap()
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_claude_desktop_inherits_claude_global_defaults() -> Result<(), AppError> {
+        use crate::proxy::usage::logger::UsageLogger;
+
+        let db = Arc::new(Database::memory()?);
+
+        // 全局计费配置只有 claude/codex/gemini 三行；claude-desktop 的
+        // 全局默认必须继承 claude，而不是静默落回工厂默认（1 / response）
+        db.set_default_cost_multiplier("claude", "1.5").await?;
+        db.set_pricing_model_source("claude", "request").await?;
+
+        let logger = UsageLogger::new(&db);
+        let (multiplier, source) = logger
+            .resolve_pricing_config("nonexistent-provider", "claude-desktop")
+            .await;
+
+        assert_eq!(multiplier, Decimal::from_str("1.5").unwrap());
+        assert_eq!(source, "request");
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn test_log_usage_falls_back_to_global_defaults() -> Result<(), AppError> {
         let db = Arc::new(Database::memory()?);
         let app_type = "claude";
@@ -1074,6 +1198,7 @@ mod tests {
             "provider-2",
             app_type,
             "resp-model",
+            "req-model",
             "req-model",
             usage,
             10,
