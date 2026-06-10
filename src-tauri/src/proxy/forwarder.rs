@@ -1537,14 +1537,17 @@ impl RequestForwarder {
                 Vec::new()
             };
 
-        let custom_user_agent = provider
-            .meta
-            .as_ref()
-            .and_then(|meta| meta.custom_user_agent.as_deref())
-            .map(str::trim)
-            .filter(|ua| !ua.is_empty())
-            .filter(|_| !is_copilot)
-            .and_then(|ua| http::HeaderValue::from_str(ua).ok());
+        // 自定义 User-Agent：与 stream_check / model_fetch 共用 parse_custom_user_agent，
+        // 运行时静默忽略非法值（前端在输入处给非阻断提示，不在保存时阻断）。
+        // Copilot 指纹 UA 不可覆盖。
+        let custom_user_agent = if is_copilot {
+            None
+        } else {
+            provider
+                .meta
+                .as_ref()
+                .and_then(|meta| meta.custom_user_agent_header().ok().flatten())
+        };
 
         // --- Copilot 优化器：动态 header 注入 ---
         if let Some((ref classification, ref det_request_id, ref interaction_id)) =
