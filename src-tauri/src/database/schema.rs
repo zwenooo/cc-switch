@@ -181,9 +181,12 @@ impl Database {
         )", []).map_err(|e| AppError::Database(e.to_string()))?;
 
         // 10. Proxy Request Logs 表
+        // pricing_model = 写入时实际用于计价的模型名（pricing_model_source 解析结果），
+        // 回填按它重算；NULL 表示 v11 之前的历史行，'' 表示未计价的错误行。
         conn.execute("CREATE TABLE IF NOT EXISTS proxy_request_logs (
             request_id TEXT PRIMARY KEY, provider_id TEXT NOT NULL, app_type TEXT NOT NULL, model TEXT NOT NULL,
             request_model TEXT,
+            pricing_model TEXT,
             input_tokens INTEGER NOT NULL DEFAULT 0, output_tokens INTEGER NOT NULL DEFAULT 0,
             cache_read_tokens INTEGER NOT NULL DEFAULT 0, cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
             input_cost_usd TEXT NOT NULL DEFAULT '0', output_cost_usd TEXT NOT NULL DEFAULT '0',
@@ -255,12 +258,17 @@ impl Database {
         .map_err(|e| AppError::Database(e.to_string()))?;
 
         // 17. Usage Daily Rollups 表 (日聚合统计)
+        // request_model 保留路由接管的「客户端别名 → 真实模型」映射维度，
+        // pricing_model 保留写入时的计价基准（request 计价模式下与 model 分叉），
+        // 否则明细被 prune 后接管计费不可审计；历史行迁移时填 ''（未知）。
         conn.execute(
             "CREATE TABLE IF NOT EXISTS usage_daily_rollups (
                 date TEXT NOT NULL,
                 app_type TEXT NOT NULL,
                 provider_id TEXT NOT NULL,
                 model TEXT NOT NULL,
+                request_model TEXT NOT NULL DEFAULT '',
+                pricing_model TEXT NOT NULL DEFAULT '',
                 request_count INTEGER NOT NULL DEFAULT 0,
                 success_count INTEGER NOT NULL DEFAULT 0,
                 input_tokens INTEGER NOT NULL DEFAULT 0,
@@ -269,7 +277,7 @@ impl Database {
                 cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
                 total_cost_usd TEXT NOT NULL DEFAULT '0',
                 avg_latency_ms INTEGER NOT NULL DEFAULT 0,
-                PRIMARY KEY (date, app_type, provider_id, model)
+                PRIMARY KEY (date, app_type, provider_id, model, request_model, pricing_model)
             )",
             [],
         )
@@ -430,6 +438,11 @@ impl Database {
                         log::info!("迁移数据库从 v9 到 v10（添加 Hermes Agent 支持）");
                         Self::migrate_v9_to_v10(conn)?;
                         Self::set_user_version(conn, 10)?;
+                    }
+                    10 => {
+                        log::info!("迁移数据库从 v10 到 v11（usage_daily_rollups 保留 request_model 维度）");
+                        Self::migrate_v10_to_v11(conn)?;
+                        Self::set_user_version(conn, 11)?;
                     }
                     _ => {
                         return Err(AppError::Database(format!(
@@ -1197,6 +1210,63 @@ impl Database {
         }
 
         log::info!("v9 -> v10 迁移完成：已添加 Hermes Agent 支持");
+        Ok(())
+    }
+
+    /// v10 -> v11：usage_daily_rollups 增加 request_model 维度（进入主键），
+    /// proxy_request_logs 增加 pricing_model 列（写入时的计价基准，回填依据）。
+    ///
+    /// 路由接管下 model（真实上游模型）≠ request_model（客户端别名），
+    /// 旧 rollup 只按 model 聚合，明细 prune 后映射关系永久丢失、计费不可审计。
+    /// SQLite 改主键必须重建表；历史行的 request_model 已不可知，填 ''。
+    fn migrate_v10_to_v11(conn: &Connection) -> Result<(), AppError> {
+        // proxy_request_logs.pricing_model：NULL = v11 前的历史行（回填走
+        // model → 占位符回退 request_model 的旧逻辑），'' = 未计价的错误行
+        if Self::table_exists(conn, "proxy_request_logs")? {
+            Self::add_column_if_missing(conn, "proxy_request_logs", "pricing_model", "TEXT")?;
+        }
+
+        if !Self::table_exists(conn, "usage_daily_rollups")? {
+            log::info!("v10 -> v11：usage_daily_rollups 不存在，跳过重建");
+            return Ok(());
+        }
+
+        conn.execute_batch(
+            "ALTER TABLE usage_daily_rollups RENAME TO usage_daily_rollups_v10;
+             CREATE TABLE usage_daily_rollups (
+                 date TEXT NOT NULL,
+                 app_type TEXT NOT NULL,
+                 provider_id TEXT NOT NULL,
+                 model TEXT NOT NULL,
+                 request_model TEXT NOT NULL DEFAULT '',
+                 pricing_model TEXT NOT NULL DEFAULT '',
+                 request_count INTEGER NOT NULL DEFAULT 0,
+                 success_count INTEGER NOT NULL DEFAULT 0,
+                 input_tokens INTEGER NOT NULL DEFAULT 0,
+                 output_tokens INTEGER NOT NULL DEFAULT 0,
+                 cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+                 cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
+                 total_cost_usd TEXT NOT NULL DEFAULT '0',
+                 avg_latency_ms INTEGER NOT NULL DEFAULT 0,
+                 PRIMARY KEY (date, app_type, provider_id, model, request_model, pricing_model)
+             );
+             INSERT INTO usage_daily_rollups
+                 (date, app_type, provider_id, model, request_model, pricing_model,
+                  request_count, success_count, input_tokens, output_tokens,
+                  cache_read_tokens, cache_creation_tokens, total_cost_usd, avg_latency_ms)
+             SELECT date, app_type, provider_id, model, '', '',
+                  request_count, success_count, input_tokens, output_tokens,
+                  cache_read_tokens, cache_creation_tokens, total_cost_usd, avg_latency_ms
+             FROM usage_daily_rollups_v10;
+             DROP TABLE usage_daily_rollups_v10;",
+        )
+        .map_err(|e| {
+            AppError::Database(format!("v10 -> v11 重建 usage_daily_rollups 失败: {e}"))
+        })?;
+
+        log::info!(
+            "v10 -> v11 迁移完成：usage_daily_rollups 已保留 request_model/pricing_model 维度"
+        );
         Ok(())
     }
 
