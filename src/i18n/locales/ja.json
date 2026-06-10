@@ -1373,6 +1373,7 @@
     "appFilter": {
       "all": "すべて",
       "claude": "Claude Code",
+      "claude-desktop": "Claude Desktop",
       "codex": "Codex",
       "gemini": "Gemini",
       "opencode": "OpenCode"
@@ -1403,6 +1404,7 @@
     "modelPricingDesc": "各モデルのトークンコストを設定",
     "noPricingData": "料金データがありません。「追加」をクリックしてモデル料金を設定してください。",
     "model": "モデル",
+    "pricingModel": "課金モデル",
     "displayName": "表示名",
     "inputCost": "入力コスト",
     "outputCost": "出力コスト",

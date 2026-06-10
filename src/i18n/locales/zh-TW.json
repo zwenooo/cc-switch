@@ -1318,6 +1318,7 @@
     "appFilter": {
       "all": "全部",
       "claude": "Claude Code",
+      "claude-desktop": "Claude Desktop",
       "codex": "Codex",
       "gemini": "Gemini",
       "opencode": "OpenCode"
@@ -1348,6 +1349,7 @@
     "modelPricingDesc": "設定各模型的 Token 成本",
     "noPricingData": "暫無定價資料。點擊「新增」加入模型定價設定。",
     "model": "模型",
+    "pricingModel": "計價模型",
     "displayName": "顯示名稱",
     "inputCost": "輸入成本",
     "outputCost": "輸出成本",
