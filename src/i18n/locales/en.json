@@ -1261,8 +1261,9 @@
     "reasoningModeHint": "Enable when the upstream Chat Completions API supports toggling thinking on/off. Providers like Kimi, GLM and Qwen usually fall into this category.",
     "reasoningEffortToggle": "Supports Reasoning Effort",
     "reasoningEffortHint": "Enable when the upstream supports thinking-depth control such as low/high/max. Enabling this also turns on thinking mode and converts Codex's reasoning.effort into the upstream Chat parameter.",
-    "reasoningSectionToggle": "Reasoning Capability (Advanced · usually auto-detected)",
-    "reasoningSectionHint": "Preset providers are configured automatically; custom providers are inferred from name/URL. Expand to override manually only when auto-detection is wrong."
+    "reasoningGroupTitle": "Reasoning Capability",
+    "reasoningSectionHint": "Preset providers are configured automatically; custom providers are inferred from name/URL. Override manually only when auto-detection is wrong.",
+    "advancedSectionHint": "Includes local routing, model mapping, reasoning overrides and custom User-Agent. Enable local routing here when your provider uses the Chat Completions protocol or non-GPT models."
   },
   "geminiConfig": {
     "envFile": "Environment Variables (.env)",

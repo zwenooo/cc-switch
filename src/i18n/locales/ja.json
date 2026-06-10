@@ -1261,8 +1261,9 @@
     "reasoningModeHint": "上流の Chat Completions API が思考（thinking）のオン/オフ切り替えに対応している場合に有効化します。Kimi、GLM、Qwen などが通常このタイプに該当します。",
     "reasoningEffortToggle": "思考レベルに対応",
     "reasoningEffortHint": "上流が low/high/max などの思考の深さの制御に対応している場合に有効化します。有効にすると思考モードも自動的にオンになり、Codex の reasoning.effort を上流の Chat パラメータに変換します。",
-    "reasoningSectionToggle": "思考能力（詳細・通常は自動識別）",
-    "reasoningSectionHint": "プリセットの供給元は自動的に設定され、カスタム供給元は名前/URL から自動推論されます。自動識別が正しくない場合のみ展開して手動で上書きしてください。"
+    "reasoningGroupTitle": "思考能力",
+    "reasoningSectionHint": "プリセットの供給元は自動的に設定され、カスタム供給元は名前/URL から自動推論されます。自動識別が正しくない場合のみ手動で上書きしてください。",
+    "advancedSectionHint": "ローカルルーティング、モデルマッピング、思考能力、カスタム User-Agent の設定を含みます。供給元が Chat Completions プロトコルまたは GPT 以外のモデルを使用する場合は、ここでローカルルーティングを有効にしてください。"
   },
   "geminiConfig": {
     "envFile": "環境変数 (.env)",
