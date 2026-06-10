@@ -47,6 +47,7 @@ import {
   showFetchModelsError,
   type FetchedModel,
 } from "@/lib/api/model-fetch";
+import { CustomUserAgentField } from "./CustomUserAgentField";
 import type {
   ProviderCategory,
   ClaudeApiFormat,
@@ -204,7 +205,8 @@ export function ClaudeFormFields({
     defaultSonnetModel ||
     defaultOpusModel ||
     apiFormat !== "anthropic" ||
-    apiKeyField !== "ANTHROPIC_AUTH_TOKEN"
+    apiKeyField !== "ANTHROPIC_AUTH_TOKEN" ||
+    customUserAgent
   );
   const [advancedExpanded, setAdvancedExpanded] = useState(hasAnyAdvancedValue);
 
@@ -257,7 +259,7 @@ export function ClaudeFormFields({
     const modelsUrl = matchedPreset?.modelsUrl;
 
     setIsFetchingModels(true);
-    fetchModelsForConfig(baseUrl, apiKey, isFullUrl, modelsUrl)
+    fetchModelsForConfig(baseUrl, apiKey, isFullUrl, modelsUrl, customUserAgent)
       .then((models) => {
         setFetchedModels(models);
         showModelFetchResult(models.length);
@@ -267,7 +269,7 @@ export function ClaudeFormFields({
         showFetchModelsError(err, t);
       })
       .finally(() => setIsFetchingModels(false));
-  }, [baseUrl, apiKey, isFullUrl, showModelFetchResult, t]);
+  }, [baseUrl, apiKey, isFullUrl, customUserAgent, showModelFetchResult, t]);
 
   const handleFetchCopilotModels = useCallback(() => {
     if (!isCopilotAuthenticated) {
@@ -671,30 +673,6 @@ export function ClaudeFormFields({
         />
       )}
 
-      {category !== "official" && (
-        <div className="space-y-2">
-          <FormLabel htmlFor="claude-custom-user-agent">
-            {t("providerForm.customUserAgent", {
-              defaultValue: "自定义 User-Agent",
-            })}
-          </FormLabel>
-          <Input
-            id="claude-custom-user-agent"
-            type="text"
-            value={customUserAgent}
-            onChange={(e) => onCustomUserAgentChange(e.target.value)}
-            placeholder="Mozilla/5.0 ..."
-            autoComplete="off"
-          />
-          <p className="text-xs text-muted-foreground">
-            {t("providerForm.customUserAgentHint", {
-              defaultValue:
-                "仅在开启本地路由/代理接管后生效，会替换转发到供应商 API 请求中的 User-Agent。",
-            })}
-          </p>
-        </div>
-      )}
-
       {shouldShowModelSelector && (
         <Collapsible open={advancedExpanded} onOpenChange={setAdvancedExpanded}>
           <CollapsibleTrigger asChild>
@@ -962,6 +940,12 @@ export function ClaudeFormFields({
                 })}
               </p>
             </div>
+
+            <CustomUserAgentField
+              id="claude-custom-user-agent"
+              value={customUserAgent}
+              onChange={onCustomUserAgentChange}
+            />
           </CollapsibleContent>
         </Collapsible>
       )}
