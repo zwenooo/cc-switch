@@ -575,7 +575,8 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: CC Switch ${{ github.ref_name }}
-          prerelease: true
+          prerelease: false
+          make_latest: true
           body: |
             ## CC Switch ${{ github.ref_name }}
 
