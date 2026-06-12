@@ -16,13 +16,18 @@ jobs:
   release:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: windows-2022
           - os: ubuntu-22.04
           - os: ubuntu-22.04-arm
             arch: arm64
-          - os: macos-14
+          # Fork 定制：移除 macOS 构建——本仓库没有 Apple Developer 签名/公证
+          # 所需的 secrets（APPLE_CERTIFICATE 等），macOS 任务会在「Import Apple
+          # signing certificate」步骤失败并连带阻塞 publish-release。如需 macOS 产物，
+          # 配好 Apple 签名 secrets 后再恢复 `- os: macos-14`。
+          # - os: macos-14
 
     steps:
       - name: Checkout
