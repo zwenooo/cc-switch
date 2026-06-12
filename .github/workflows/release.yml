@@ -23,11 +23,10 @@ jobs:
           - os: ubuntu-22.04
           - os: ubuntu-22.04-arm
             arch: arm64
-          # Fork 定制：移除 macOS 构建——本仓库没有 Apple Developer 签名/公证
-          # 所需的 secrets（APPLE_CERTIFICATE 等），macOS 任务会在「Import Apple
-          # signing certificate」步骤失败并连带阻塞 publish-release。如需 macOS 产物，
-          # 配好 Apple 签名 secrets 后再恢复 `- os: macos-14`。
-          # - os: macos-14
+          # macOS：本仓库无 Apple Developer 账号，故以 ad-hoc 方式签名构建（未公证）。
+          # 若以后配好 Apple 签名 secrets（APPLE_CERTIFICATE 等），会自动切换为
+          # 正式 Developer ID 签名 + 公证（见下方 MACOS_SIGN_MODE 判断）。
+          - os: macos-14
 
     steps:
       - name: Checkout
@@ -155,11 +154,21 @@ jobs:
           fi
           echo "✅ Tauri signing key prepared"
 
-      - name: Import Apple signing certificate
+      - name: Set up macOS code signing
         if: runner.os == 'macOS'
         shell: bash
         run: |
           set -euo pipefail
+          # Fork：无 Apple Developer 账号时走 ad-hoc 签名（Apple Silicon 可运行，未公证）。
+          # 配置了 APPLE_CERTIFICATE 才走正式 Developer ID 签名 + 公证。
+          if [ -z "${{ secrets.APPLE_CERTIFICATE }}" ]; then
+            echo "MACOS_SIGN_MODE=adhoc" >> "$GITHUB_ENV"
+            echo "APPLE_SIGNING_IDENTITY=-" >> "$GITHUB_ENV"
+            echo "⚠️ 未配置 APPLE_CERTIFICATE：以 ad-hoc 方式构建未公证的 macOS 包"
+            exit 0
+          fi
+
+          echo "MACOS_SIGN_MODE=full" >> "$GITHUB_ENV"
           # Decode .p12 certificate from base64
           CERT_PATH="$RUNNER_TEMP/certificate.p12"
           printf '%s' "${{ secrets.APPLE_CERTIFICATE }}" | (base64 --decode 2>/dev/null || base64 -D) > "$CERT_PATH"
@@ -264,9 +273,15 @@ jobs:
             exit 1
           fi
 
-          # Staple notarization ticket to .app (Tauri already notarized it)
-          xcrun stapler staple "$APP_PATH"
-          echo "✅ .app stapled"
+          if [ "${MACOS_SIGN_MODE:-adhoc}" = "full" ]; then
+            # Staple notarization ticket to .app (Tauri already notarized it)
+            xcrun stapler staple "$APP_PATH"
+            echo "✅ .app stapled"
+          else
+            # ad-hoc：深度 ad-hoc 签名整个 .app（Apple Silicon 必须签名才能启动），不公证
+            codesign --force --deep --sign - "$APP_PATH"
+            echo "⚠️ ad-hoc 构建：已深度签名，跳过公证 stapling"
+          fi
 
           # 1) Collect .tar.gz (updater artifact)
           NEW_TAR_GZ="CC-Switch-${VERSION}-macOS.tar.gz"
@@ -280,11 +295,6 @@ jobs:
           echo "macOS zip ready: $NEW_ZIP"
 
           # 3) Create styled DMG with create-dmg (Tauri's built-in DMG styling doesn't work on CI)
-          if [ -z "${APPLE_SIGNING_IDENTITY:-}" ]; then
-            echo "❌ APPLE_SIGNING_IDENTITY is missing before DMG creation" >&2
-            exit 1
-          fi
-
           HOMEBREW_NO_AUTO_UPDATE=1 brew install create-dmg
           NEW_DMG="CC-Switch-${VERSION}-macOS.dmg"
           DMG_STAGE_DIR="$RUNNER_TEMP/dmg-stage"
@@ -292,25 +302,41 @@ jobs:
           mkdir -p "$DMG_STAGE_DIR"
           ditto "$APP_PATH" "$DMG_STAGE_DIR/CC Switch.app"
 
-          create-dmg \
-            --volname "CC Switch" \
-            --background "src-tauri/icons/dmg-background.png" \
-            --window-size 660 400 \
-            --window-pos 200 120 \
-            --icon-size 80 \
-            --icon "CC Switch.app" 180 220 \
-            --hide-extension "CC Switch.app" \
-            --app-drop-link 480 220 \
-            --codesign "$APPLE_SIGNING_IDENTITY" \
-            --no-internet-enable \
-            "release-assets/$NEW_DMG" \
-            "$DMG_STAGE_DIR"
+          if [ "${MACOS_SIGN_MODE:-adhoc}" = "full" ]; then
+            create-dmg \
+              --volname "CC Switch" \
+              --background "src-tauri/icons/dmg-background.png" \
+              --window-size 660 400 \
+              --window-pos 200 120 \
+              --icon-size 80 \
+              --icon "CC Switch.app" 180 220 \
+              --hide-extension "CC Switch.app" \
+              --app-drop-link 480 220 \
+              --codesign "$APPLE_SIGNING_IDENTITY" \
+              --no-internet-enable \
+              "release-assets/$NEW_DMG" \
+              "$DMG_STAGE_DIR"
+          else
+            # ad-hoc：DMG 不做 Apple 代码签名（内部 .app 已 ad-hoc 深度签名）
+            create-dmg \
+              --volname "CC Switch" \
+              --background "src-tauri/icons/dmg-background.png" \
+              --window-size 660 400 \
+              --window-pos 200 120 \
+              --icon-size 80 \
+              --icon "CC Switch.app" 180 220 \
+              --hide-extension "CC Switch.app" \
+              --app-drop-link 480 220 \
+              --no-internet-enable \
+              "release-assets/$NEW_DMG" \
+              "$DMG_STAGE_DIR"
+          fi
 
           rm -rf "$DMG_STAGE_DIR"
           echo "✅ Styled DMG created: $NEW_DMG"
 
       - name: Notarize macOS DMG
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && env.MACOS_SIGN_MODE == 'full'
         shell: bash
         timeout-minutes: 30
         env:
@@ -352,7 +378,7 @@ jobs:
           done
 
       - name: Verify macOS code signing and notarization
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && env.MACOS_SIGN_MODE == 'full'
         shell: bash
         run: |
           set -euo pipefail
