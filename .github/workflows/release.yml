@@ -217,6 +217,11 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
+          # ad-hoc 模式：清空 Apple 公证变量，否则 Tauri 见到（空字符串）的
+          # APPLE_ID/APPLE_TEAM_ID 会尝试公证并报「Team ID must be at least 3 characters」
+          if [ "${MACOS_SIGN_MODE:-adhoc}" != "full" ]; then
+            unset APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
+          fi
           max_attempts=3
           for attempt in $(seq 1 "$max_attempts"); do
             echo "=== macOS build/notarization attempt ${attempt}/${max_attempts} ==="
