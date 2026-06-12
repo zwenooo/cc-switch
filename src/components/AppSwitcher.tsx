@@ -1,66 +1,130 @@
-import { useEffect } from "react";
-import { AppType } from "../lib/tauri-api";
-import { ClaudeIcon, CodexIcon } from "./BrandIcons";
+import type { AppId } from "@/lib/api";
+import type { VisibleApps } from "@/types";
+import { ProviderIcon } from "@/components/ProviderIcon";
+import { cn } from "@/lib/utils";
+import { Monitor, Terminal } from "lucide-react";
+
+const APP_BADGE_ICON: Partial<
+  Record<AppId, { icon: typeof Terminal; offsetY?: number }>
+> = {
+  claude: { icon: Terminal },
+  "claude-desktop": { icon: Monitor, offsetY: 0.5 },
+};
 
 interface AppSwitcherProps {
-  activeApp: AppType;
-  onSwitch: (app: AppType) => void;
+  activeApp: AppId;
+  onSwitch: (app: AppId) => void;
+  visibleApps?: VisibleApps;
+  compact?: boolean;
 }
 
-export function AppSwitcher({ activeApp, onSwitch }: AppSwitcherProps) {
-  const hideClaude = (() => {
-    const v = (import.meta as any)?.env?.VITE_HIDE_CLAUDE;
-    if (typeof v !== "string") return false;
-    const s = v.toLowerCase();
-    return s === "1" || s === "true" || s === "yes";
-  })();
+const ALL_APPS: AppId[] = [
+  "claude",
+  "claude-desktop",
+  "codex",
+  "gemini",
+  "opencode",
+  "openclaw",
+  "hermes",
+];
+const STORAGE_KEY = "cc-switch-last-app";
 
-  useEffect(() => {
-    if (hideClaude && activeApp === "claude") {
-      onSwitch("codex");
-    }
-  }, [hideClaude, activeApp, onSwitch]);
-  const handleSwitch = (app: AppType) => {
+export function AppSwitcher({
+  activeApp,
+  onSwitch,
+  visibleApps,
+  compact,
+}: AppSwitcherProps) {
+  const handleSwitch = (app: AppId) => {
     if (app === activeApp) return;
+    localStorage.setItem(STORAGE_KEY, app);
     onSwitch(app);
   };
+  const iconSize = 20;
+  const appIconName: Record<AppId, string> = {
+    claude: "claude",
+    "claude-desktop": "claude",
+    codex: "openai",
+    gemini: "gemini",
+    opencode: "opencode",
+    openclaw: "openclaw",
+    hermes: "hermes",
+  };
+  const appDisplayName: Record<AppId, string> = {
+    claude: "Claude Code",
+    "claude-desktop": "Claude Desktop",
+    codex: "Codex",
+    gemini: "Gemini",
+    opencode: "OpenCode",
+    openclaw: "OpenClaw",
+    hermes: "Hermes",
+  };
+
+  // Filter apps based on visibility settings (default all visible)
+  const appsToShow = ALL_APPS.filter((app) => {
+    if (!visibleApps) return true;
+    return visibleApps[app];
+  });
 
   return (
-    <div className="inline-flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1 gap-1 border border-transparent dark:border-gray-700">
-      {!hideClaude && (
-        <button
-          type="button"
-          onClick={() => handleSwitch("claude")}
-          className={`group inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
-            activeApp === "claude"
-              ? "bg-white text-gray-900 shadow-sm dark:bg-gray-900 dark:text-gray-100 dark:shadow-none"
-              : "text-gray-500 hover:text-gray-900 hover:bg-white/50 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-gray-800/60"
-          }`}
-        >
-          <ClaudeIcon
-            size={16}
-            className={
-              activeApp === "claude"
-                ? "text-[#D97757] dark:text-[#D97757] transition-colors duration-200"
-                : "text-gray-500 dark:text-gray-400 group-hover:text-[#D97757] dark:group-hover:text-[#D97757] transition-colors duration-200"
-            }
-          />
-          <span>Claude</span>
-        </button>
-      )}
-
-      <button
-        type="button"
-        onClick={() => handleSwitch("codex")}
-        className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
-          activeApp === "codex"
-            ? "bg-white text-gray-900 shadow-sm dark:bg-gray-900 dark:text-gray-100 dark:shadow-none"
-            : "text-gray-500 hover:text-gray-900 hover:bg-white/50 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-gray-800/60"
-        }`}
-      >
-        <CodexIcon size={16} />
-        <span>Codex</span>
-      </button>
+    <div className="inline-flex bg-muted rounded-xl p-1 gap-1">
+      {appsToShow.map((app) => {
+        const badgeConfig = APP_BADGE_ICON[app];
+        const BadgeIcon = badgeConfig?.icon;
+        const isActive = activeApp === app;
+        return (
+          <button
+            key={app}
+            type="button"
+            onClick={() => handleSwitch(app)}
+            className={cn(
+              "group inline-flex items-center px-3 h-8 rounded-md text-sm font-medium transition-all duration-200",
+              isActive
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground hover:bg-background/50",
+            )}
+          >
+            <span className="relative inline-flex shrink-0">
+              <ProviderIcon
+                icon={appIconName[app]}
+                name={appDisplayName[app]}
+                size={iconSize}
+              />
+              {BadgeIcon && (
+                <span
+                  className={cn(
+                    "absolute -bottom-0.5 -right-0.5 flex items-center justify-center rounded-[3px] border h-[11px] w-[11px]",
+                    isActive
+                      ? "bg-background border-border text-foreground"
+                      : "bg-muted border-background text-muted-foreground group-hover:bg-background group-hover:text-foreground",
+                  )}
+                  aria-hidden="true"
+                >
+                  <BadgeIcon
+                    className="h-[8px] w-[8px]"
+                    strokeWidth={2.5}
+                    style={
+                      badgeConfig?.offsetY
+                        ? { transform: `translateY(${badgeConfig.offsetY}px)` }
+                        : undefined
+                    }
+                  />
+                </span>
+              )}
+            </span>
+            <span
+              className={cn(
+                "transition-all duration-200 whitespace-nowrap overflow-hidden",
+                compact
+                  ? "max-w-0 opacity-0 ml-0"
+                  : "max-w-[120px] opacity-100 ml-2",
+              )}
+            >
+              {appDisplayName[app]}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
